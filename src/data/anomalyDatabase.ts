@@ -1,25 +1,41 @@
 // Mock anomaly frequency database
 // This module can later be replaced with a real hospital database, vector DB, or SQL DB
 
+export type Severity = "low" | "moderate" | "high" | "critical";
+
 export interface AnomalyEntry {
   term: string;
   aliases: string[];       // Alternative names for the same condition
   frequency: number;        // Absolute count in historical reports
   totalReports: number;     // Total reports in the database
   category: string;         // Clinical category
-  severity: "low" | "moderate" | "high" | "critical";
 }
 
 const TOTAL_REPORTS = 300;
 
+/**
+ * Compute severity from frequency: rarer findings are more severe.
+ *   < 5%  → critical
+ *   5-15% → high
+ *  15-25% → moderate
+ *   > 25% → low
+ */
+export function getSeverity(entry: AnomalyEntry): Severity {
+  const pct = (entry.frequency / entry.totalReports) * 100;
+  if (pct < 5) return "critical";
+  if (pct < 15) return "high";
+  if (pct < 25) return "moderate";
+  return "low";
+}
+
 export const anomalyDatabase: AnomalyEntry[] = [
   {
     term: "Pulmonary embolism",
-    aliases: ["PE", "pulmonary thromboembolism"],
+    // Do not add "PE" as alias — too ambiguous; matches "PERFORMED", "PERSPECTIVE", etc.
+    aliases: ["pulmonary thromboembolism"],
     frequency: 42,
     totalReports: TOTAL_REPORTS,
     category: "Pulmonary",
-    severity: "critical",
   },
   {
     term: "Coronary artery stenosis",
@@ -27,7 +43,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 87,
     totalReports: TOTAL_REPORTS,
     category: "Cardiac",
-    severity: "high",
   },
   {
     term: "Aortic aneurysm",
@@ -35,7 +50,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 23,
     totalReports: TOTAL_REPORTS,
     category: "Vascular",
-    severity: "critical",
   },
   {
     term: "Carotid plaque",
@@ -43,7 +57,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 65,
     totalReports: TOTAL_REPORTS,
     category: "Vascular",
-    severity: "moderate",
   },
   {
     term: "Dissection",
@@ -51,7 +64,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 8,
     totalReports: TOTAL_REPORTS,
     category: "Vascular",
-    severity: "critical",
   },
   {
     term: "Pericardial effusion",
@@ -59,7 +71,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 31,
     totalReports: TOTAL_REPORTS,
     category: "Cardiac",
-    severity: "moderate",
   },
   {
     term: "Pleural effusion",
@@ -67,7 +78,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 58,
     totalReports: TOTAL_REPORTS,
     category: "Pulmonary",
-    severity: "moderate",
   },
   {
     term: "Calcification",
@@ -75,7 +85,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 112,
     totalReports: TOTAL_REPORTS,
     category: "Vascular",
-    severity: "low",
   },
   {
     term: "Thrombus",
@@ -83,7 +92,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 35,
     totalReports: TOTAL_REPORTS,
     category: "Vascular",
-    severity: "high",
   },
   {
     term: "Lymphadenopathy",
@@ -91,7 +99,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 47,
     totalReports: TOTAL_REPORTS,
     category: "Systemic",
-    severity: "moderate",
   },
   {
     term: "Atelectasis",
@@ -99,7 +106,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 73,
     totalReports: TOTAL_REPORTS,
     category: "Pulmonary",
-    severity: "low",
   },
   {
     term: "Cardiomegaly",
@@ -107,7 +113,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 54,
     totalReports: TOTAL_REPORTS,
     category: "Cardiac",
-    severity: "moderate",
   },
   {
     term: "Pulmonary nodule",
@@ -115,7 +120,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 39,
     totalReports: TOTAL_REPORTS,
     category: "Pulmonary",
-    severity: "high",
   },
   {
     term: "Mitral valve calcification",
@@ -123,7 +127,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 28,
     totalReports: TOTAL_REPORTS,
     category: "Cardiac",
-    severity: "moderate",
   },
   {
     term: "Aortic valve calcification",
@@ -131,7 +134,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 34,
     totalReports: TOTAL_REPORTS,
     category: "Cardiac",
-    severity: "moderate",
   },
   {
     term: "Pulmonary hypertension",
@@ -139,7 +141,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 19,
     totalReports: TOTAL_REPORTS,
     category: "Pulmonary",
-    severity: "high",
   },
   {
     term: "Stenosis",
@@ -147,7 +148,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 96,
     totalReports: TOTAL_REPORTS,
     category: "Vascular",
-    severity: "high",
   },
   {
     term: "Consolidation",
@@ -155,7 +155,6 @@ export const anomalyDatabase: AnomalyEntry[] = [
     frequency: 41,
     totalReports: TOTAL_REPORTS,
     category: "Pulmonary",
-    severity: "moderate",
   },
 ];
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Activity, Heart } from "lucide-react";
 import { ReportInput } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
@@ -42,10 +43,13 @@ const Index = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Link
+            to="/dataset"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
             <Heart className="h-3.5 w-3.5 text-clinical-danger" />
             <span>300 reports in database</span>
-          </div>
+          </Link>
         </div>
       </header>
 

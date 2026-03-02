@@ -1,0 +1,565 @@
+{
+  "totalReports": 300,
+  "entries": [
+    {
+      "term": "Findings",
+      "aliases": [],
+      "frequency": 291,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Impression",
+      "aliases": [],
+      "frequency": 254,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Comparison",
+      "aliases": [],
+      "frequency": 246,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Indication",
+      "aliases": [],
+      "frequency": 196,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Technique",
+      "aliases": [],
+      "frequency": 186,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Patient",
+      "aliases": [],
+      "frequency": 137,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Examination",
+      "aliases": [],
+      "frequency": 121,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Abdomen",
+      "aliases": [],
+      "frequency": 116,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Procedure",
+      "aliases": [],
+      "frequency": 116,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Ct",
+      "aliases": [],
+      "frequency": 108,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Bilateral",
+      "aliases": [],
+      "frequency": 100,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Woman",
+      "aliases": [],
+      "frequency": 95,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Pelvis",
+      "aliases": [],
+      "frequency": 93,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "___",
+      "aliases": [],
+      "frequency": 90,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "History",
+      "aliases": [],
+      "frequency": 84,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Unchanged",
+      "aliases": [],
+      "frequency": 78,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Liver",
+      "aliases": [],
+      "frequency": 75,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Year",
+      "aliases": [],
+      "frequency": 72,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Images",
+      "aliases": [],
+      "frequency": 68,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Evidence",
+      "aliases": [],
+      "frequency": 66,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Catheter",
+      "aliases": [],
+      "frequency": 64,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Ascites",
+      "aliases": [],
+      "frequency": 60,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Left",
+      "aliases": [],
+      "frequency": 57,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Identified",
+      "aliases": [],
+      "frequency": 56,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Measuring",
+      "aliases": [],
+      "frequency": 54,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Study",
+      "aliases": [],
+      "frequency": 54,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Patient'S",
+      "aliases": [],
+      "frequency": 51,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Size",
+      "aliases": [],
+      "frequency": 51,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Fluid",
+      "aliases": [],
+      "frequency": 50,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Mild",
+      "aliases": [],
+      "frequency": 50,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Pancreas",
+      "aliases": [],
+      "frequency": 49,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Wire",
+      "aliases": [],
+      "frequency": 49,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Stable",
+      "aliases": [],
+      "frequency": 48,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Contrast",
+      "aliases": [],
+      "frequency": 48,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Reviewed",
+      "aliases": [],
+      "frequency": 47,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Consistent With",
+      "aliases": [],
+      "frequency": 47,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Ctdivol",
+      "aliases": [],
+      "frequency": 47,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Lesion",
+      "aliases": [],
+      "frequency": 46,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Dr.",
+      "aliases": [],
+      "frequency": 45,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Body) Dlp",
+      "aliases": [],
+      "frequency": 45,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Pleural Effusion",
+      "aliases": [],
+      "frequency": 44,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Spleen",
+      "aliases": [],
+      "frequency": 44,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Gallbladder",
+      "aliases": [],
+      "frequency": 43,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Ultrasound",
+      "aliases": [],
+      "frequency": 42,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Lidocaine",
+      "aliases": [],
+      "frequency": 42,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Mass",
+      "aliases": [],
+      "frequency": 42,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Chest",
+      "aliases": [],
+      "frequency": 40,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Collection",
+      "aliases": [],
+      "frequency": 40,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Appearance",
+      "aliases": [],
+      "frequency": 39,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Moderate",
+      "aliases": [],
+      "frequency": 39,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Measures",
+      "aliases": [],
+      "frequency": 37,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Bilaterally",
+      "aliases": [],
+      "frequency": 37,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Kidneys",
+      "aliases": [],
+      "frequency": 36,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Dose",
+      "aliases": [],
+      "frequency": 35,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Malignancy",
+      "aliases": [],
+      "frequency": 34,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Edema",
+      "aliases": [],
+      "frequency": 34,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Screening",
+      "aliases": [],
+      "frequency": 34,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Risks",
+      "aliases": [],
+      "frequency": 33,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Benefits",
+      "aliases": [],
+      "frequency": 33,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Sagittal",
+      "aliases": [],
+      "frequency": 33,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Pneumothorax",
+      "aliases": [],
+      "frequency": 32,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Distal",
+      "aliases": [],
+      "frequency": 32,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Focal Consolidation",
+      "aliases": [],
+      "frequency": 31,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Female",
+      "aliases": [],
+      "frequency": 31,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Local Anesthesia",
+      "aliases": [],
+      "frequency": 31,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Dated",
+      "aliases": [],
+      "frequency": 31,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Brain",
+      "aliases": [],
+      "frequency": 31,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "No",
+      "aliases": [],
+      "frequency": 31,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Therapeutic Paracentesis",
+      "aliases": [],
+      "frequency": 30,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Post",
+      "aliases": [],
+      "frequency": 30,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Evaluation",
+      "aliases": [],
+      "frequency": 30,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Increased",
+      "aliases": [],
+      "frequency": 29,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Lungs",
+      "aliases": [],
+      "frequency": 29,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "__",
+      "aliases": [],
+      "frequency": 29,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Axial",
+      "aliases": [],
+      "frequency": 29,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Lung",
+      "aliases": [],
+      "frequency": 29,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Bi-Rads",
+      "aliases": [],
+      "frequency": 29,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Views",
+      "aliases": [],
+      "frequency": 29,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Pa",
+      "aliases": [],
+      "frequency": 28,
+      "totalReports": 300,
+      "category": "Entity"
+    },
+    {
+      "term": "Site",
+      "aliases": [],
+      "frequency": 28,
+      "totalReports": 300,
+      "category": "Entity"
+    }
+  ]
+}

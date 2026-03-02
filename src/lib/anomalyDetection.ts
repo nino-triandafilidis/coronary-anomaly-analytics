@@ -3,7 +3,7 @@
 // Designed to be modular — can be replaced with a fine-tuned clinical NER model
 // or transformer-based medical entity extraction model in the future.
 
-import { anomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
+import { getAnomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
 
 export interface DetectedAnomaly {
   term: string;           // The matched text from the report
@@ -29,7 +29,7 @@ export function detectAnomalies(text: string): DetectedAnomaly[] {
   // Build a flat list of {term, entry} pairs sorted by term length descending.
   // This ensures longer/more-specific terms get matched first.
   const searchTerms: { term: string; entry: AnomalyEntry }[] = [];
-  for (const entry of anomalyDatabase) {
+  for (const entry of getAnomalyDatabase()) {
     for (const term of [entry.term, ...entry.aliases]) {
       searchTerms.push({ term, entry });
     }

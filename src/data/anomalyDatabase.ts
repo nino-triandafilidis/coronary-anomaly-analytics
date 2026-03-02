@@ -1,17 +1,30 @@
-// Mock anomaly frequency database
-// This module can later be replaced with a real hospital database, vector DB, or SQL DB
+// Anomaly frequency database: loaded from public/anomaly_frequencies.json when available (from
+// scripts/mimic_pipeline.py --run-ner), otherwise uses the mock below.
 
 export type Severity = "low" | "moderate" | "high" | "critical";
 
 export interface AnomalyEntry {
   term: string;
-  aliases: string[];       // Alternative names for the same condition
-  frequency: number;        // Absolute count in historical reports
-  totalReports: number;     // Total reports in the database
-  category: string;         // Clinical category
+  aliases: string[];
+  frequency: number;
+  totalReports: number;
+  category: string;
 }
 
 const TOTAL_REPORTS = 300;
+
+/** In-memory database; set by fetching /anomaly_frequencies.json in App. */
+let loadedDatabase: AnomalyEntry[] | null = null;
+
+/** Returns the active anomaly list (fetched from JSON if loaded, else mock). */
+export function getAnomalyDatabase(): AnomalyEntry[] {
+  return loadedDatabase ?? MOCK_ANOMALY_DATABASE;
+}
+
+/** Called when /anomaly_frequencies.json has been fetched. Use this to wire in real pipeline output. */
+export function setAnomalyDatabase(entries: AnomalyEntry[]): void {
+  loadedDatabase = entries.length > 0 ? entries : null;
+}
 
 /**
  * Compute severity from frequency: rarer findings are more severe.
@@ -28,7 +41,7 @@ export function getSeverity(entry: AnomalyEntry): Severity {
   return "low";
 }
 
-export const anomalyDatabase: AnomalyEntry[] = [
+const MOCK_ANOMALY_DATABASE: AnomalyEntry[] = [
   {
     term: "Pulmonary embolism",
     // Do not add "PE" as alias — too ambiguous; matches "PERFORMED", "PERSPECTIVE", etc.
@@ -160,7 +173,7 @@ export const anomalyDatabase: AnomalyEntry[] = [
 
 export function getAnomalyByTerm(term: string): AnomalyEntry | undefined {
   const lower = term.toLowerCase();
-  return anomalyDatabase.find(
+  return getAnomalyDatabase().find(
     (entry) =>
       entry.term.toLowerCase() === lower ||
       entry.aliases.some((alias) => alias.toLowerCase() === lower)

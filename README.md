@@ -1,5 +1,7 @@
 # Welcome to your Lovable project
 
+**MIMIC dataset / pipeline:** See **[SCRIPTS.md](./SCRIPTS.md)** for which scripts to run (e.g. `python scripts/mimic_pipeline.py` to generate the 300-report dataset).
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID

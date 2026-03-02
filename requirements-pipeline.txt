@@ -1,0 +1,15 @@
+# Optional: for scripts/mimic_pipeline.py --run-ner
+# 1. Extract 300 reports (no deps beyond stdlib):
+#    python scripts/mimic_pipeline.py
+# 2. With NER + frequency export:
+#    pip install -r requirements-pipeline.txt
+#    python -m spacy download en_core_sci_sm  # or install en_ner_bc5cdr_md from scispacy
+#    python scripts/mimic_pipeline.py --run-ner
+# 3. Copy public/anomaly_frequencies.json into src/data/ and wire anomalyDatabase to use it if desired.
+
+pandas>=2.0.0
+spacy>=3.7.0
+# scispacy + model (optional, for biomedical NER):
+# pip install scispacy
+# pip install https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_ner_bc5cdr_md-0.5.4.tar.gz
+# UMLS linker (optional): requires UMLS license and scispacy EntityLinker

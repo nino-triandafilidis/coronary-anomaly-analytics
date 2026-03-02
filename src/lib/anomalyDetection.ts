@@ -16,6 +16,9 @@ export interface DetectedAnomaly {
  * Detect anomalies in a given report text using dictionary-based matching.
  * Returns all detected anomalies with their positions in the text.
  *
+ * Terms are sorted by length (longest first) so specific terms like
+ * "coronary artery stenosis" take priority over generic "stenosis".
+ *
  * Future replacement: Swap this function with a call to a fine-tuned
  * clinical NER model (e.g., BioBERT, Med7, or a custom transformer).
  */
@@ -23,45 +26,65 @@ export function detectAnomalies(text: string): DetectedAnomaly[] {
   const detected: DetectedAnomaly[] = [];
   const lowerText = text.toLowerCase();
 
+  // Build a flat list of {term, entry} pairs sorted by term length descending.
+  // This ensures longer/more-specific terms get matched first.
+  const searchTerms: { term: string; entry: AnomalyEntry }[] = [];
   for (const entry of anomalyDatabase) {
-    const allTerms = [entry.term, ...entry.aliases];
+    for (const term of [entry.term, ...entry.aliases]) {
+      searchTerms.push({ term, entry });
+    }
+  }
+  searchTerms.sort((a, b) => b.term.length - a.term.length);
 
-    for (const term of allTerms) {
-      const lowerTerm = term.toLowerCase();
-      let searchFrom = 0;
+  const isWordBoundary = (ch: string) => /[\s.,;:!?()\-\/\n\r]/.test(ch);
 
-      while (searchFrom < lowerText.length) {
-        const index = lowerText.indexOf(lowerTerm, searchFrom);
-        if (index === -1) break;
+  for (const { term, entry } of searchTerms) {
+    const lowerTerm = term.toLowerCase();
+    const isShortTerm = term.length <= 2;
+    let searchFrom = 0;
 
-        // Check word boundaries to avoid partial matches
-        const before = index > 0 ? lowerText[index - 1] : " ";
-        const after = index + lowerTerm.length < lowerText.length
-          ? lowerText[index + lowerTerm.length]
-          : " ";
+    while (searchFrom < lowerText.length) {
+      const index = lowerText.indexOf(lowerTerm, searchFrom);
+      if (index === -1) break;
 
-        const isWordBoundary = (ch: string) => /[\s.,;:!?()\-\/\n\r]/.test(ch);
+      const end = index + lowerTerm.length;
 
-        if (isWordBoundary(before) && isWordBoundary(after)) {
-          // Check for overlapping detections
-          const overlaps = detected.some(
-            (d) =>
-              (index >= d.startIndex && index < d.endIndex) ||
-              (index + lowerTerm.length > d.startIndex && index + lowerTerm.length <= d.endIndex)
-          );
+      // Check word boundaries to avoid partial matches
+      const before = index > 0 ? lowerText[index - 1] : " ";
+      const after = end < lowerText.length ? lowerText[end] : " ";
 
-          if (!overlaps) {
-            detected.push({
-              term: text.substring(index, index + lowerTerm.length),
-              entry,
-              startIndex: index,
-              endIndex: index + lowerTerm.length,
-            });
-          }
-        }
-
+      if (!isWordBoundary(before) || !isWordBoundary(after)) {
         searchFrom = index + 1;
+        continue;
       }
+
+      // For very short terms (e.g. "PE"), require uppercase in original text to avoid
+      // false positives in words like "PERFORMED", "PERSPECTIVE"
+      if (isShortTerm) {
+        const actualSlice = text.substring(index, end);
+        if (actualSlice !== actualSlice.toUpperCase()) {
+          searchFrom = index + 1;
+          continue;
+        }
+      }
+
+      // Overlap or full containment: skip if this range intersects or is inside an existing detection
+      const overlaps = detected.some(
+        (d) =>
+          (index < d.endIndex && end > d.startIndex) ||
+          (index >= d.startIndex && end <= d.endIndex)
+      );
+
+      if (!overlaps) {
+        detected.push({
+          term: text.substring(index, end),
+          entry,
+          startIndex: index,
+          endIndex: end,
+        });
+      }
+
+      searchFrom = index + 1;
     }
   }
 

@@ -62,18 +62,28 @@ def extract_300_reports(mimic_note_dir: Path, output_dir: Path) -> list[dict]:
     return reports
 
 
+# NER labels to keep: only clinical/finding-like types. en_ner_bc5cdr_md has DISEASE, CHEMICAL; en_core_sci_sm only has ENTITY.
+ALLOWED_NER_LABELS = frozenset({"DISEASE", "CHEMICAL", "CONDITION", "SYMPTOM", "ENTITY"})  # ENTITY for en_core_sci_sm fallback
+# When model only gives ENTITY, exclude these high-frequency non-findings (section headers / boilerplate / anatomy-only)
+BLOCKLIST_TERMS = frozenset({
+    "findings", "impression", "comparison", "indication", "technique", "patient", "examination",
+    "procedure", "bilateral", "abdomen", "chest", "report", "history", "clinical", "evidence",
+    "no", "normal", "images", "ct", "mri", "study", "date", "woman", "man", "pelvis", "left", "right",
+    "unchanged", "year", "catheter", "identified", "measuring", "size", "fluid", "___", "patient's",
+    "male", "female", "age", "years", "old", "status", "post", "pre", "without", "with", "same",
+})
+
+
 def run_ner_and_export_frequencies(reports: list[dict], output_dir: Path, total_reports: int) -> None:
-    """Run scispaCy NER, aggregate entity counts, export anomaly_frequencies.json.
-    Note: This aggregates all NER entity types (no filter for clinical findings). Inspect
-    intermediary output before wiring to the app; see AGENTS.md."""
+    """Run scispaCy NER, aggregate entity counts for DISEASE/CONDITION/etc. only, export anomaly_frequencies.json."""
     try:
         import spacy
     except ImportError:
         print("pip install spacy then: python -m spacy download en_ner_bc5cdr_md", file=sys.stderr)
         return
 
-    # Prefer scispaCy models (install via pip; see SCRIPTS.md)
-    for model_name in ("en_core_sci_sm", "en_ner_bc5cdr_md", "en_core_sci_md"):
+    # Prefer BC5CDR (DISEASE/CHEMICAL); fall back to en_core_sci_* (generic ENTITY)
+    for model_name in ("en_ner_bc5cdr_md", "en_core_sci_md", "en_core_sci_sm"):
         try:
             nlp = spacy.load(model_name)
             break
@@ -104,17 +114,22 @@ def run_ner_and_export_frequencies(reports: list[dict], output_dir: Path, total_
         text = rep.get("text", "")[:100000]  # limit length
         doc = nlp(text)
         for ent in doc.ents:
+            if ent.label_ not in ALLOWED_NER_LABELS:
+                continue
             key = ent.text.strip().lower()
             if not key or len(key) < 2:
+                continue
+            if key in BLOCKLIST_TERMS:
                 continue
             term_counts[key] += 1
             term_labels[key] = ent.label_
 
-    # Build anomaly list: prefer terms that look like conditions (DISEASE, etc.)
+    # Build anomaly list from filtered counts (DISEASE/CONDITION/CHEMICAL/SYMPTOM only)
     total = total_reports or len(reports)
     entries = []
     seen_terms = set()
-    for (term_lower, count) in sorted(term_counts.items(), key=lambda x: -x[1])[:80]:
+    sorted_terms = sorted(term_counts.items(), key=lambda x: -x[1])
+    for (term_lower, count) in sorted_terms[:80]:
         if term_lower in seen_terms:
             continue
         seen_terms.add(term_lower)

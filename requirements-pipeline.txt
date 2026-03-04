@@ -8,6 +8,7 @@
 # 3. Copy public/anomaly_frequencies.json into src/data/ and wire anomalyDatabase to use it if desired.
 
 pandas>=2.0.0
+reportlab>=4.0.0
 spacy>=3.7.0
 # scispacy + model (optional, for biomedical NER):
 # pip install scispacy

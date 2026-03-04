@@ -58,11 +58,29 @@ python scripts/mimic_pipeline.py --mimic-dir "/path/to/mimic-iv-note/2.2/note" -
 
 ---
 
+## 3. Generate a test PDF (report not in the DB)
+
+To test **PDF upload/parsing** and **detection on text the DB hasn’t seen**, generate a single PDF from the 301st MIMIC report (so it’s not one of the 300 in the dataset):
+
+```bash
+# Requires reportlab (e.g. in your venv)
+pip install reportlab
+
+python scripts/generate_sample_pdf.py
+```
+
+- **Output:** `public/sample_report_not_in_db.pdf`
+- **Options:** `--mimic-dir PATH` (same as pipeline), `--output PATH` (output PDF path).
+- Use this file in the app: upload it to confirm PDF parsing works and to see which terms get highlighted on a report that wasn’t in the training set.
+
+---
+
 ## Summary
 
 | Goal | Command |
 |------|--------|
 | **Dataset page with 300 reports** | `python3 scripts/mimic_pipeline.py` (no venv) |
 | **Same + NER frequency export** | Create venv, `pip install -r requirements-pipeline.txt`, then `python scripts/mimic_pipeline.py --run-ner` |
+| **Test PDF + new-text detection** | `pip install reportlab` then `python scripts/generate_sample_pdf.py` |
 
 No other scripts are required for the Dataset page; only step 1 is required.

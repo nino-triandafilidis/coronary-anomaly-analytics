@@ -254,6 +254,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                   <Tooltip key={i}>
                     <TooltipTrigger asChild>
                       <span
+                        data-term-index={seg.termIdx}
                         className={`cursor-pointer rounded-sm px-0.5 transition-all duration-150 ${STATUS_HIGHLIGHT[seg.status!]} ${isHovered ? "ring-2 ring-primary" : ""}`}
                         onMouseEnter={() => setHoveredIdx(seg.termIdx)}
                         onMouseLeave={() => setHoveredIdx(null)}

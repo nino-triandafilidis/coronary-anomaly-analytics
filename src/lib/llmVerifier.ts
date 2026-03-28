@@ -10,10 +10,10 @@
 import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai";
 import type { ParsedTerm } from "@/data/mockParseResults";
 
-const VERIFIER_MODEL = "gemini-2.0-flash";
+const VERIFIER_MODEL = "gemini-2.5-flash";
 
-const INPUT_COST_PER_TOKEN = 0.10 / 1_000_000;
-const OUTPUT_COST_PER_TOKEN = 0.40 / 1_000_000;
+const INPUT_COST_PER_TOKEN = 0.30 / 1_000_000;
+const OUTPUT_COST_PER_TOKEN = 2.50 / 1_000_000;
 
 const VERIFIER_PROMPT = `You are a clinical verification system. You will receive:
 1. A CT angiogram radiology report

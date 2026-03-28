@@ -146,7 +146,7 @@ export async function orchestrateParse(
 
       // Update result
       parseResult.parsedTerms = filteredTerms;
-      parseResult.verifierModel = "gemini-2.0-flash";
+      parseResult.verifierModel = "gemini-2.5-flash";
       parseResult.verifierAgreement = verification.overallAgreement;
       parseResult.totalTokensUsed +=
         verification.tokenUsage.input + verification.tokenUsage.output;

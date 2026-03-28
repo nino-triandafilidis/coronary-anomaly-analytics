@@ -12,11 +12,11 @@ import type { ParsedTerm, ParseResult } from "@/data/mockParseResults";
 // Config
 // ---------------------------------------------------------------------------
 
-const MODEL_NAME = "gemini-2.0-flash";
+const MODEL_NAME = "gemini-2.5-flash";
 
-// Pricing per 1M tokens (Gemini 2.0 Flash as of 2025)
-const INPUT_COST_PER_TOKEN = 0.10 / 1_000_000;
-const OUTPUT_COST_PER_TOKEN = 0.40 / 1_000_000;
+// Pricing per 1M tokens (Gemini 2.5 Flash, standard tier)
+const INPUT_COST_PER_TOKEN = 0.30 / 1_000_000;
+const OUTPUT_COST_PER_TOKEN = 2.50 / 1_000_000;
 
 // ---------------------------------------------------------------------------
 // Prompt

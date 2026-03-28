@@ -1,121 +1,208 @@
+// Real de-identified MIMIC-IV radiology reports.
+// Selected for high anomaly density and cardiac/pulmonary relevance.
+// Source: public/mimic_reports_300.json (indices 235, 130, 256)
+
 export const sampleReports = [
   {
-    id: "report-001",
-    title: "CT Angiogram — Patient A (Chest Pain Evaluation)",
-    text: `CT ANGIOGRAPHY OF THE CHEST — CLINICAL REPORT
+    id: "mimic-235",
+    title: "CTA Chest — Extensive PE with Pulmonary Nodules",
+    text: `EXAMINATION:  CTA chest
 
-Patient: [REDACTED]  |  Age: 67  |  Sex: Male
-Date of Study: 2025-11-14
-Clinical Indication: Acute chest pain, rule out pulmonary embolism.
+INDICATION:  History: ___ status post robotic radical cystectomy on ___
+with post op LLE DVT has been on lovenox, now presenting with new oxygen
+requirement and worsening dyspnea on exertion x 1 day  // eval for pulmonary
+embolism
 
-TECHNIQUE:
-CT angiography was performed from the thoracic inlet to the diaphragm following intravenous administration of 80 mL of iodinated contrast. Images were acquired during the arterial phase with ECG gating.
+TECHNIQUE:  Axial multidetector CT images were obtained through the thorax
+after the uneventful administration of intravenous contrast.
+Reformatted coronal, sagittal, thin slice axial images, and oblique maximal
+intensity projection images were submitted to PACS and reviewed.
+
+DOSE:  Acquisition sequence:
+   1) Stationary Acquisition 1.5 s, 0.5 cm; CTDIvol = 4.6 mGy (Body) DLP = 2.3
+mGy-cm.
+   2) Spiral Acquisition 3.8 s, 29.6 cm; CTDIvol = 9.5 mGy (Body) DLP = 280.3
+mGy-cm.
+ Total DLP (Body) = 283 mGy-cm.
+
+COMPARISON:  CT chest ___, PET-CT ___
 
 FINDINGS:
 
-Pulmonary Arteries:
-A filling defect is identified in the right lower lobe segmental pulmonary artery, consistent with pulmonary embolism. No evidence of saddle embolus. The main pulmonary artery diameter measures 32 mm, suggesting possible pulmonary hypertension.
+The aorta and its major branch vessels are patent, with no evidence of
+stenosis, occlusion, dissection, or aneurysmal formation.  There is no
+evidence of penetrating atherosclerotic ulcer or aortic arch atheroma present.
+Moderate atherosclerotic calcifications are noted throughout the thoracic
+aorta.
 
-Coronary Arteries:
-Moderate calcification is noted in the left anterior descending artery (LAD). Coronary artery stenosis of approximately 50% is seen in the proximal LAD. The right coronary artery shows mild calcification without significant stenosis.
+There is extensive thrombus seen extending from the right main pulmonary
+artery into the right upper, middle, and lower lobes.  Additionally, there are
+smaller thrombi seen in the segmental branches of the left upper and lower
+lobes.  The main and right pulmonary arteries, however, are normal in caliber,
+and there is no evidence of right heart strain.
 
-Aorta:
-The thoracic aorta is normal in caliber. No evidence of aortic aneurysm or dissection. Mild atherosclerotic changes are noted in the aortic arch.
+There is no supraclavicular, axillary, mediastinal, or hilar lymphadenopathy.
+Rim calcified 9 mm thyroid nodule is unchanged (3:2).  Aortic and mitral
+valvular calicifications R presents.  Heart size is normal.
 
-Cardiac:
-The heart is mildly enlarged, consistent with cardiomegaly. A small pericardial effusion is present. No intracardiac thrombus identified. Aortic valve calcification is noted.
+There is no evidence of pericardial effusion.  There is no pleural effusion.
 
-Lungs:
-Bilateral dependent atelectasis is present. A 6mm pulmonary nodule is identified in the right upper lobe. No pleural effusion. No consolidation.
+Several pulmonary nodules are noted, as seen previously, with the largest
+measuring up to 1 cm in the right middle lobe (series 2: Image 59), all of
+which appear unchanged from prior exam.  The airways are patent to the
+subsegmental level.
 
-Mediastinum:
-Mildly enlarged mediastinal lymph nodes, measuring up to 12mm in short axis, consistent with lymphadenopathy.
+Limited images of the upper abdomen are remarkable for a a 1.1 cm hypodense
+structure in the liver dome, likely day hepatic cyst.  There is a small hiatal
+hernia.
+
+No lytic or blastic osseous lesion suspicious for malignancy is identified.
+Degenerative changes are noted in the thoracic spine.  2 soft tissue nodules
+are identified within the left breast measuring 11 and 7 mm, similar to the
+previous CT.
 
 IMPRESSION:
-1. Pulmonary embolism involving the right lower lobe segmental artery.
-2. Moderate coronary artery stenosis in the proximal LAD with calcification.
-3. Mild cardiomegaly with small pericardial effusion.
-4. 6mm pulmonary nodule in right upper lobe — recommend follow-up CT in 6 months.
-5. Mediastinal lymphadenopathy — clinical correlation recommended.
-6. Aortic valve calcification.`,
+
+1.  Extensive pulmonary embolism with thrombus seen extending from the right
+main pulmonary artery into the segmental and subsegmental right upper, middle,
+and lower lobe pulmonary arteries.  No right heart strain identified.
+2.  Additionally, there are smaller pulmonary emboli seen in the segmental and
+subsegmental branches of the left upper and lower lobes.
+3.  Several pulmonary nodules are noted, as noted previously, with the largest
+appearing spiculated and measuring up to 1 cm in the right middle lobe,
+suspicious for malignancy on the previous PET-CT.
+4.  Re- demonstration of 2 left breast nodules for which correlation with
+mammography and ultrasound is suggested.
+
+RECOMMENDATION(S):  Left breast ultrasound and mammography for the 2 breasts
+nodules, as previously recommended.
+
+NOTIFICATION:  The findings were discussed with ___, M.D. by ___
+___, M.D. on the telephone on ___ at 7:55 ___, 2 minutes after discovery
+of the findings.`,
   },
   {
-    id: "report-002",
-    title: "CT Angiogram — Patient B (Aortic Evaluation)",
-    text: `CT ANGIOGRAPHY OF THE CHEST AND ABDOMEN — CLINICAL REPORT
+    id: "mimic-130",
+    title: "CT Chest — CAD, Pulmonary Edema, Mitral Regurgitation",
+    text: `INDICATION:  History of coronary artery disease, hypertension, hyperlipidemia
+who presents with shortness of breath, echo with severe mitral regurgitation,
+preoperative exam, question opacity in the right upper lobe.
 
-Patient: [REDACTED]  |  Age: 74  |  Sex: Female
-Date of Study: 2025-10-28
-Clinical Indication: Known aortic aneurysm, follow-up evaluation.
+COMPARISONS:  Chest radiograph from ___.
 
-TECHNIQUE:
-CT angiography of the chest and upper abdomen was performed with 90 mL of iodinated contrast. Arterial and delayed phase images were obtained.
+TECHNIQUE:  MDCT axial imaging was obtained through the chest without the
+administration of intravenous contrast material.  Coronal and sagittal
+reformats were completed.
 
-FINDINGS:
+FINDINGS:  The thyroid gland is unremarkable.  There are no enlarged
+supraclavicular or axillary lymph nodes.  There are prominent mediastinal
+nodes, for example, 9 mm node (2:16), subcarinal node measures 8 mm in short
+axis.  There are dense coronary artery calcifications as well as mild aortic
+valvular calcifications.  There is no pericardial effusion.  The aorta is of
+normal caliber.  Pulmonary artery is enlarged, specifically the right main
+branch measures 2.5 cm.  The airways are patent to the subsegmental levels.
 
-Aorta:
-The infrarenal abdominal aortic aneurysm measures 5.2 cm in maximal diameter, increased from 4.8 cm on prior study dated 2025-04-15. A mural thrombus is present within the aneurysm sac. No evidence of dissection or rupture. The thoracic aorta is mildly ectatic at 3.8 cm.
+Large areas of confluent, relatively central ground-glass opacity, involve
+contiguous, central right upper lobe and lower lobes.  There are no nodules or
+masses.  Left upper lobe subpleural opacity (4:46) is noted.  No pleural
+effusion or pneumothorax.  There is no large focal consolidation.  There are
+areas of scarring and paraseptal emphysema in the right middle lobe and
+lingula.
 
-Pulmonary Arteries:
-No filling defects to suggest pulmonary embolism. The main pulmonary artery is within normal limits.
+This study is not tailored for evaluation of subdiaphragmatic structures, but
+limited views demonstrate atherosclerotic disease at the origins of the celiac
+artery and SMA.
 
-Coronary Arteries:
-Extensive coronary calcification is noted. Coronary artery stenosis is suspected in the left circumflex artery. The LAD shows moderate calcification.
-
-Cardiac:
-Cardiomegaly is present. Moderate pericardial effusion identified. Mitral valve calcification is noted. No intracardiac thrombus.
-
-Lungs:
-Moderate bilateral pleural effusion is present. Compressive atelectasis at the lung bases bilaterally. No pulmonary nodule identified. No consolidation.
-
-Vascular:
-Bilateral carotid plaque is noted at the carotid bifurcations. No hemodynamically significant carotid stenosis.
+There are no concerning bony lesions.
 
 IMPRESSION:
-1. Enlarging infrarenal aortic aneurysm (5.2 cm) with mural thrombus — surgical consultation recommended.
-2. Moderate bilateral pleural effusion with compressive atelectasis.
-3. Cardiomegaly with moderate pericardial effusion.
-4. Coronary artery stenosis and extensive calcification.
-5. Bilateral carotid plaque without significant stenosis.
-6. Mitral valve calcification.`,
+
+1.  Diffuse confluent ground-glass opacities predominantly in the right upper
+lobe and right lower lobe most likely represent residual pulmonary edema,
+localized to the right lung because of direction of jet in mitral
+regurgitation.
+
+2.  Possible pulmonary hypertension.
+
+3.  Moderate coronary artery disease.`,
   },
   {
-    id: "report-003",
-    title: "CT Angiogram — Patient C (Post-Surgical Follow-Up)",
-    text: `CT ANGIOGRAPHY OF THE CHEST — CLINICAL REPORT
+    id: "mimic-256",
+    title: "CT Chest — Pulmonary Nodules, Coronary Calcification",
+    text: `EXAMINATION:  CT CHEST W/CONTRAST
 
-Patient: [REDACTED]  |  Age: 58  |  Sex: Male
-Date of Study: 2025-12-02
-Clinical Indication: Post-CABG follow-up, evaluate graft patency.
+INDICATION:  ___ year old woman with bladder ca, schedule for radical
+cystectomy  // please evaluate for any abnormalities, mets
 
-TECHNIQUE:
-ECG-gated CT angiography of the chest was performed with 85 mL of iodinated contrast during the arterial phase.
+TECHNIQUE:  Non contrasted CT chest
+
+DOSE:  Acquisition sequence:
+   1) Spiral Acquisition 6.8 s, 35.9 cm; CTDIvol = 7.6 mGy (Body) DLP = 276.7
+mGy-cm.
+ Total DLP (Body) = 277 mGy-cm.
+
+COMPARISON:  No prior chest CT available for comparison.
 
 FINDINGS:
 
-Coronary Arteries and Grafts:
-The left internal mammary artery (LIMA) graft to the LAD is patent with good distal flow. The saphenous vein graft (SVG) to the right coronary artery shows moderate stenosis at the proximal anastomosis. Native coronary arteries demonstrate diffuse calcification. Coronary artery stenosis is present in the native left circumflex artery (approximately 70%).
+FINDINGS:
 
-Aorta:
-The ascending aorta measures 4.1 cm, consistent with mild aortic dilatation. No dissection identified. Aortic valve calcification is noted with mildly restricted leaflet motion, consistent with aortic sclerosis.
+NECK, THORACIC INLET, AXILLAE, CHEST WALL: Circumferentially calcified nodule
+in the right lobe of the thyroid measuring 8 mm in diameter.  Smaller punctate
+calcifications just anterior to the right lobe of thyroid (6, 22).  No
+supraclavicular adenopathy.  No axillary adenopathy.  There is attenuation of
+the left subclavian vein as it crosses between the clavicle and the first rib
+with mildly prominent collateral vessels, with his most likely is secondary to
+the patient's ___ position.  2 subcentimeter soft tissue nodules in the left
+breast (6, 164 and 140).
 
-Pulmonary Arteries:
-No evidence of pulmonary embolism. The pulmonary arteries are normal in caliber.
+UPPER ABDOMEN: This study was not tailored to evaluate the subdiaphragmatic
+organs.  Small sliding hiatus hernia.  No adrenal lesions.  Hypodense lesion
+in segment 7 of the liver appear similar compared to prior imaging done ___.  Evidence of previous cholecystectomy.  Mild stranding seen adjacent to
+the right kidney/ ___ pouch.
 
-Cardiac:
-The heart is normal in size. Trace pericardial effusion. No intracardiac thrombus.
+MEDIASTINUM: No mediastinal adenopathy.
 
-Lungs:
-Mild bibasilar atelectasis. Two small pulmonary nodules are identified: a 4mm nodule in the right middle lobe and a 3mm nodule in the left lower lobe. No pleural effusion. Patchy consolidation in the left lower lobe, likely post-operative.
+HILA: Subcentimeter hilar lymph nodes.
 
-Mediastinum:
-Post-surgical changes. Mediastinal lymphadenopathy is not present. Sternal wires are intact.
+HEART and PERICARDIUM: Normal cardiac configuration.  Moderate aortic annular
+calcifications.  Mild coronary artery calcifications.  No pericardial
+effusion.  Moderate calcification of the aortic arch and supra-aortic vessels.
+PLEURA: No pleural effusion.
+LUNG:
+
+-PARENCHYMA:  Biapical pleural-parenchymal scarring.  There are 2 spiculated
+irregular part solid nodules with associated bronchiolectasis the largest in
+the right upper lobe (6, 146) with the nodule and solid component measuring
+10.5 mm (the sub solid component is seen in its inferior aspect).  Smaller
+irregular bubbly part solid nodule measuring 7 mm in average diameter in the
+left lower lobe (6, 186).  Few small pulmonary nodules measuring 3 mm in
+diameter seen in the left lower lobe (6, 181) and (6, 118) which are
+indeterminate.  Mild centrilobular emphysematous changes.  A few punctate
+calcified granulomas.  Incidental lung cysts.
+-AIRWAYS:  The airways are patent to the subsegmental level.
+-VESSELS:  The pulmonary artery measures at the upper limits of normal (31
+mm).  No pulmonary arterial filling defects.
+CHEST CAGE: Spondylotic changes of the thoracic spine.  No lytic/ destructive
+bony lesions.
 
 IMPRESSION:
-1. Patent LIMA graft to LAD. Moderate stenosis in SVG to RCA — recommend clinical correlation.
-2. Severe native coronary artery stenosis (70%) in the left circumflex artery with diffuse calcification.
-3. Mild ascending aortic dilatation (4.1 cm). Aortic valve calcification with early aortic sclerosis.
-4. Two small pulmonary nodules (4mm and 3mm) — likely benign; recommend follow-up CT in 12 months.
-5. Post-operative consolidation in the left lower lobe.`,
+
+Two irregular, spiculated part solid nodules, the largest in the right upper
+lobe measuring 11 mm in diameter.  These nodules do not have the typical
+appearance of metastasis, but are concerning for lesions in the lung
+adenocarcinoma spectrum.
+
+Small indeterminate round 3 mm pulmonary nodule seen in the left lower lobe.
+
+2 subcentimeter soft tissue nodules in the left breast, for which correlation
+with mammography advised if warranted clinically.
+
+RECOMMENDATION(S):  The larger spiculated part solid nodule in the right upper
+lobe measures 11 mm in diameter.  Thus, PET-CT imaging may be performed for
+better characterization.
+
+Alternatively consider a 3 month follow-up CT for re-evaluation of all
+nodules.`,
   },
 ];

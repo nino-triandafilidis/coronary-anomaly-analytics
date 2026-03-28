@@ -1,12 +1,12 @@
 # Anomaly Insight
 
-Clinical anomaly detection tool for pediatric cardiologists at Stanford Children's Hospital. Built as part of CS147 (Introduction to Human-Computer Interaction Design) at Stanford.
+Clinical analytics tool for pediatric cardiologists at Stanford Children's Hospital.
 
-Cardiologists upload CT angiogram radiology reports, and the system uses LLM-powered named entity recognition to extract, verify, and track clinical findings across a growing database.
+User uploads a CT angiogram  reports, and the system uses LLM-powered named entity recognition to extract, verify, and track the frequence of observed anomalies across a growing database of patients.
 
 ## How it works
 
-1. **Upload** a radiology report (paste text or upload PDF)
+1. **Upload** a CT angiogram report (paste text or upload PDF)
 2. **Parser** (Gemini 2.5 Flash) extracts clinical terms with exact text positions
 3. **Resolver** fixes any terms the parser paraphrased instead of quoting verbatim, and catches missed findings
 4. **Verifier** confirms or rejects each term (catches negation leaks, hallucinations)
@@ -83,7 +83,3 @@ The UI follows CS147 HCI design principles documented in [design-guidelines.md](
 | `VITE_GEMINI_API_KEY` | Yes (for live parsing) | Google Gemini API key |
 | `VITE_ANTHROPIC_API_KEY` | No | Reserved for future use |
 | `VITE_OPENAI_API_KEY` | No | Reserved for future use |
-
-## Cost
-
-Each report costs ~$0.008 to parse (parser + verifier). The resolver only fires when needed, adding ~$0.003. Well under the $1/call safety limit.

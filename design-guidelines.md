@@ -1,16 +1,11 @@
-# Stanford CS147: Practical Design Skills for Project Mastery
+# Practical Design Skills for Project Mastery
 
 ## What This Document Is
 
-This is a distilled summary of the **creative and execution-oriented** design skills taught in Stanford's CS147 (Introduction to Human-Computer Interaction Design), taught by Prof. James Landay. The focus is on principles and techniques you can demonstrate mastery of in a portfolio project -- not on research methods like interviewing or documentation.
-
-The course's full title is "Design Thinking for User Experience Design, Prototyping & Evaluation," and it follows the d.school design thinking framework: Empathize, Define, Ideate, Prototype, Test. Below, I've reorganized the course content around the **skills you'd want to showcase**.
-
+This is a distilled summary of the **creative and execution-oriented** design skills taught in Stanford's CS147 (Introduction to Human-Computer Interaction Design), taught by Prof. James Landay.
 ---
 
-## 1. Ideation & Concept Development
-
-**What the course teaches:** How to move from a fuzzy problem space to concrete, creative solution directions.
+## 1. Ideation & Concept Development: How to move from a fuzzy problem space to concrete, creative solution directions?
 
 ### Key Techniques
 

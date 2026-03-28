@@ -4,25 +4,78 @@ import { Activity, Heart } from "lucide-react";
 import { ReportInput } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
+import { TermReview } from "@/components/TermReview";
 import { detectAnomalies, getUniqueAnomalies, type DetectedAnomaly } from "@/lib/anomalyDetection";
-import type { AnomalyEntry } from "@/data/anomalyDatabase";
+import { getAnomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
+import { findMockParseResultByText, type ParseResult, type ReviewableTerm } from "@/data/mockParseResults";
+
+type Stage = "upload" | "review" | "results";
 
 const Index = () => {
+  const [stage, setStage] = useState<Stage>("upload");
   const [reportText, setReportText] = useState<string | null>(null);
   const [detected, setDetected] = useState<DetectedAnomaly[]>([]);
   const [unique, setUnique] = useState<AnomalyEntry[]>([]);
+  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+  const [reviewTerms, setReviewTerms] = useState<ReviewableTerm[] | null>(null);
 
   const handleReport = (text: string) => {
-    const results = detectAnomalies(text);
     setReportText(text);
-    setDetected(results);
-    setUnique(getUniqueAnomalies(results));
+    const mock = findMockParseResultByText(text);
+    if (mock) {
+      setParseResult(mock);
+      setReviewTerms(null);
+      setStage("review");
+    } else {
+      // Fallback: rule-based detection, skip review
+      const results = detectAnomalies(text);
+      setDetected(results);
+      setUnique(getUniqueAnomalies(results));
+      setParseResult(null);
+      setStage("results");
+    }
+  };
+
+  const handleReviewConfirm = (accepted: ReviewableTerm[]) => {
+    setReviewTerms(accepted);
+    const db = getAnomalyDatabase();
+    const dbLookup = new Map(db.map((e) => [e.term.toLowerCase(), e]));
+
+    const mapped: DetectedAnomaly[] = accepted.map((t) => {
+      const match =
+        dbLookup.get(t.normalizedName.toLowerCase()) ??
+        db.find((e) =>
+          e.aliases.some((a) => a.toLowerCase() === t.normalizedName.toLowerCase())
+        );
+
+      const entry: AnomalyEntry = match ?? {
+        term: t.normalizedName,
+        aliases: [],
+        frequency: 0,
+        totalReports: 300,
+        category: t.category,
+      };
+
+      return {
+        term: t.term,
+        entry,
+        startIndex: t.startIndex,
+        endIndex: t.endIndex,
+      };
+    });
+
+    setDetected(mapped);
+    setUnique(getUniqueAnomalies(mapped));
+    setStage("results");
   };
 
   const handleReset = () => {
+    setStage("upload");
     setReportText(null);
     setDetected([]);
     setUnique([]);
+    setParseResult(null);
+    setReviewTerms(null);
   };
 
   return (
@@ -54,8 +107,7 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {!reportText ? (
-          /* Input State */
+        {stage === "upload" && (
           <div className="mx-auto max-w-2xl animate-fade-in">
             <div className="mb-6 text-center">
               <h2 className="text-2xl font-semibold text-foreground">
@@ -67,8 +119,18 @@ const Index = () => {
             </div>
             <ReportInput onReportSubmit={handleReport} />
           </div>
-        ) : (
-          /* Results State */
+        )}
+
+        {stage === "review" && parseResult && (
+          <TermReview
+            parseResult={parseResult}
+            initialTerms={reviewTerms ?? undefined}
+            onConfirm={handleReviewConfirm}
+            onBack={handleReset}
+          />
+        )}
+
+        {stage === "results" && reportText && (
           <div className="animate-fade-in">
             <div className="mb-6 flex items-center justify-between">
               <div>
@@ -78,12 +140,22 @@ const Index = () => {
                   {unique.length} unique condition{unique.length !== 1 ? "s" : ""}
                 </p>
               </div>
-              <button
-                onClick={handleReset}
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                ← New Report
-              </button>
+              <div className="flex items-center gap-3">
+                {parseResult && (
+                  <button
+                    onClick={() => setStage("review")}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    ← Back to Review
+                  </button>
+                )}
+                <button
+                  onClick={handleReset}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  ← New Report
+                </button>
+              </div>
             </div>
             <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
               <ReportViewer text={reportText} anomalies={detected} />

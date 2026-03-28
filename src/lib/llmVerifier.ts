@@ -1,8 +1,8 @@
 /**
  * LLM-based verifier — checks parser output for errors.
  *
- * Uses a second Gemini call (or different provider) to verify:
- * 1. No hallucinated terms (terms not actually in the report)
+ * Checks:
+ * 1. No hallucinated terms (terms not in the report)
  * 2. No negated findings incorrectly included
  * 3. No missed findings
  */
@@ -19,36 +19,38 @@ const VERIFIER_PROMPT = `You are a clinical verification system. You will receiv
 1. A CT angiogram radiology report
 2. A list of anomaly terms extracted by another AI
 
-YOUR TASK: Verify the extraction is correct and complete. For each extracted term, check:
-- Is it actually present in the report text at the claimed position?
-- Is it a genuine anomaly/finding (not a negated finding like "no evidence of X")?
-- Is the category correct?
+YOUR TASK: Verify the extraction is correct and complete.
+
+For each extracted term, check:
+- Is it actually present in the report text? (exact text match)
+- Is it a genuine anomaly/finding? (not a negated finding like "no evidence of X")
+- Was it correctly extracted? (not a symptom, not a section header, not normal anatomy)
 
 Also check for MISSED findings — anomalies in the report that were NOT extracted.
+Only flag genuinely missed clinical findings, not borderline terms.
 
-Return JSON with this exact structure:
+NEGATION: Be strict. "No PE", "without effusion", "not seen" → those findings should NOT be in the extracted list.
+
+Return JSON:
 {
   "decisions": [
     {
-      "term": "the extracted term",
-      "verdict": "confirmed" | "rejected" | "uncertain",
+      "term": "the extracted term text",
+      "verdict": "confirmed" | "rejected",
       "reason": "brief explanation"
     }
   ],
   "missedFindings": [
     {
-      "term": "exact text from report",
+      "term": "exact text from report (verbatim, including typos)",
       "normalizedName": "Canonical Name",
       "category": "Pulmonary|Cardiac|Vascular|Systemic|Musculoskeletal",
-      "confidence": 0.9,
-      "context": "the sentence containing this term",
-      "isAnomaly": true
+      "isAnomaly": true,
+      "context": "the sentence containing this term"
     }
   ],
   "overallAgreement": 0.95
-}
-
-Be strict about negation. If the report says "no PE" or "without effusion", those should be rejected if they were extracted.`;
+}`;
 
 let _model: GenerativeModel | null = null;
 
@@ -73,7 +75,7 @@ function getModel(): GenerativeModel {
 
 export interface VerifierDecision {
   term: string;
-  verdict: "confirmed" | "rejected" | "uncertain";
+  verdict: "confirmed" | "rejected";
   reason: string;
 }
 
@@ -81,9 +83,8 @@ export interface MissedFinding {
   term: string;
   normalizedName: string;
   category: string;
-  confidence: number;
-  context: string;
   isAnomaly: boolean;
+  context: string;
 }
 
 export interface VerifyResult {
@@ -105,11 +106,14 @@ export async function verifyParseResult(
   const model = getModel();
   const startTime = performance.now();
 
+  console.group("🔍 [Verifier] Checking parser output...");
+  console.log("Model:", VERIFIER_MODEL);
+  console.log("Terms to verify:", parsedTerms.length);
+
   const termsForVerification = parsedTerms.map((t) => ({
     term: t.term,
     normalizedName: t.normalizedName,
     category: t.category,
-    confidence: t.confidence,
     isAnomaly: t.isAnomaly,
   }));
 
@@ -128,6 +132,8 @@ export async function verifyParseResult(
   const outputTokens = usage?.candidatesTokenCount ?? 0;
   const cost = inputTokens * INPUT_COST_PER_TOKEN + outputTokens * OUTPUT_COST_PER_TOKEN;
 
+  console.log(`⏱ ${elapsed}ms | 📊 ${inputTokens}+${outputTokens} tokens | 💲 $${cost.toFixed(5)}`);
+
   let parsed: {
     decisions?: VerifierDecision[];
     missedFindings?: MissedFinding[];
@@ -137,13 +143,36 @@ export async function verifyParseResult(
   try {
     parsed = JSON.parse(response.text());
   } catch {
-    console.error("Failed to parse verifier response:", response.text());
+    console.error("❌ Failed to parse verifier response:", response.text().slice(0, 300));
     parsed = {};
   }
 
+  const decisions = parsed.decisions ?? [];
+  const missed = parsed.missedFindings ?? [];
+
+  const confirmed = decisions.filter(d => d.verdict === "confirmed").length;
+  const rejected = decisions.filter(d => d.verdict === "rejected").length;
+
+  console.log(`✅ ${confirmed} confirmed | ❌ ${rejected} rejected | 🆕 ${missed.length} missed findings`);
+
+  if (rejected > 0) {
+    console.table(decisions.filter(d => d.verdict === "rejected").map(d => ({
+      term: d.term.slice(0, 40),
+      reason: d.reason,
+    })));
+  }
+  if (missed.length > 0) {
+    console.table(missed.map(m => ({
+      term: m.term.slice(0, 40),
+      normalized: m.normalizedName,
+      category: m.category,
+    })));
+  }
+  console.groupEnd();
+
   return {
-    decisions: parsed.decisions ?? [],
-    missedFindings: parsed.missedFindings ?? [],
+    decisions,
+    missedFindings: missed,
     overallAgreement: parsed.overallAgreement ?? 0,
     tokenUsage: { input: inputTokens, output: outputTokens },
     costUsd: cost,

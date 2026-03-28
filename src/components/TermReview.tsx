@@ -254,6 +254,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                   <Tooltip key={i}>
                     <TooltipTrigger asChild>
                       <span
+                        data-term-index={seg.termIdx}
                         className={`cursor-pointer rounded-sm px-0.5 transition-all duration-150 ${STATUS_HIGHLIGHT[seg.status!]} ${isHovered ? "ring-2 ring-primary" : ""}`}
                         onMouseEnter={() => setHoveredIdx(seg.termIdx)}
                         onMouseLeave={() => setHoveredIdx(null)}
@@ -360,6 +361,10 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                       className={`rounded-md border border-border bg-card p-3 border-l-4 transition-all duration-150 ${STATUS_BORDER[term.status]} ${isHovered ? "ring-2 ring-primary" : ""}`}
                       onMouseEnter={() => setHoveredIdx(idx)}
                       onMouseLeave={() => setHoveredIdx(null)}
+                      onClick={() => {
+                        const span = document.querySelector(`[data-term-index="${idx}"]`);
+                        span?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">

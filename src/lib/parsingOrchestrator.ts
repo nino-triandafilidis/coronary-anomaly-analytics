@@ -1,17 +1,19 @@
 /**
- * Parsing orchestrator — coordinates parser + verifier with cost controls.
+ * Parsing orchestrator — coordinates parser → resolver → verifier pipeline.
  *
  * Flow:
  * 1. Check for mock data (when no API key).
  * 2. Estimate cost — block if over $1 per call.
- * 3. Run parser (Gemini).
- * 4. Run verifier (Gemini) — reject bad terms, add missed terms.
- * 5. Return final ParseResult.
+ * 3. Run parser (Gemini) — extracts terms, resolves positions (exact + whitespace).
+ * 4. Run resolver (Gemini) — fixes unresolved terms, finds missed findings.
+ * 5. Run verifier (Gemini) — confirms/rejects the full term set.
+ * 6. Return final ParseResult.
  */
 
 import { parseReport, estimateCost } from "@/lib/llmParser";
+import { resolveUnmatchedTerms } from "@/lib/llmResolver";
 import { verifyParseResult } from "@/lib/llmVerifier";
-import type { ParseResult } from "@/data/mockParseResults";
+import type { ParseResult, ParsedTerm } from "@/data/mockParseResults";
 import { findMockParseResultByText } from "@/data/mockParseResults";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,30 @@ export interface OrchestratorOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: position-resolve a term in the report
+// ---------------------------------------------------------------------------
+
+function positionResolve(
+  reportText: string,
+  term: string,
+  existingTerms: ParsedTerm[]
+): { startIndex: number; endIndex: number } | null {
+  const lower = reportText.toLowerCase();
+  const lowerTerm = term.toLowerCase();
+  const idx = lower.indexOf(lowerTerm);
+
+  if (idx === -1) return null;
+
+  // Check for overlap with existing terms
+  const overlaps = existingTerms.some(
+    (t) => idx < t.endIndex && idx + term.length > t.startIndex
+  );
+  if (overlaps) return null;
+
+  return { startIndex: idx, endIndex: idx + term.length };
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator
 // ---------------------------------------------------------------------------
 
@@ -71,11 +97,9 @@ export async function orchestrateParse(
     }
   }
 
-  // 2. Cost check
+  // 2. Cost check (estimate 3 calls: parser + resolver + verifier)
   const estimate = estimateCost(reportText);
-  const totalEstimate = runVerifier
-    ? estimate.estimatedCostUsd * 2
-    : estimate.estimatedCostUsd;
+  const totalEstimate = estimate.estimatedCostUsd * 3;
 
   console.log(`💲 Estimated cost: $${totalEstimate.toFixed(5)} (limit: $${COST_LIMIT_PER_CALL})`);
 
@@ -86,8 +110,91 @@ export async function orchestrateParse(
 
   // 3. Run parser
   const parseResult = await parseReport(reportText);
+  const unresolved = parseResult.unresolvedRawTerms ?? [];
 
-  // 4. Run verifier
+  // 4. Run resolver (if there are unresolved terms)
+  if (unresolved.length > 0) {
+    try {
+      console.log(
+        `🔧 [Orchestrator] ${unresolved.length} unresolved terms → calling resolver...`
+      );
+
+      const resolution = await resolveUnmatchedTerms(
+        reportText,
+        unresolved,
+        parseResult.parsedTerms.map((t) => ({
+          term: t.term,
+          normalizedName: t.normalizedName,
+          category: t.category,
+        }))
+      );
+
+      // Integrate resolved terms that have a verbatim match
+      let resolvedCount = 0;
+      for (const r of resolution.resolved) {
+        if (!r.verbatimText || r.correctionType === "hallucinated" || r.correctionType === "negated") {
+          console.log(`  ✗ "${r.originalTerm}" → ${r.correctionType}: ${r.explanation}`);
+          continue;
+        }
+
+        const pos = positionResolve(reportText, r.verbatimText, parseResult.parsedTerms);
+        if (!pos) {
+          console.warn(`  ⚠ Resolver returned "${r.verbatimText}" but couldn't position it`);
+          continue;
+        }
+
+        parseResult.parsedTerms.push({
+          term: reportText.substring(pos.startIndex, pos.endIndex),
+          normalizedName: r.normalizedName,
+          category: r.category,
+          confidence: 1,
+          startIndex: pos.startIndex,
+          endIndex: pos.endIndex,
+          context: "",
+          isAnomaly: r.isAnomaly,
+          correctionType: "resolved",
+          resolutionNote: `${r.correctionType}: ${r.explanation}`,
+        });
+        resolvedCount++;
+      }
+
+      // Integrate missed findings from resolver
+      for (const missed of resolution.missedFindings) {
+        const pos = positionResolve(reportText, missed.term, parseResult.parsedTerms);
+        if (!pos) continue;
+
+        parseResult.parsedTerms.push({
+          term: reportText.substring(pos.startIndex, pos.endIndex),
+          normalizedName: missed.normalizedName,
+          category: missed.category,
+          confidence: 1,
+          startIndex: pos.startIndex,
+          endIndex: pos.endIndex,
+          context: missed.context,
+          isAnomaly: missed.isAnomaly,
+        });
+      }
+
+      console.log(
+        `🔧 [Orchestrator] Resolver: ${resolvedCount} recovered, ` +
+          `${resolution.resolved.length - resolvedCount} discarded, ` +
+          `${resolution.missedFindings.length} missed added`
+      );
+
+      // Clear unresolved — they've been handled
+      parseResult.unresolvedRawTerms = undefined;
+
+      // Accumulate cost/time
+      parseResult.totalTokensUsed +=
+        resolution.tokenUsage.input + resolution.tokenUsage.output;
+      parseResult.estimatedCostUsd += resolution.costUsd;
+      parseResult.parseTimeMs += resolution.timeMs;
+    } catch (err) {
+      console.warn("⚠ Resolver failed, continuing with partial results:", err);
+    }
+  }
+
+  // 5. Run verifier (confirm/reject on the full set)
   if (runVerifier && parseResult.parsedTerms.length > 0) {
     try {
       const verification = await verifyParseResult(
@@ -106,36 +213,28 @@ export async function orchestrateParse(
         (t) => !rejectedTerms.has(t.term.toLowerCase())
       );
 
-      // Add missed findings with resolved positions
+      // Add missed findings from verifier (deduplicate against existing)
       for (const missed of verification.missedFindings) {
-        const lowerReport = reportText.toLowerCase();
-        const lowerTerm = missed.term.toLowerCase();
-        const idx = lowerReport.indexOf(lowerTerm);
+        const pos = positionResolve(reportText, missed.term, filteredTerms);
+        if (!pos) continue;
 
-        if (idx !== -1) {
-          const overlaps = filteredTerms.some(
-            (t) => idx < t.endIndex && idx + missed.term.length > t.startIndex
-          );
-
-          if (!overlaps) {
-            filteredTerms.push({
-              term: reportText.substring(idx, idx + missed.term.length),
-              normalizedName: missed.normalizedName,
-              category: missed.category,
-              confidence: 1,
-              startIndex: idx,
-              endIndex: idx + missed.term.length,
-              context: missed.context,
-              isAnomaly: missed.isAnomaly,
-            });
-          }
-        }
+        filteredTerms.push({
+          term: reportText.substring(pos.startIndex, pos.endIndex),
+          normalizedName: missed.normalizedName,
+          category: missed.category,
+          confidence: 1,
+          startIndex: pos.startIndex,
+          endIndex: pos.endIndex,
+          context: missed.context,
+          isAnomaly: missed.isAnomaly,
+        });
       }
 
       filteredTerms.sort((a, b) => a.startIndex - b.startIndex);
 
-      const removed = parseResult.parsedTerms.length - filteredTerms.length + verification.missedFindings.length;
-      console.log(`🔍 [Orchestrator] Verifier: ${rejectedTerms.size} removed, ${verification.missedFindings.length} added`);
+      console.log(
+        `🔍 [Orchestrator] Verifier: ${rejectedTerms.size} removed, ${verification.missedFindings.length} added`
+      );
 
       parseResult.parsedTerms = filteredTerms;
       parseResult.verifierModel = "gemini-2.5-flash";
@@ -145,13 +244,19 @@ export async function orchestrateParse(
       parseResult.estimatedCostUsd += verification.costUsd;
       parseResult.parseTimeMs += verification.timeMs;
     } catch (err) {
-      console.warn("⚠ Verifier failed, using parser results only:", err);
+      console.warn("⚠ Verifier failed, using parser+resolver results:", err);
       parseResult.verifierModel = "error";
       parseResult.verifierAgreement = 0;
     }
   }
 
-  console.log(`✅ [Orchestrator] Final: ${parseResult.parsedTerms.length} terms, $${parseResult.estimatedCostUsd.toFixed(5)}, ${parseResult.parseTimeMs}ms`);
+  // Sort final set
+  parseResult.parsedTerms.sort((a, b) => a.startIndex - b.startIndex);
+
+  console.log(
+    `✅ [Orchestrator] Final: ${parseResult.parsedTerms.length} terms, ` +
+      `$${parseResult.estimatedCostUsd.toFixed(5)}, ${parseResult.parseTimeMs}ms`
+  );
   console.groupEnd();
 
   return parseResult;

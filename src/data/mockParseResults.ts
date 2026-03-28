@@ -11,11 +11,13 @@ export interface ParsedTerm {
   term: string;           // The exact text span found in the report
   normalizedName: string; // Canonical/normalized name (e.g. "Pulmonary Embolism")
   category: string;       // e.g. "Pulmonary", "Cardiac", "Vascular"
-  confidence: number;     // 0-1, LLM's confidence score
+  confidence: number;     // Kept for backward compat — always 1
   startIndex: number;     // Position in report text
   endIndex: number;       // Position in report text
   context: string;        // Surrounding sentence for context
   isAnomaly: boolean;     // LLM's assessment: is this a clinical finding/anomaly?
+  correctionType?: "exact" | "whitespace" | "resolved"; // How position was matched
+  resolutionNote?: string; // Human-readable description of the correction
 }
 
 export interface ParseResult {
@@ -28,6 +30,16 @@ export interface ParseResult {
   parseTimeMs: number;
   totalTokensUsed: number;
   estimatedCostUsd: number;
+  /** Raw terms the parser returned that couldn't be position-resolved */
+  unresolvedRawTerms?: UnresolvedRawTerm[];
+}
+
+export interface UnresolvedRawTerm {
+  term: string;
+  normalizedName: string;
+  category: string;
+  isAnomaly: boolean;
+  context: string;
 }
 
 export type TermStatus = "pending" | "accepted" | "rejected" | "added";

@@ -6,7 +6,7 @@
  */
 
 import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai";
-import type { ParsedTerm, ParseResult } from "@/data/mockParseResults";
+import type { ParsedTerm, ParseResult, UnresolvedRawTerm } from "@/data/mockParseResults";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -112,29 +112,99 @@ interface RawLLMTerm {
   hasTypo?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Position resolution — two-pass: exact match → whitespace-normalized
+// ---------------------------------------------------------------------------
+
+interface PositionMatch {
+  startIndex: number;
+  endIndex: number;
+  correctionType: "exact" | "whitespace";
+}
+
 /**
- * Locate the exact start/end index of a term in the report text.
- * Searches from `searchAfter` to handle duplicate terms.
+ * Build a whitespace-normalized version of a string, tracking the mapping
+ * from each normalized character back to its original index.
+ */
+function normalizeForSearch(text: string): { normalized: string; indexMap: number[] } {
+  const chars: string[] = [];
+  const indexMap: number[] = [];
+  let lastWasSpace = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (/\s/.test(ch)) {
+      if (!lastWasSpace) {
+        chars.push(" ");
+        indexMap.push(i);
+        lastWasSpace = true;
+      }
+    } else {
+      chars.push(ch.toLowerCase());
+      indexMap.push(i);
+      lastWasSpace = false;
+    }
+  }
+
+  return { normalized: chars.join(""), indexMap };
+}
+
+/**
+ * Locate a term in the report text.
+ * Pass 1: exact case-insensitive indexOf.
+ * Pass 2: whitespace-normalized search (collapses \n, \t, multi-space).
  */
 function findTermPosition(
   reportText: string,
   term: string,
   searchAfter: number = 0
-): { startIndex: number; endIndex: number } {
+): PositionMatch | null {
+  // --- Pass 1: exact (case-insensitive) ---
   const lowerReport = reportText.toLowerCase();
   const lowerTerm = term.toLowerCase();
-  const idx = lowerReport.indexOf(lowerTerm, searchAfter);
+  let idx = lowerReport.indexOf(lowerTerm, searchAfter);
 
-  if (idx === -1) {
-    // Fallback: try to find it anywhere
-    const fallback = lowerReport.indexOf(lowerTerm);
-    if (fallback !== -1) {
-      return { startIndex: fallback, endIndex: fallback + term.length };
-    }
-    return { startIndex: -1, endIndex: -1 };
+  if (idx !== -1) {
+    return { startIndex: idx, endIndex: idx + term.length, correctionType: "exact" };
   }
 
-  return { startIndex: idx, endIndex: idx + term.length };
+  // Try from start (in case searchAfter skipped the only occurrence)
+  if (searchAfter > 0) {
+    idx = lowerReport.indexOf(lowerTerm);
+    if (idx !== -1) {
+      return { startIndex: idx, endIndex: idx + term.length, correctionType: "exact" };
+    }
+  }
+
+  // --- Pass 2: whitespace-normalized ---
+  const { normalized: normReport, indexMap: reportMap } = normalizeForSearch(reportText);
+  const { normalized: normTerm } = normalizeForSearch(term);
+
+  // Map searchAfter to normalized space
+  let normSearchAfter = 0;
+  if (searchAfter > 0) {
+    for (let i = 0; i < reportMap.length; i++) {
+      if (reportMap[i] >= searchAfter) {
+        normSearchAfter = i;
+        break;
+      }
+    }
+  }
+
+  let normIdx = normReport.indexOf(normTerm, normSearchAfter);
+
+  // Fallback: try from beginning
+  if (normIdx === -1 && normSearchAfter > 0) {
+    normIdx = normReport.indexOf(normTerm);
+  }
+
+  if (normIdx !== -1 && normIdx + normTerm.length - 1 < reportMap.length) {
+    const originalStart = reportMap[normIdx];
+    const originalEnd = reportMap[normIdx + normTerm.length - 1] + 1;
+    return { startIndex: originalStart, endIndex: originalEnd, correctionType: "whitespace" };
+  }
+
+  return null; // Truly unresolved — will go to the LLM resolver
 }
 
 /**
@@ -183,50 +253,73 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
 
   console.log(`📋 LLM returned ${rawTerms.length} terms`);
 
-  // Resolve positions against source text
+  // Resolve positions against source text (exact + whitespace-normalized)
   const usedPositions = new Set<number>();
   const parsedTerms: ParsedTerm[] = [];
-  const skipped: string[] = [];
+  const unresolvedRawTerms: UnresolvedRawTerm[] = [];
+  let whitespaceFixCount = 0;
 
   for (const raw of rawTerms) {
     let searchAfter = 0;
     let pos = findTermPosition(reportText, raw.term, searchAfter);
 
-    while (pos.startIndex !== -1 && usedPositions.has(pos.startIndex)) {
+    // Skip already-used positions (for duplicate terms)
+    while (pos && usedPositions.has(pos.startIndex)) {
       searchAfter = pos.startIndex + 1;
       pos = findTermPosition(reportText, raw.term, searchAfter);
     }
 
-    if (pos.startIndex === -1) {
-      skipped.push(raw.term);
+    if (!pos) {
+      // Could not resolve — save for LLM resolver
+      unresolvedRawTerms.push({
+        term: raw.term,
+        normalizedName: raw.normalizedName || raw.term,
+        category: raw.category || "Systemic",
+        isAnomaly: raw.isAnomaly ?? true,
+        context: raw.context || "",
+      });
       continue;
     }
 
     usedPositions.add(pos.startIndex);
+    if (pos.correctionType === "whitespace") whitespaceFixCount++;
 
     parsedTerms.push({
       term: reportText.substring(pos.startIndex, pos.endIndex),
       normalizedName: raw.normalizedName || raw.term,
       category: raw.category || "Systemic",
-      confidence: 1, // Not used — kept for type compatibility
+      confidence: 1,
       startIndex: pos.startIndex,
       endIndex: pos.endIndex,
       context: raw.context || "",
       isAnomaly: raw.isAnomaly ?? true,
+      correctionType: pos.correctionType,
+      resolutionNote:
+        pos.correctionType === "whitespace"
+          ? "Matched after normalizing whitespace/line breaks"
+          : undefined,
     });
   }
 
-  if (skipped.length > 0) {
-    console.warn(`⚠ ${skipped.length} terms not found in report text:`, skipped);
+  if (unresolvedRawTerms.length > 0) {
+    console.warn(
+      `⚠ ${unresolvedRawTerms.length} terms unresolved (→ LLM resolver):`,
+      unresolvedRawTerms.map((t) => t.term)
+    );
+  }
+  if (whitespaceFixCount > 0) {
+    console.log(`🔧 ${whitespaceFixCount} terms matched via whitespace normalization`);
   }
   console.log(`✅ ${parsedTerms.length} terms resolved to positions`);
-  console.table(parsedTerms.map(t => ({
-    term: t.term.slice(0, 40),
-    normalized: t.normalizedName,
-    category: t.category,
-    pos: `${t.startIndex}-${t.endIndex}`,
-    isAnomaly: t.isAnomaly,
-  })));
+  console.table(
+    parsedTerms.map((t) => ({
+      term: t.term.slice(0, 40),
+      normalized: t.normalizedName,
+      category: t.category,
+      pos: `${t.startIndex}-${t.endIndex}`,
+      match: t.correctionType ?? "exact",
+    }))
+  );
   console.groupEnd();
 
   // Sort by position
@@ -236,6 +329,7 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
     reportId: crypto.randomUUID(),
     reportText,
     parsedTerms,
+    unresolvedRawTerms: unresolvedRawTerms.length > 0 ? unresolvedRawTerms : undefined,
     parserModel: MODEL_NAME,
     verifierModel: "",
     verifierAgreement: 0,

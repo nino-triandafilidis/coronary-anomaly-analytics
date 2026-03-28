@@ -265,8 +265,14 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                     <TooltipContent side="top" className="max-w-xs text-xs">
                       <p className="font-semibold">{term.normalizedName}</p>
                       <p className="text-muted-foreground">
-                        {term.category} · {Math.round(term.confidence * 100)}% confidence
+                        {term.category}
+                        {term.correctionType && term.correctionType !== "exact" && (
+                          <> · <span className="text-amber-600 dark:text-amber-400">{term.correctionType === "whitespace" ? "whitespace fix" : term.correctionType === "resolved" ? "AI-resolved" : term.correctionType}</span></>
+                        )}
                       </p>
+                      {term.resolutionNote && (
+                        <p className="text-muted-foreground/70 mt-0.5 italic">{term.resolutionNote}</p>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -378,9 +384,11 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                             >
                               {term.category}
                             </Badge>
-                            <span className="text-[11px] text-muted-foreground">
-                              {Math.round(term.confidence * 100)}%
-                            </span>
+                            {term.correctionType && term.correctionType !== "exact" && (
+                              <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                {term.correctionType === "whitespace" ? "ws fix" : term.correctionType === "resolved" ? "resolved" : term.correctionType}
+                              </span>
+                            )}
                             {!term.isAnomaly && (
                               <span className="flex items-center gap-0.5 text-[11px] text-amber-600 dark:text-amber-400">
                                 <AlertTriangle className="h-3 w-3" />

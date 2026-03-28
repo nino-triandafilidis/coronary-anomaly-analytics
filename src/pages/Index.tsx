@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, Heart } from "lucide-react";
+import { Activity, Heart, Loader2 } from "lucide-react";
 import { ReportInput } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
 import { TermReview } from "@/components/TermReview";
 import { detectAnomalies, getUniqueAnomalies, type DetectedAnomaly } from "@/lib/anomalyDetection";
 import { getAnomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
-import { findMockParseResultByText, type ParseResult, type ReviewableTerm } from "@/data/mockParseResults";
+import { orchestrateParse, CostLimitError } from "@/lib/parsingOrchestrator";
+import type { ParseResult, ReviewableTerm } from "@/data/mockParseResults";
 
-type Stage = "upload" | "review" | "results";
+type Stage = "upload" | "parsing" | "review" | "results";
 
 const Index = () => {
   const [stage, setStage] = useState<Stage>("upload");
@@ -18,16 +19,28 @@ const Index = () => {
   const [unique, setUnique] = useState<AnomalyEntry[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [reviewTerms, setReviewTerms] = useState<ReviewableTerm[] | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
 
-  const handleReport = (text: string) => {
+  const handleReport = async (text: string) => {
     setReportText(text);
-    const mock = findMockParseResultByText(text);
-    if (mock) {
-      setParseResult(mock);
+    setParseError(null);
+    setStage("parsing");
+
+    try {
+      // Try LLM pipeline (falls back to mock if no API key)
+      const result = await orchestrateParse(text, { runVerifier: true });
+      setParseResult(result);
       setReviewTerms(null);
       setStage("review");
-    } else {
-      // Fallback: rule-based detection, skip review
+    } catch (err) {
+      if (err instanceof CostLimitError) {
+        setParseError(`Cost limit exceeded: ${err.message}`);
+        setStage("upload");
+        return;
+      }
+
+      // Fallback to rule-based detection
+      console.warn("LLM parse failed, falling back to rule-based detection:", err);
       const results = detectAnomalies(text);
       setDetected(results);
       setUnique(getUniqueAnomalies(results));
@@ -76,6 +89,7 @@ const Index = () => {
     setUnique([]);
     setParseResult(null);
     setReviewTerms(null);
+    setParseError(null);
   };
 
   return (
@@ -116,8 +130,21 @@ const Index = () => {
               <p className="mt-2 text-sm text-muted-foreground">
                 Upload a report or paste text to detect anomalies and view historical frequency data.
               </p>
+              {parseError && (
+                <p className="mt-3 text-sm text-red-600 dark:text-red-400">{parseError}</p>
+              )}
             </div>
             <ReportInput onReportSubmit={handleReport} />
+          </div>
+        )}
+
+        {stage === "parsing" && (
+          <div className="mx-auto max-w-md animate-fade-in text-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary mb-4" />
+            <h2 className="text-lg font-semibold text-foreground">Analyzing Report</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Running AI parser and verifier — check browser console for detailed logs
+            </p>
           </div>
         )}
 

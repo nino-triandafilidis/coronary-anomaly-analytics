@@ -2,16 +2,16 @@
  * Parsing orchestrator — coordinates parser + verifier with cost controls.
  *
  * Flow:
- * 1. Estimate cost. If over $1 per call, throw (caller should show warning).
- * 2. Run parser.
- * 3. Optionally run verifier.
- * 4. Merge verifier feedback (reject bad terms, add missed terms).
+ * 1. Check for mock data (when no API key).
+ * 2. Estimate cost — block if over $1 per call.
+ * 3. Run parser (Gemini).
+ * 4. Run verifier (Gemini) — reject bad terms, add missed terms.
  * 5. Return final ParseResult.
  */
 
 import { parseReport, estimateCost } from "@/lib/llmParser";
 import { verifyParseResult } from "@/lib/llmVerifier";
-import type { ParseResult, ParsedTerm } from "@/data/mockParseResults";
+import type { ParseResult } from "@/data/mockParseResults";
 import { findMockParseResultByText } from "@/data/mockParseResults";
 
 // ---------------------------------------------------------------------------
@@ -46,22 +46,25 @@ export interface OrchestratorOptions {
 // Orchestrator
 // ---------------------------------------------------------------------------
 
-/**
- * Parse a report end-to-end: mock fallback → cost check → parser → verifier → merged result.
- */
 export async function orchestrateParse(
   reportText: string,
   options: OrchestratorOptions = {}
 ): Promise<ParseResult> {
   const { runVerifier = true, useMock } = options;
 
-  // 1. Try mock data first (default when no API key set)
+  console.group("🏗 [Orchestrator] Starting parse pipeline...");
+
+  // 1. Mock fallback
   const shouldUseMock = useMock ?? !import.meta.env.VITE_GEMINI_API_KEY;
   if (shouldUseMock) {
     const mock = findMockParseResultByText(reportText);
-    if (mock) return mock;
-    // No mock match — if no API key, we can't proceed
+    if (mock) {
+      console.log("📦 Using mock data (no API key or mock match found)");
+      console.groupEnd();
+      return mock;
+    }
     if (!import.meta.env.VITE_GEMINI_API_KEY) {
+      console.groupEnd();
       throw new Error(
         "No API key set and no mock data matches this report. Set VITE_GEMINI_API_KEY in .env."
       );
@@ -70,19 +73,21 @@ export async function orchestrateParse(
 
   // 2. Cost check
   const estimate = estimateCost(reportText);
-  // Parser + verifier = roughly 2x
   const totalEstimate = runVerifier
     ? estimate.estimatedCostUsd * 2
     : estimate.estimatedCostUsd;
 
+  console.log(`💲 Estimated cost: $${totalEstimate.toFixed(5)} (limit: $${COST_LIMIT_PER_CALL})`);
+
   if (totalEstimate > COST_LIMIT_PER_CALL) {
+    console.groupEnd();
     throw new CostLimitError(totalEstimate);
   }
 
   // 3. Run parser
   const parseResult = await parseReport(reportText);
 
-  // 4. Optionally run verifier
+  // 4. Run verifier
   if (runVerifier && parseResult.parsedTerms.length > 0) {
     try {
       const verification = await verifyParseResult(
@@ -90,7 +95,7 @@ export async function orchestrateParse(
         parseResult.parsedTerms
       );
 
-      // Apply verifier decisions: remove rejected terms, flag uncertain ones
+      // Remove rejected terms
       const rejectedTerms = new Set(
         verification.decisions
           .filter((d) => d.verdict === "rejected")
@@ -101,19 +106,6 @@ export async function orchestrateParse(
         (t) => !rejectedTerms.has(t.term.toLowerCase())
       );
 
-      // Lower confidence for uncertain terms
-      const uncertainTerms = new Set(
-        verification.decisions
-          .filter((d) => d.verdict === "uncertain")
-          .map((d) => d.term.toLowerCase())
-      );
-
-      for (const t of filteredTerms) {
-        if (uncertainTerms.has(t.term.toLowerCase())) {
-          t.confidence = Math.min(t.confidence, 0.6);
-        }
-      }
-
       // Add missed findings with resolved positions
       for (const missed of verification.missedFindings) {
         const lowerReport = reportText.toLowerCase();
@@ -121,7 +113,6 @@ export async function orchestrateParse(
         const idx = lowerReport.indexOf(lowerTerm);
 
         if (idx !== -1) {
-          // Check it doesn't overlap with existing terms
           const overlaps = filteredTerms.some(
             (t) => idx < t.endIndex && idx + missed.term.length > t.startIndex
           );
@@ -131,7 +122,7 @@ export async function orchestrateParse(
               term: reportText.substring(idx, idx + missed.term.length),
               normalizedName: missed.normalizedName,
               category: missed.category,
-              confidence: missed.confidence * 0.9, // slightly lower since it was missed initially
+              confidence: 1,
               startIndex: idx,
               endIndex: idx + missed.term.length,
               context: missed.context,
@@ -141,10 +132,11 @@ export async function orchestrateParse(
         }
       }
 
-      // Re-sort by position
       filteredTerms.sort((a, b) => a.startIndex - b.startIndex);
 
-      // Update result
+      const removed = parseResult.parsedTerms.length - filteredTerms.length + verification.missedFindings.length;
+      console.log(`🔍 [Orchestrator] Verifier: ${rejectedTerms.size} removed, ${verification.missedFindings.length} added`);
+
       parseResult.parsedTerms = filteredTerms;
       parseResult.verifierModel = "gemini-2.5-flash";
       parseResult.verifierAgreement = verification.overallAgreement;
@@ -153,12 +145,14 @@ export async function orchestrateParse(
       parseResult.estimatedCostUsd += verification.costUsd;
       parseResult.parseTimeMs += verification.timeMs;
     } catch (err) {
-      // Verifier failure is non-fatal — return parser results without verification
-      console.warn("Verifier failed, using parser results only:", err);
+      console.warn("⚠ Verifier failed, using parser results only:", err);
       parseResult.verifierModel = "error";
       parseResult.verifierAgreement = 0;
     }
   }
+
+  console.log(`✅ [Orchestrator] Final: ${parseResult.parsedTerms.length} terms, $${parseResult.estimatedCostUsd.toFixed(5)}, ${parseResult.parseTimeMs}ms`);
+  console.groupEnd();
 
   return parseResult;
 }

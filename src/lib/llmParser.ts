@@ -24,37 +24,53 @@ const OUTPUT_COST_PER_TOKEN = 2.50 / 1_000_000;
 
 const SYSTEM_PROMPT = `You are a clinical NER system for CT angiogram radiology reports.
 
-YOUR TASK: Extract every anomaly-related term from the report. An anomaly is any clinical finding, condition, disease, pathology, or abnormal observation. Include:
-- Named conditions (e.g., "pulmonary embolism", "cardiomegaly", "aortic aneurysm")
-- Descriptive findings (e.g., "filling defect", "moderate stenosis", "mildly enlarged")
-- Measurements indicating abnormality (e.g., "measures 5.2 cm", "approximately 50%")
-- All abbreviations and medical jargon (e.g., "PE", "LAD", "SVG")
-- Calcification, effusion, thrombus, nodule, atelectasis, etc.
+YOUR TASK: Extract every anomaly-related term from the report.
+
+WHAT TO EXTRACT:
+- Named conditions: pulmonary embolism, cardiomegaly, aortic aneurysm, DVT, etc.
+- Descriptive findings: filling defect, ground-glass opacity, spiculated nodule, etc.
+- Calcification, effusion, thrombus, nodule, atelectasis, edema, stenosis, etc.
+- All abbreviations and medical jargon: PE, DVT, CAD, LAD, SVG, etc.
 - Any term a cardiologist would consider clinically relevant
 
-DO NOT extract:
-- Normal/negative findings (e.g., "no evidence of dissection", "within normal limits", "unremarkable")
-- Section headers (e.g., "FINDINGS:", "IMPRESSION:", "TECHNIQUE:")
-- Patient demographics or dates
-- Imaging technique descriptions (e.g., "80 mL of iodinated contrast")
-- Anatomy that is described as normal
+WHAT NOT TO EXTRACT:
+- Negated findings: "no evidence of dissection" → do NOT extract "dissection"
+- Section headers: FINDINGS, IMPRESSION, TECHNIQUE
+- Patient demographics, dates, dose information
+- Imaging technique descriptions
+- Normal anatomy described as normal
+- Measurements by themselves without a finding (do NOT extract "measuring up to 1 cm" alone)
+- Symptoms from INDICATION section (e.g. "shortness of breath", "chest pain") — only extract the suspected diagnosis if named (e.g. "pulmonary embolism" in "rule out pulmonary embolism")
 
-NEGATION RULES — THIS IS CRITICAL:
-- If a finding is explicitly negated ("no", "no evidence of", "without", "ruled out", "not seen", "not identified", "absent"), DO NOT include it.
-- "No evidence of dissection" → do NOT extract "dissection"
-- "No pleural effusion" → do NOT extract "pleural effusion"
-- BUT: "consistent with pulmonary embolism" → DO extract "pulmonary embolism"
-- BUT: "rule out pulmonary embolism" in INDICATION section → DO extract it (it's the suspected finding)
+NEGATION RULES — CRITICAL:
+- "No evidence of X" → do NOT extract X
+- "No X" → do NOT extract X
+- "Without X" → do NOT extract X
+- "Ruled out X" → do NOT extract X
+- "Not seen / not identified / absent" → do NOT extract
+- BUT: "consistent with X" → DO extract X
+- BUT: "suggesting possible X" → DO extract X
 
-For each term, provide:
-- "term": the exact text as it appears in the report (preserve case)
-- "normalizedName": the canonical medical term (Title Case)
+EXACT TEXT RULE — CRITICAL:
+The "term" field MUST be an exact character-for-character copy from the report text. This includes:
+- Preserving typos (e.g. if the report says "calicifications", return "calicifications" NOT "calcifications")
+- Preserving line breaks if the term spans a line break
+- Preserving exact capitalization
+- Do NOT paraphrase, summarize, or construct phrases that do not appear verbatim in the text
+- Do NOT combine separate words into a phrase unless that exact phrase appears contiguously in the report
+
+DEDUPLICATION:
+If the same finding appears in both FINDINGS and IMPRESSION sections, extract BOTH occurrences — each with its own exact text. The UI will show both highlights but the database will deduplicate.
+
+For each term, return a JSON object with:
+- "term": exact verbatim text from the report (character-for-character, including typos)
+- "normalizedName": the canonical medical term in Title Case (correct any typos here)
 - "category": one of "Pulmonary", "Cardiac", "Vascular", "Systemic", "Musculoskeletal"
-- "confidence": 0.0-1.0, your confidence this is a real anomaly
-- "isAnomaly": true if this is a definite clinical finding, false if borderline/uncertain
+- "isAnomaly": true if definite clinical finding, false if borderline/uncertain
 - "context": the full sentence containing this term
+- "hasTypo": true ONLY if the term in the report contains a spelling error that you corrected in normalizedName, false otherwise
 
-Return a JSON array. If no anomalies are found, return an empty array [].`;
+Return a JSON array. If no anomalies found, return [].`;
 
 // ---------------------------------------------------------------------------
 // Client
@@ -91,9 +107,9 @@ interface RawLLMTerm {
   term: string;
   normalizedName: string;
   category: string;
-  confidence: number;
   isAnomaly: boolean;
   context: string;
+  hasTypo?: boolean;
 }
 
 /**
@@ -115,7 +131,6 @@ function findTermPosition(
     if (fallback !== -1) {
       return { startIndex: fallback, endIndex: fallback + term.length };
     }
-    // Term not found in text — return -1 to signal filtering
     return { startIndex: -1, endIndex: -1 };
   }
 
@@ -129,6 +144,10 @@ function findTermPosition(
 export async function parseReport(reportText: string): Promise<ParseResult> {
   const model = getModel();
   const startTime = performance.now();
+
+  console.group("🔬 [Parser] Calling Gemini...");
+  console.log("Model:", MODEL_NAME);
+  console.log("Report length:", reportText.length, "chars");
 
   const result = await model.generateContent([
     { text: SYSTEM_PROMPT },
@@ -145,39 +164,41 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
   const totalTokens = inputTokens + outputTokens;
   const cost = inputTokens * INPUT_COST_PER_TOKEN + outputTokens * OUTPUT_COST_PER_TOKEN;
 
+  console.log(`⏱ ${elapsed}ms | 📊 ${inputTokens}+${outputTokens} tokens | 💲 $${cost.toFixed(5)}`);
+
   // Parse JSON response
   const rawText = response.text();
   let rawTerms: RawLLMTerm[];
   try {
     rawTerms = JSON.parse(rawText);
   } catch {
-    console.error("Failed to parse Gemini JSON response:", rawText);
+    console.error("❌ JSON parse failed:", rawText.slice(0, 300));
     rawTerms = [];
   }
 
   if (!Array.isArray(rawTerms)) {
-    console.error("Gemini response is not an array:", rawTerms);
+    console.error("❌ Response is not an array:", rawTerms);
     rawTerms = [];
   }
+
+  console.log(`📋 LLM returned ${rawTerms.length} terms`);
 
   // Resolve positions against source text
   const usedPositions = new Set<number>();
   const parsedTerms: ParsedTerm[] = [];
+  const skipped: string[] = [];
 
   for (const raw of rawTerms) {
-    // Find position, avoiding duplicates
     let searchAfter = 0;
     let pos = findTermPosition(reportText, raw.term, searchAfter);
 
-    // Skip past positions already claimed by other terms
     while (pos.startIndex !== -1 && usedPositions.has(pos.startIndex)) {
       searchAfter = pos.startIndex + 1;
       pos = findTermPosition(reportText, raw.term, searchAfter);
     }
 
     if (pos.startIndex === -1) {
-      // Term not found in report — LLM hallucinated or paraphrased. Skip it.
-      console.warn(`Term "${raw.term}" not found in report text, skipping.`);
+      skipped.push(raw.term);
       continue;
     }
 
@@ -187,13 +208,26 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
       term: reportText.substring(pos.startIndex, pos.endIndex),
       normalizedName: raw.normalizedName || raw.term,
       category: raw.category || "Systemic",
-      confidence: Math.max(0, Math.min(1, raw.confidence ?? 0.8)),
+      confidence: 1, // Not used — kept for type compatibility
       startIndex: pos.startIndex,
       endIndex: pos.endIndex,
       context: raw.context || "",
       isAnomaly: raw.isAnomaly ?? true,
     });
   }
+
+  if (skipped.length > 0) {
+    console.warn(`⚠ ${skipped.length} terms not found in report text:`, skipped);
+  }
+  console.log(`✅ ${parsedTerms.length} terms resolved to positions`);
+  console.table(parsedTerms.map(t => ({
+    term: t.term.slice(0, 40),
+    normalized: t.normalizedName,
+    category: t.category,
+    pos: `${t.startIndex}-${t.endIndex}`,
+    isAnomaly: t.isAnomaly,
+  })));
+  console.groupEnd();
 
   // Sort by position
   parsedTerms.sort((a, b) => a.startIndex - b.startIndex);
@@ -203,7 +237,7 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
     reportText,
     parsedTerms,
     parserModel: MODEL_NAME,
-    verifierModel: "", // filled by orchestrator if verifier runs
+    verifierModel: "",
     verifierAgreement: 0,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,
@@ -213,7 +247,6 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
 
 /**
  * Estimate the cost of parsing a report (without actually calling the API).
- * Uses rough token estimation: ~4 chars per token.
  */
 export function estimateCost(reportText: string): {
   estimatedInputTokens: number;
@@ -223,7 +256,6 @@ export function estimateCost(reportText: string): {
   const promptTokens = Math.ceil(SYSTEM_PROMPT.length / 4);
   const reportTokens = Math.ceil(reportText.length / 4);
   const estimatedInputTokens = promptTokens + reportTokens;
-  // Assume output is roughly 30% of input for NER tasks
   const estimatedOutputTokens = Math.ceil(estimatedInputTokens * 0.3);
   const estimatedCostUsd =
     estimatedInputTokens * INPUT_COST_PER_TOKEN +

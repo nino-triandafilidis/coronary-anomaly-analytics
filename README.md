@@ -1,75 +1,89 @@
-# Welcome to your Lovable project
+# Anomaly Insight
 
-**MIMIC dataset / pipeline:** See **[SCRIPTS.md](./SCRIPTS.md)** for which scripts to run (e.g. `python scripts/mimic_pipeline.py` to generate the 300-report dataset).
+Clinical anomaly detection tool for pediatric cardiologists at Stanford Children's Hospital. Built as part of CS147 (Introduction to Human-Computer Interaction Design) at Stanford.
 
-## Project info
+Cardiologists upload CT angiogram radiology reports, and the system uses LLM-powered named entity recognition to extract, verify, and track clinical findings across a growing database.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## How it works
 
-## How can I edit this code?
+1. **Upload** a radiology report (paste text or upload PDF)
+2. **Parser** (Gemini 2.5 Flash) extracts clinical terms with exact text positions
+3. **Resolver** fixes any terms the parser paraphrased instead of quoting verbatim, and catches missed findings
+4. **Verifier** confirms or rejects each term (catches negation leaks, hallucinations)
+5. **Review UI** — two-column layout: highlighted report on the left, term cards on the right. Cardiologist accepts, rejects, or manually adds terms
+6. **Confirmed terms** feed a frequency database tracking anomaly prevalence across reports
 
-There are several ways of editing your application.
+## Tech stack
 
-**Use Lovable**
+- React + TypeScript + Vite
+- Tailwind CSS + shadcn/ui
+- Google Gemini 2.5 Flash API (`@google/generative-ai`)
+- MIMIC-IV-Note radiology reports (de-identified)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Getting started
 
-Changes made via Lovable will be committed automatically to this repo.
+```bash
+# Install dependencies
+npm install
 
-**Use your preferred IDE**
+# Copy env template and add your Gemini API key
+cp .env.example .env
+# Edit .env → set VITE_GEMINI_API_KEY=your_key_here
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start dev server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Without an API key the app falls back to mock data for the 3 sample reports.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Project structure
 
-**Use GitHub Codespaces**
+```
+src/
+  lib/
+    llmParser.ts           # Gemini parser — extracts terms, resolves positions
+    llmResolver.ts         # Gemini resolver — fixes unmatched terms, finds missed findings
+    llmVerifier.ts         # Gemini verifier — confirms/rejects terms
+    parsingOrchestrator.ts # Coordinates parser → resolver → verifier pipeline
+  components/
+    TermReview.tsx          # Two-column review UI with highlights + term cards
+    FrequencyPanel.tsx      # Anomaly frequency bars
+  pages/
+    Index.tsx               # Upload → parsing → review → results flow
+    Dataset.tsx             # Dataset browser (300 MIMIC reports)
+  data/
+    mockParseResults.ts     # Types + mock data for offline development
+    sampleReports.ts        # 3 real MIMIC reports for demo
+    anomalyDatabase.ts      # Legacy hardcoded frequency data (to be replaced)
+public/
+  mimic_reports_300.json    # 300 real MIMIC-IV radiology reports
+  seed_reports_10.json      # 10 reports for building the initial parsed database
+  test_reports_5.json       # 5 reports for upload/parse testing
+  anomaly_frequencies.json  # Legacy frequency data (to be replaced with real parsed results)
+scripts/
+  mimic_pipeline.py         # Generates mimic_reports_300.json from raw MIMIC data
+  generate_sample_pdf.py    # Creates a test PDF from a report not in the dataset
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Data pipeline scripts
 
-## What technologies are used for this project?
+See [SCRIPTS.md](./SCRIPTS.md) for details on generating the MIMIC dataset and running the NER pipeline.
 
-This project is built with:
+## Design principles
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+The UI follows CS147 HCI design principles documented in [design-guidelines.md](./design-guidelines.md):
+- Gestalt principles for visual grouping of related findings
+- Norman's conceptual model for the upload → review → confirm flow
+- Nielsen's 10 usability heuristics throughout the interface
 
-## How can I deploy this project?
+## Environment variables
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_GEMINI_API_KEY` | Yes (for live parsing) | Google Gemini API key |
+| `VITE_ANTHROPIC_API_KEY` | No | Reserved for future use |
+| `VITE_OPENAI_API_KEY` | No | Reserved for future use |
 
-## Can I connect a custom domain to my Lovable project?
+## Cost
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Each report costs ~$0.008 to parse (parser + verifier). The resolver only fires when needed, adding ~$0.003. Well under the $1/call safety limit.

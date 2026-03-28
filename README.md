@@ -13,6 +13,34 @@ User uploads a CT angiogram  reports, and the system uses LLM-powered named enti
 5. **Review UI** — two-column layout: highlighted report on the left, term cards on the right. Cardiologist accepts, rejects, or manually adds terms
 6. **Confirmed terms** feed a frequency database tracking anomaly prevalence across reports
 
+### Parsing pipeline
+
+```mermaid
+flowchart TD
+    A[CT Angiogram Report] --> B[Parser Agent\nGemini 2.5 Flash]
+    B --> C{Position Resolution}
+    C -->|Exact match| D[Resolved Terms]
+    C -->|Whitespace fix| D
+    C -->|No match| E[Unresolved Terms]
+    D --> F[Resolver Agent\nGemini 2.5 Flash]
+    E --> F
+    F -->|Paraphrased| G[Corrected with\nverbatim text]
+    F -->|Hallucinated| H[Discarded]
+    F -->|Negated| H
+    F -->|Missed findings| I[New terms added]
+    G --> J[Full Term Set]
+    D --> J
+    I --> J
+    J --> K[Verifier Agent\nGemini 2.5 Flash]
+    K -->|Confirmed| L[Review UI]
+    K -->|Rejected| H
+    K -->|Missed findings| L
+    L --> M{Cardiologist Review}
+    M -->|Accept| N[Frequency Database]
+    M -->|Reject| O[Excluded]
+    M -->|Add manually| N
+```
+
 ## Tech stack
 
 - React + TypeScript + Vite

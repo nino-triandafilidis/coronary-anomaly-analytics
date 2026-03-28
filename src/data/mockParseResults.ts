@@ -22,8 +22,8 @@ export interface ParseResult {
   reportId: string;
   reportText: string;
   parsedTerms: ParsedTerm[];
-  parserModel: string;    // e.g. "gemini-1.5-flash"
-  verifierModel: string;  // e.g. "gemini-1.5-pro"
+  parserModel: string;    // e.g. "gemini-2.0-flash"
+  verifierModel: string;  // e.g. "gemini-2.0-flash"
   verifierAgreement: number; // 0-1, how much verifier agreed with parser
   parseTimeMs: number;
   totalTokensUsed: number;
@@ -466,8 +466,8 @@ export const mockParseResults: ParseResult[] = [
     reportId: "report-001",
     reportText: r1,
     parsedTerms: report001Terms,
-    parserModel: "gemini-1.5-flash",
-    verifierModel: "gemini-1.5-pro",
+    parserModel: "gemini-2.0-flash",
+    verifierModel: "gemini-2.0-flash",
     verifierAgreement: 0.92,
     parseTimeMs: 1843,
     totalTokensUsed: 3274,
@@ -477,8 +477,8 @@ export const mockParseResults: ParseResult[] = [
     reportId: "report-002",
     reportText: r2,
     parsedTerms: report002Terms,
-    parserModel: "gemini-1.5-flash",
-    verifierModel: "gemini-1.5-pro",
+    parserModel: "gemini-2.0-flash",
+    verifierModel: "gemini-2.0-flash",
     verifierAgreement: 0.89,
     parseTimeMs: 2105,
     totalTokensUsed: 3691,
@@ -488,8 +488,8 @@ export const mockParseResults: ParseResult[] = [
     reportId: "report-003",
     reportText: r3,
     parsedTerms: report003Terms,
-    parserModel: "gemini-1.5-flash",
-    verifierModel: "gemini-1.5-pro",
+    parserModel: "gemini-2.0-flash",
+    verifierModel: "gemini-2.0-flash",
     verifierAgreement: 0.91,
     parseTimeMs: 1956,
     totalTokensUsed: 3418,

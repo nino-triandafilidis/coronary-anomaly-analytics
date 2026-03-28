@@ -161,14 +161,14 @@ const report001Terms: ParsedTerm[] = [
     context: "Mildly enlarged mediastinal lymph nodes, measuring up to 12mm in short axis, consistent with lymphadenopathy.",
     isAnomaly: true,
   },
-  // --- False positive: negated finding ---
+  // --- False positive: negated finding (highlight only the medical term) ---
   {
-    term: "No evidence of aortic aneurysm or dissection",
+    term: "aortic aneurysm or dissection",
     normalizedName: "Aortic Dissection",
     category: "Vascular",
     confidence: 0.62,
-    startIndex: idx(r1, "No evidence of aortic aneurysm or dissection"),
-    endIndex: idx(r1, "No evidence of aortic aneurysm or dissection") + "No evidence of aortic aneurysm or dissection".length,
+    startIndex: idx(r1, "aortic aneurysm or dissection"),
+    endIndex: idx(r1, "aortic aneurysm or dissection") + "aortic aneurysm or dissection".length,
     context: "The thoracic aorta is normal in caliber. No evidence of aortic aneurysm or dissection.",
     isAnomaly: false,
   },
@@ -302,14 +302,14 @@ const report002Terms: ParsedTerm[] = [
     context: "Bilateral carotid plaque is noted at the carotid bifurcations.",
     isAnomaly: true,
   },
-  // --- False positive: negated finding ---
+  // --- False positive: negated finding (highlight only the medical term) ---
   {
-    term: "No filling defects to suggest pulmonary embolism",
+    term: "pulmonary embolism",
     normalizedName: "Pulmonary Embolism",
     category: "Pulmonary",
     confidence: 0.61,
-    startIndex: idx(r2, "No filling defects to suggest pulmonary embolism"),
-    endIndex: idx(r2, "No filling defects to suggest pulmonary embolism") + "No filling defects to suggest pulmonary embolism".length,
+    startIndex: idx(r2, "to suggest pulmonary embolism") + "to suggest ".length,
+    endIndex: idx(r2, "to suggest pulmonary embolism") + "to suggest ".length + "pulmonary embolism".length,
     context: "No filling defects to suggest pulmonary embolism. The main pulmonary artery is within normal limits.",
     isAnomaly: false,
   },
@@ -435,12 +435,12 @@ const report003Terms: ParsedTerm[] = [
   },
   // --- False positive: negated finding ---
   {
-    term: "No evidence of pulmonary embolism",
+    term: "pulmonary embolism",
     normalizedName: "Pulmonary Embolism",
     category: "Pulmonary",
     confidence: 0.60,
-    startIndex: idx(r3, "No evidence of pulmonary embolism"),
-    endIndex: idx(r3, "No evidence of pulmonary embolism") + "No evidence of pulmonary embolism".length,
+    startIndex: idx(r3, "No evidence of pulmonary embolism") + "No evidence of ".length,
+    endIndex: idx(r3, "No evidence of pulmonary embolism") + "No evidence of ".length + "pulmonary embolism".length,
     context: "No evidence of pulmonary embolism. The pulmonary arteries are normal in caliber.",
     isAnomaly: false,
   },

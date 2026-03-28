@@ -1,4 +1,4 @@
-# Anomaly Insight
+# Coronary Anomaly Analytics
 
 Clinical analytics tool for pediatric cardiologists at Stanford Children's Hospital.
 

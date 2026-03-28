@@ -1,8 +1,7 @@
-import { useState, useMemo, useCallback, Fragment } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
 import { Check, X, Plus, AlertTriangle, Clock, Cpu, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -10,6 +9,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -20,7 +24,7 @@ import {
 import type { ParseResult, ReviewableTerm, TermStatus } from "@/data/mockParseResults";
 
 // ---------------------------------------------------------------------------
-// Category color mapping (uses semantic tokens where possible)
+// Category color mapping
 // ---------------------------------------------------------------------------
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -76,8 +80,17 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     parseResult.parsedTerms.map((t) => ({ ...t, status: "pending" as TermStatus }))
   );
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newCategory, setNewCategory] = useState("");
+
+  // --- Selection-based add-term state ---
+  const reportRef = useRef<HTMLParagraphElement>(null);
+  const [selectionPopover, setSelectionPopover] = useState<{
+    text: string;
+    startIndex: number;
+    endIndex: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [addCategory, setAddCategory] = useState("");
 
   // --- Derived counts ---
   const counts = useMemo(() => {
@@ -89,10 +102,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
   const confirmedCount = counts.accepted + counts.added;
 
   // --- Actions ---
-  const setStatus = useCallback((idx: number, status: TermStatus) => {
-    setTerms((prev) => prev.map((t, i) => (i === idx ? { ...t, status } : t)));
-  }, []);
-
   const toggleStatus = useCallback(
     (idx: number, target: TermStatus) => {
       setTerms((prev) =>
@@ -115,23 +124,72 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
       prev.map((t) => (t.status === "pending" ? { ...t, status: "rejected" } : t))
     );
 
-  const addTerm = () => {
-    const name = newName.trim();
-    if (!name) return;
+  // --- Text selection handler ---
+  useEffect(() => {
+    const handleMouseUp = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !reportRef.current) {
+        return;
+      }
+
+      // Ensure selection is within the report panel
+      const range = sel.getRangeAt(0);
+      if (!reportRef.current.contains(range.commonAncestorContainer)) {
+        return;
+      }
+
+      const selectedText = sel.toString().trim();
+      if (!selectedText) return;
+
+      // Compute startIndex/endIndex within the full report text
+      const fullText = parseResult.reportText;
+      // Walk text nodes to find the offset
+      const startOffset = getTextOffset(reportRef.current, range.startContainer, range.startOffset);
+      const endOffset = getTextOffset(reportRef.current, range.endContainer, range.endOffset);
+
+      if (startOffset === -1 || endOffset === -1) return;
+
+      // Verify the text matches
+      const extracted = fullText.slice(startOffset, endOffset).trim();
+      if (!extracted) return;
+
+      // Position the popover near the selection
+      const rect = range.getBoundingClientRect();
+      setSelectionPopover({
+        text: selectedText,
+        startIndex: startOffset,
+        endIndex: endOffset,
+        x: rect.left + rect.width / 2,
+        y: rect.top,
+      });
+      setAddCategory("");
+    };
+
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => document.removeEventListener("mouseup", handleMouseUp);
+  }, [parseResult.reportText]);
+
+  const addSelectedTerm = () => {
+    if (!selectionPopover) return;
     const added: ReviewableTerm = {
-      term: name,
-      normalizedName: name,
-      category: newCategory || "Other",
+      term: selectionPopover.text,
+      normalizedName: selectionPopover.text,
+      category: addCategory || "Other",
       confidence: 1,
-      startIndex: -1,
-      endIndex: -1,
+      startIndex: selectionPopover.startIndex,
+      endIndex: selectionPopover.endIndex,
       context: "",
       isAnomaly: true,
       status: "added",
     };
     setTerms((prev) => [...prev, added]);
-    setNewName("");
-    setNewCategory("");
+    setSelectionPopover(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const dismissPopover = () => {
+    setSelectionPopover(null);
+    window.getSelection()?.removeAllRanges();
   };
 
   const handleConfirm = () => {
@@ -140,7 +198,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
 
   // --- Build highlighted text segments ---
   const segments = useMemo(() => {
-    // Only terms with valid positions
     const positioned = terms
       .map((t, idx) => ({ ...t, _idx: idx }))
       .filter((t) => t.startIndex >= 0 && t.endIndex > t.startIndex)
@@ -151,7 +208,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     let cursor = 0;
 
     for (const t of positioned) {
-      if (t.startIndex < cursor) continue; // overlapping, skip
+      if (t.startIndex < cursor) continue;
       if (t.startIndex > cursor) {
         parts.push({ text: text.slice(cursor, t.startIndex), termIdx: null, status: null });
       }
@@ -182,8 +239,11 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
 
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
           {/* LEFT — Report with highlights */}
-          <div className="rounded-lg border border-border bg-card p-5 overflow-auto max-h-[75vh]">
-            <p className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-card-foreground">
+          <div className="relative rounded-lg border border-border bg-card p-5 overflow-auto max-h-[75vh]">
+            <p
+              ref={reportRef}
+              className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-card-foreground"
+            >
               {segments.map((seg, i) => {
                 if (seg.termIdx === null) {
                   return <Fragment key={i}>{seg.text}</Fragment>;
@@ -211,6 +271,44 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                 );
               })}
             </p>
+
+            {/* Floating popover for text selection */}
+            {selectionPopover && (
+              <div
+                className="fixed z-50"
+                style={{
+                  left: selectionPopover.x,
+                  top: selectionPopover.y - 8,
+                  transform: "translate(-50%, -100%)",
+                }}
+              >
+                <div className="rounded-lg border border-border bg-popover p-3 shadow-lg">
+                  <p className="text-xs font-medium text-popover-foreground mb-2 max-w-[200px] truncate">
+                    Add: "{selectionPopover.text}"
+                  </p>
+                  <div className="flex gap-2">
+                    <Select value={addCategory} onValueChange={setAddCategory}>
+                      <SelectTrigger className="h-7 w-24 text-xs">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIES.map((c) => (
+                          <SelectItem key={c} value={c} className="text-xs">
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="default" className="h-7 px-2 text-xs" onClick={addSelectedTerm}>
+                      <Plus className="h-3 w-3 mr-1" /> Add
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 px-1.5 text-xs" onClick={dismissPopover}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* RIGHT — Term review panel */}
@@ -263,7 +361,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                       onMouseEnter={() => setHoveredIdx(idx)}
                       onMouseLeave={() => setHoveredIdx(null)}
                     >
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-medium text-card-foreground truncate">
@@ -275,14 +373,11 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                             >
                               {term.category}
                             </Badge>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                            {term.context || term.term}
-                          </p>
-                          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span>{Math.round(term.confidence * 100)}%</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {Math.round(term.confidence * 100)}%
+                            </span>
                             {!term.isAnomaly && (
-                              <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                              <span className="flex items-center gap-0.5 text-[11px] text-amber-600 dark:text-amber-400">
                                 <AlertTriangle className="h-3 w-3" />
                                 likely not anomaly
                               </span>
@@ -312,33 +407,10 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
               </div>
             </ScrollArea>
 
-            {/* Add term */}
-            <div className="rounded-lg border border-dashed border-border bg-card p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Add a term manually</p>
-              <div className="flex gap-2">
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Term name…"
-                  className="h-8 text-xs flex-1"
-                />
-                <Select value={newCategory} onValueChange={setNewCategory}>
-                  <SelectTrigger className="h-8 w-28 text-xs">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c} className="text-xs">
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" variant="outline" className="h-8 px-2" onClick={addTerm} disabled={!newName.trim()}>
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
+            {/* Hint for adding terms */}
+            <p className="text-[11px] text-muted-foreground text-center">
+              Select text in the report to add a term
+            </p>
 
             {/* Confirm CTA */}
             <Button onClick={handleConfirm} disabled={confirmedCount === 0} className="w-full">
@@ -349,4 +421,21 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
       </div>
     </TooltipProvider>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute character offset of a DOM position within a container
+// ---------------------------------------------------------------------------
+
+function getTextOffset(root: Node, targetNode: Node, targetOffset: number): number {
+  let offset = 0;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    if (node === targetNode) {
+      return offset + targetOffset;
+    }
+    offset += (node.textContent?.length ?? 0);
+  }
+  return -1;
 }

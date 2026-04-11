@@ -1,6 +1,6 @@
 import { Fragment, useRef, useState, useCallback, useEffect } from "react";
 import type { DetectedAnomaly } from "@/lib/anomalyDetection";
-import { getFrequencyPercentage, getSeverity } from "@/data/anomalyDatabase";
+import { getSeverity } from "@/data/anomalyDatabase";
 import {
   Tooltip,
   TooltipContent,
@@ -56,13 +56,29 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
       ref={containerRef}
       className="rounded-lg border border-border bg-card p-6 font-mono text-sm leading-7 whitespace-pre-wrap text-card-foreground overflow-auto max-h-[70vh]"
     >
-      {segments.map((seg, i) =>
-        seg.anomaly ? (
+      {segments.map((seg, i) => {
+        if (!seg.anomaly) {
+          return <Fragment key={i}>{seg.text}</Fragment>;
+        }
+
+        const isNegated = seg.anomaly.assertion === "negated";
+        // Negated terms are shown as a dashed underline with no background fill
+        // so the radiologist can see at a glance which findings are *ruled out*.
+        // Asserted terms keep the existing solid yellow highlight.
+        const markClass = isNegated
+          ? "relative cursor-pointer px-0.5 text-muted-foreground/90 underline decoration-muted-foreground/60 decoration-dashed underline-offset-4 transition-colors hover:decoration-muted-foreground"
+          : "relative cursor-pointer rounded-sm bg-highlight/40 px-0.5 transition-colors hover:bg-highlight-hover/50";
+
+        const isAssertedFreq = !isNegated;
+        const freq = isAssertedFreq
+          ? seg.anomaly.entry.frequencyAsserted
+          : seg.anomaly.entry.frequencyNegated;
+        const freqLabel = isAssertedFreq ? "asserted in" : "ruled out in";
+
+        return (
           <Tooltip key={`${i}-${scrollKey}`}>
             <TooltipTrigger asChild>
-              <mark className="relative cursor-pointer rounded-sm bg-highlight/40 px-0.5 transition-colors hover:bg-highlight-hover/50">
-                {seg.text}
-              </mark>
+              <mark className={markClass}>{seg.text}</mark>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8} className="max-w-xs px-4 py-3">
               <p className="text-sm font-semibold text-popover-foreground">
@@ -70,31 +86,34 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
               </p>
               <div className="mt-1.5 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${severityColor(getSeverity(seg.anomaly.entry))}`}>
+                  <span
+                    className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${severityColor(
+                      getSeverity(seg.anomaly.entry)
+                    )}`}
+                  >
                     {getSeverity(seg.anomaly.entry)}
                   </span>
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                    {seg.anomaly.entry.category}
+                  <span
+                    className={
+                      "inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide " +
+                      (isNegated
+                        ? "border-muted-foreground/40 bg-muted text-muted-foreground"
+                        : "border-primary/30 bg-primary/10 text-primary")
+                    }
+                  >
+                    {seg.anomaly.assertion}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Found in{" "}
-                  <span className="font-semibold text-foreground">
-                    {seg.anomaly.entry.frequency}
-                  </span>{" "}
-                  of {seg.anomaly.entry.totalReports} reports (
-                  <span className="font-semibold text-foreground">
-                    {getFrequencyPercentage(seg.anomaly.entry)}%
-                  </span>
-                  )
+                  {freqLabel}{" "}
+                  <span className="font-semibold text-foreground">{freq}</span> of{" "}
+                  {seg.anomaly.entry.totalReports} reports
                 </p>
               </div>
             </TooltipContent>
           </Tooltip>
-        ) : (
-          <Fragment key={i}>{seg.text}</Fragment>
-        )
-      )}
+        );
+      })}
     </div>
   );
 }

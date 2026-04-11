@@ -175,6 +175,10 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
       term: selectionPopover.text,
       normalizedName: selectionPopover.text,
       category: addCategory || "Other",
+      // Manually-added terms default to asserted — the user is affirmatively
+      // marking the span. They can flip it via the assertion toggle if they
+      // intended a ruled-out finding the parser missed.
+      assertion: "asserted",
       confidence: 1,
       startIndex: selectionPopover.startIndex,
       endIndex: selectionPopover.endIndex,
@@ -186,6 +190,16 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     setSelectionPopover(null);
     window.getSelection()?.removeAllRanges();
   };
+
+  const toggleAssertion = useCallback((idx: number) => {
+    setTerms((prev) =>
+      prev.map((t, i) =>
+        i === idx
+          ? { ...t, assertion: t.assertion === "negated" ? "asserted" : "negated" }
+          : t
+      )
+    );
+  }, []);
 
   const dismissPopover = () => {
     setSelectionPopover(null);
@@ -237,9 +251,11 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
           </button>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-          {/* LEFT — Report with highlights */}
-          <div className="relative rounded-lg border border-border bg-card p-5 overflow-auto max-h-[75vh]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+          {/* LEFT — Report with highlights. min-w-0 (via minmax(0,1fr) above)
+              lets the column shrink past its content width so the right
+              column never gets pushed off-screen. */}
+          <div className="relative min-w-0 rounded-lg border border-border bg-card p-5 overflow-auto max-h-[75vh]">
             <p
               ref={reportRef}
               className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-card-foreground"
@@ -250,12 +266,20 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                 }
                 const term = terms[seg.termIdx];
                 const isHovered = hoveredIdx === seg.termIdx;
+                // Negated terms get gray + dashed-underline regardless of
+                // accept/reject status, so the user can see at a glance which
+                // findings the radiologist ruled out. Accept/reject is still
+                // visible via the matching card border on the right.
+                const isNegated = term.assertion === "negated";
+                const baseClass = isNegated
+                  ? "cursor-pointer px-0.5 text-muted-foreground/90 underline decoration-muted-foreground/60 decoration-dashed underline-offset-4 transition-all duration-150"
+                  : `cursor-pointer rounded-sm px-0.5 transition-all duration-150 ${STATUS_HIGHLIGHT[seg.status!]}`;
                 return (
                   <Tooltip key={i}>
                     <TooltipTrigger asChild>
                       <span
                         data-term-index={seg.termIdx}
-                        className={`cursor-pointer rounded-sm px-0.5 transition-all duration-150 ${STATUS_HIGHLIGHT[seg.status!]} ${isHovered ? "ring-2 ring-primary" : ""}`}
+                        className={`${baseClass} ${isHovered ? "ring-2 ring-primary" : ""}`}
                         onMouseEnter={() => setHoveredIdx(seg.termIdx)}
                         onMouseLeave={() => setHoveredIdx(null)}
                       >
@@ -265,7 +289,18 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                     <TooltipContent side="top" className="max-w-xs text-xs">
                       <p className="font-semibold">{term.normalizedName}</p>
                       <p className="text-muted-foreground">
-                        {term.category}
+                        {term.category && term.category !== "Other" && (
+                          <>{term.category}{" · "}</>
+                        )}
+                        <span
+                          className={
+                            term.assertion === "negated"
+                              ? "text-muted-foreground"
+                              : "text-emerald-600 dark:text-emerald-400"
+                          }
+                        >
+                          {term.assertion}
+                        </span>
                         {term.correctionType && term.correctionType !== "exact" && (
                           <> · <span className="text-amber-600 dark:text-amber-400">{term.correctionType === "whitespace" ? "whitespace fix" : term.correctionType === "resolved" ? "AI-resolved" : term.correctionType}</span></>
                         )}
@@ -319,7 +354,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
           </div>
 
           {/* RIGHT — Term review panel */}
-          <div className="flex flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-4">
             {/* Model metadata */}
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -378,12 +413,37 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                             <span className="text-sm font-medium text-card-foreground truncate">
                               {term.normalizedName}
                             </span>
-                            <Badge
-                              variant="secondary"
-                              className={`text-[10px] px-1.5 py-0 ${categoryBadgeClass(term.category)}`}
+                            {/* Anthropic parser doesn't extract a category, so it
+                                stamps everything as "Other" — hide the badge in
+                                that case rather than show a useless placeholder. */}
+                            {term.category && term.category !== "Other" && (
+                              <Badge
+                                variant="secondary"
+                                className={`text-[10px] px-1.5 py-0 ${categoryBadgeClass(term.category)}`}
+                              >
+                                {term.category}
+                              </Badge>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleAssertion(idx);
+                              }}
+                              title={
+                                term.assertion === "negated"
+                                  ? "Marked as ruled out — click to flip"
+                                  : "Marked as present — click to flip"
+                              }
+                              className={
+                                "text-[10px] px-1.5 py-0 rounded uppercase tracking-wide font-medium transition-colors " +
+                                (term.assertion === "negated"
+                                  ? "bg-muted text-muted-foreground hover:bg-muted/80"
+                                  : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300")
+                              }
                             >
-                              {term.category}
-                            </Badge>
+                              {term.assertion}
+                            </button>
                             {term.correctionType && term.correctionType !== "exact" && (
                               <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
                                 {term.correctionType === "whitespace" ? "ws fix" : term.correctionType === "resolved" ? "resolved" : term.correctionType}

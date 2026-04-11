@@ -1,20 +1,46 @@
 /**
- * Parsing orchestrator — coordinates parser → resolver → verifier pipeline.
+ * Parsing orchestrator — provider switch + cost guard for the parse pipeline.
  *
- * Flow:
- * 1. Check for mock data (when no API key).
- * 2. Estimate cost — block if over $1 per call.
- * 3. Run parser (Gemini) — extracts terms, resolves positions (exact + whitespace).
- * 4. Run resolver (Gemini) — fixes unresolved terms, finds missed findings.
- * 5. Run verifier (Gemini) — confirms/rejects the full term set.
- * 6. Return final ParseResult.
+ * Two providers are supported, selected via VITE_LLM_PROVIDER:
+ *
+ *   anthropic (default)  → src/lib/anthropicParser.ts
+ *                          One Claude call with tool-use forced JSON output.
+ *                          Returns terms with asserted/negated assertion status.
+ *
+ *   gemini               → legacy 3-call pipeline:
+ *                          parser → resolver → verifier
+ *                          See src/lib/llmParser.ts, llmResolver.ts, llmVerifier.ts.
+ *                          The Gemini prompts skip negated findings entirely,
+ *                          so all returned terms are tagged "asserted".
+ *
+ * The mock-data fallback that used to live here was removed when we replaced
+ * the sample reports with real coronary CTAs — the canned mock results no
+ * longer matched the new samples and were silently masking real LLM failures.
+ * On any error, the orchestrator now throws and the UI surfaces the error.
  */
 
-import { parseReport, estimateCost } from "@/lib/llmParser";
+import { parseReport, estimateCost as estimateGeminiCost } from "@/lib/llmParser";
 import { resolveUnmatchedTerms } from "@/lib/llmResolver";
 import { verifyParseResult } from "@/lib/llmVerifier";
+import { parseWithAnthropic, estimateAnthropicCost } from "@/lib/anthropicParser";
+import { findTermPosition } from "@/lib/positionResolver";
 import type { ParseResult, ParsedTerm } from "@/data/mockParseResults";
-import { findMockParseResultByText } from "@/data/mockParseResults";
+
+// ---------------------------------------------------------------------------
+// Provider selection
+// ---------------------------------------------------------------------------
+
+export type LLMProvider = "anthropic" | "gemini";
+
+function getProvider(): LLMProvider {
+  const raw = (import.meta.env.VITE_LLM_PROVIDER ?? "anthropic").toLowerCase();
+  if (raw === "gemini") return "gemini";
+  if (raw === "anthropic") return "anthropic";
+  console.warn(
+    `Unknown VITE_LLM_PROVIDER="${raw}", falling back to "anthropic".`
+  );
+  return "anthropic";
+}
 
 // ---------------------------------------------------------------------------
 // Cost guard
@@ -34,85 +60,102 @@ export class CostLimitError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Options
+// Helper: position-resolve a term in the report (for Gemini resolver path)
 // ---------------------------------------------------------------------------
 
-export interface OrchestratorOptions {
-  /** Run the verifier after parsing. Default: true */
-  runVerifier?: boolean;
-  /** Use mock data if available instead of calling the API. Default: true when no API key */
-  useMock?: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Helper: position-resolve a term in the report
-// ---------------------------------------------------------------------------
-
-function positionResolve(
+function positionResolveAvailable(
   reportText: string,
   term: string,
   existingTerms: ParsedTerm[]
 ): { startIndex: number; endIndex: number } | null {
-  const lower = reportText.toLowerCase();
-  const lowerTerm = term.toLowerCase();
-  const idx = lower.indexOf(lowerTerm);
-
-  if (idx === -1) return null;
-
-  // Check for overlap with existing terms
+  const match = findTermPosition(reportText, term);
+  if (!match) return null;
   const overlaps = existingTerms.some(
-    (t) => idx < t.endIndex && idx + term.length > t.startIndex
+    (t) => match.startIndex < t.endIndex && match.endIndex > t.startIndex
   );
   if (overlaps) return null;
-
-  return { startIndex: idx, endIndex: idx + term.length };
+  return { startIndex: match.startIndex, endIndex: match.endIndex };
 }
 
 // ---------------------------------------------------------------------------
-// Orchestrator
+// Options
+// ---------------------------------------------------------------------------
+
+export interface OrchestratorOptions {
+  /** Run the verifier after parsing (Gemini path only). Default: true */
+  runVerifier?: boolean;
+  /** Override the provider (otherwise reads VITE_LLM_PROVIDER). */
+  provider?: LLMProvider;
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator entry point
 // ---------------------------------------------------------------------------
 
 export async function orchestrateParse(
   reportText: string,
   options: OrchestratorOptions = {}
 ): Promise<ParseResult> {
-  const { runVerifier = true, useMock } = options;
+  const provider = options.provider ?? getProvider();
 
-  console.group("🏗 [Orchestrator] Starting parse pipeline...");
+  console.group(`🏗 [Orchestrator] Provider: ${provider}`);
 
-  // 1. Mock fallback
-  const shouldUseMock = useMock ?? !import.meta.env.VITE_GEMINI_API_KEY;
-  if (shouldUseMock) {
-    const mock = findMockParseResultByText(reportText);
-    if (mock) {
-      console.log("📦 Using mock data (no API key or mock match found)");
-      console.groupEnd();
-      return mock;
+  try {
+    if (provider === "anthropic") {
+      return await runAnthropicPath(reportText);
     }
-    if (!import.meta.env.VITE_GEMINI_API_KEY) {
-      console.groupEnd();
-      throw new Error(
-        "No API key set and no mock data matches this report. Set VITE_GEMINI_API_KEY in .env."
-      );
-    }
+    return await runGeminiPath(reportText, options.runVerifier ?? true);
+  } finally {
+    console.groupEnd();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Anthropic path — one call, done
+// ---------------------------------------------------------------------------
+
+async function runAnthropicPath(reportText: string): Promise<ParseResult> {
+  const estimate = estimateAnthropicCost(reportText);
+  console.log(
+    `💲 Estimated cost: $${estimate.estimatedCostUsd.toFixed(5)} (limit: $${COST_LIMIT_PER_CALL})`
+  );
+  if (estimate.estimatedCostUsd > COST_LIMIT_PER_CALL) {
+    throw new CostLimitError(estimate.estimatedCostUsd);
   }
 
-  // 2. Cost check (estimate 3 calls: parser + resolver + verifier)
-  const estimate = estimateCost(reportText);
+  const result = await parseWithAnthropic(reportText);
+  console.log(
+    `✅ [Orchestrator] Anthropic: ${result.parsedTerms.length} terms, ` +
+      `$${result.estimatedCostUsd.toFixed(5)}, ${result.parseTimeMs}ms`
+  );
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Gemini path — legacy 3-call pipeline
+// ---------------------------------------------------------------------------
+
+async function runGeminiPath(
+  reportText: string,
+  runVerifier: boolean
+): Promise<ParseResult> {
+  // Cost check (estimate 3 calls: parser + resolver + verifier)
+  const estimate = estimateGeminiCost(reportText);
   const totalEstimate = estimate.estimatedCostUsd * 3;
 
-  console.log(`💲 Estimated cost: $${totalEstimate.toFixed(5)} (limit: $${COST_LIMIT_PER_CALL})`);
+  console.log(
+    `💲 Estimated cost: $${totalEstimate.toFixed(5)} (limit: $${COST_LIMIT_PER_CALL})`
+  );
 
   if (totalEstimate > COST_LIMIT_PER_CALL) {
-    console.groupEnd();
     throw new CostLimitError(totalEstimate);
   }
 
-  // 3. Run parser
+  // 1. Parser
   const parseResult = await parseReport(reportText);
   const unresolved = parseResult.unresolvedRawTerms ?? [];
 
-  // 4. Run resolver (if there are unresolved terms)
+  // 2. Resolver (if there are unresolved terms)
   if (unresolved.length > 0) {
     try {
       console.log(
@@ -132,14 +175,24 @@ export async function orchestrateParse(
       // Integrate resolved terms that have a verbatim match
       let resolvedCount = 0;
       for (const r of resolution.resolved) {
-        if (!r.verbatimText || r.correctionType === "hallucinated" || r.correctionType === "negated") {
+        if (
+          !r.verbatimText ||
+          r.correctionType === "hallucinated" ||
+          r.correctionType === "negated"
+        ) {
           console.log(`  ✗ "${r.originalTerm}" → ${r.correctionType}: ${r.explanation}`);
           continue;
         }
 
-        const pos = positionResolve(reportText, r.verbatimText, parseResult.parsedTerms);
+        const pos = positionResolveAvailable(
+          reportText,
+          r.verbatimText,
+          parseResult.parsedTerms
+        );
         if (!pos) {
-          console.warn(`  ⚠ Resolver returned "${r.verbatimText}" but couldn't position it`);
+          console.warn(
+            `  ⚠ Resolver returned "${r.verbatimText}" but couldn't position it`
+          );
           continue;
         }
 
@@ -147,6 +200,7 @@ export async function orchestrateParse(
           term: reportText.substring(pos.startIndex, pos.endIndex),
           normalizedName: r.normalizedName,
           category: r.category,
+          assertion: "asserted",
           confidence: 1,
           startIndex: pos.startIndex,
           endIndex: pos.endIndex,
@@ -160,13 +214,18 @@ export async function orchestrateParse(
 
       // Integrate missed findings from resolver
       for (const missed of resolution.missedFindings) {
-        const pos = positionResolve(reportText, missed.term, parseResult.parsedTerms);
+        const pos = positionResolveAvailable(
+          reportText,
+          missed.term,
+          parseResult.parsedTerms
+        );
         if (!pos) continue;
 
         parseResult.parsedTerms.push({
           term: reportText.substring(pos.startIndex, pos.endIndex),
           normalizedName: missed.normalizedName,
           category: missed.category,
+          assertion: "asserted",
           confidence: 1,
           startIndex: pos.startIndex,
           endIndex: pos.endIndex,
@@ -181,10 +240,8 @@ export async function orchestrateParse(
           `${resolution.missedFindings.length} missed added`
       );
 
-      // Clear unresolved — they've been handled
       parseResult.unresolvedRawTerms = undefined;
 
-      // Accumulate cost/time
       parseResult.totalTokensUsed +=
         resolution.tokenUsage.input + resolution.tokenUsage.output;
       parseResult.estimatedCostUsd += resolution.costUsd;
@@ -194,15 +251,11 @@ export async function orchestrateParse(
     }
   }
 
-  // 5. Run verifier (confirm/reject on the full set)
+  // 3. Verifier
   if (runVerifier && parseResult.parsedTerms.length > 0) {
     try {
-      const verification = await verifyParseResult(
-        reportText,
-        parseResult.parsedTerms
-      );
+      const verification = await verifyParseResult(reportText, parseResult.parsedTerms);
 
-      // Remove rejected terms
       const rejectedTerms = new Set(
         verification.decisions
           .filter((d) => d.verdict === "rejected")
@@ -213,15 +266,15 @@ export async function orchestrateParse(
         (t) => !rejectedTerms.has(t.term.toLowerCase())
       );
 
-      // Add missed findings from verifier (deduplicate against existing)
       for (const missed of verification.missedFindings) {
-        const pos = positionResolve(reportText, missed.term, filteredTerms);
+        const pos = positionResolveAvailable(reportText, missed.term, filteredTerms);
         if (!pos) continue;
 
         filteredTerms.push({
           term: reportText.substring(pos.startIndex, pos.endIndex),
           normalizedName: missed.normalizedName,
           category: missed.category,
+          assertion: "asserted",
           confidence: 1,
           startIndex: pos.startIndex,
           endIndex: pos.endIndex,
@@ -250,14 +303,12 @@ export async function orchestrateParse(
     }
   }
 
-  // Sort final set
   parseResult.parsedTerms.sort((a, b) => a.startIndex - b.startIndex);
 
   console.log(
-    `✅ [Orchestrator] Final: ${parseResult.parsedTerms.length} terms, ` +
+    `✅ [Orchestrator] Gemini: ${parseResult.parsedTerms.length} terms, ` +
       `$${parseResult.estimatedCostUsd.toFixed(5)}, ${parseResult.parseTimeMs}ms`
   );
-  console.groupEnd();
 
   return parseResult;
 }

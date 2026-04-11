@@ -6,7 +6,12 @@ export type Severity = "low" | "moderate" | "high" | "critical";
 export interface AnomalyEntry {
   term: string;
   aliases: string[];
+  /** Total mentions across all reports (asserted + negated). Kept for backward compat. */
   frequency: number;
+  /** Number of reports where the radiologist asserted this finding as present. */
+  frequencyAsserted: number;
+  /** Number of reports where the radiologist explicitly ruled this finding out. */
+  frequencyNegated: number;
   totalReports: number;
   category: string;
 }
@@ -15,15 +20,44 @@ const TOTAL_REPORTS = 300;
 
 /** In-memory database; set by fetching /anomaly_frequencies.json in App. */
 let loadedDatabase: AnomalyEntry[] | null = null;
+let mockDatabaseBackfilled: AnomalyEntry[] | null = null;
 
-/** Returns the active anomaly list (fetched from JSON if loaded, else mock). */
+/**
+ * Returns the active anomaly list (fetched from JSON if loaded, else mock).
+ * The mock list pre-dates the asserted/negated split, so we backfill it on
+ * first access — every existing entry is treated as fully asserted.
+ */
 export function getAnomalyDatabase(): AnomalyEntry[] {
-  return loadedDatabase ?? MOCK_ANOMALY_DATABASE;
+  if (loadedDatabase) return loadedDatabase;
+  if (!mockDatabaseBackfilled) {
+    mockDatabaseBackfilled = MOCK_ANOMALY_DATABASE.map((entry) => ({
+      ...entry,
+      frequencyAsserted: entry.frequency,
+      frequencyNegated: 0,
+    }));
+  }
+  return mockDatabaseBackfilled;
 }
 
-/** Called when /anomaly_frequencies.json has been fetched. Use this to wire in real pipeline output. */
+/**
+ * Called when /anomaly_frequencies.json has been fetched. Backfills the new
+ * asserted/negated fields if the JSON file pre-dates the schema change — in
+ * that case all of `frequency` is treated as asserted, with zero negated.
+ */
 export function setAnomalyDatabase(entries: AnomalyEntry[]): void {
-  loadedDatabase = entries.length > 0 ? entries : null;
+  if (entries.length === 0) {
+    loadedDatabase = null;
+    return;
+  }
+  loadedDatabase = entries.map((entry) => ({
+    ...entry,
+    frequencyAsserted:
+      entry.frequencyAsserted ?? entry.frequency ?? 0,
+    frequencyNegated: entry.frequencyNegated ?? 0,
+    frequency:
+      entry.frequency ??
+      (entry.frequencyAsserted ?? 0) + (entry.frequencyNegated ?? 0),
+  }));
 }
 
 /**
@@ -41,7 +75,11 @@ export function getSeverity(entry: AnomalyEntry): Severity {
   return "low";
 }
 
-const MOCK_ANOMALY_DATABASE: AnomalyEntry[] = [
+// The mock literal pre-dates the asserted/negated split. The two new fields
+// are filled in lazily by getAnomalyDatabase() the first time it's read.
+type MockAnomalyEntry = Omit<AnomalyEntry, "frequencyAsserted" | "frequencyNegated">;
+
+const MOCK_ANOMALY_DATABASE: MockAnomalyEntry[] = [
   {
     term: "Pulmonary embolism",
     // Do not add "PE" as alias — too ambiguous; matches "PERFORMED", "PERSPECTIVE", etc.

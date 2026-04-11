@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, Heart, Loader2 } from "lucide-react";
+import { Activity, Heart, Loader2, BookmarkCheck } from "lucide-react";
 import { ReportInput } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
@@ -9,20 +9,31 @@ import type { DetectedAnomaly } from "@/lib/anomalyDetection";
 import { getAnomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
 import { orchestrateParse, CostLimitError } from "@/lib/parsingOrchestrator";
 import type { ParseResult, ReviewableTerm } from "@/data/mockParseResults";
+import {
+  saveReport,
+  getReportCount,
+  deriveTitleFromText,
+} from "@/lib/reportDatabase";
+import { useToast } from "@/hooks/use-toast";
 
 type Stage = "upload" | "parsing" | "review" | "results";
 
 const Index = () => {
+  const { toast } = useToast();
+
   const [stage, setStage] = useState<Stage>("upload");
   const [reportText, setReportText] = useState<string | null>(null);
   const [detected, setDetected] = useState<DetectedAnomaly[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [reviewTerms, setReviewTerms] = useState<ReviewableTerm[] | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [dbCount, setDbCount] = useState(() => getReportCount());
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   const handleReport = async (text: string) => {
     setReportText(text);
     setParseError(null);
+    setSavedId(null);
     setStage("parsing");
 
     try {
@@ -49,6 +60,7 @@ const Index = () => {
 
   const handleReviewConfirm = (accepted: ReviewableTerm[]) => {
     setReviewTerms(accepted);
+    setSavedId(null);
     const db = getAnomalyDatabase();
     const dbLookup = new Map(db.map((e) => [e.term.toLowerCase(), e]));
 
@@ -82,6 +94,32 @@ const Index = () => {
     setStage("results");
   };
 
+  const handleSaveToDatabase = () => {
+    if (!parseResult || !reportText || !reviewTerms) return;
+
+    const id = parseResult.reportId || `report-${Date.now()}`;
+    // Don't save the same parse result twice
+    if (savedId === id) return;
+
+    saveReport({
+      id,
+      title: deriveTitleFromText(reportText),
+      text: reportText,
+      parsedTerms: reviewTerms,
+      parserModel: parseResult.parserModel,
+      verifierModel: parseResult.verifierModel,
+      verifierAgreement: parseResult.verifierAgreement,
+      parseTimeMs: parseResult.parseTimeMs,
+      totalTokensUsed: parseResult.totalTokensUsed,
+      estimatedCostUsd: parseResult.estimatedCostUsd,
+      savedAt: new Date().toISOString(),
+    });
+
+    setSavedId(id);
+    setDbCount(getReportCount());
+    toast({ title: "Saved to database", description: deriveTitleFromText(reportText) });
+  };
+
   const handleReset = () => {
     setStage("upload");
     setReportText(null);
@@ -89,6 +127,7 @@ const Index = () => {
     setParseResult(null);
     setReviewTerms(null);
     setParseError(null);
+    setSavedId(null);
   };
 
   return (
@@ -114,7 +153,9 @@ const Index = () => {
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
             <Heart className="h-3.5 w-3.5 text-clinical-danger" />
-            <span>300 reports in database</span>
+            <span>
+              {dbCount} report{dbCount !== 1 ? "s" : ""} in database
+            </span>
           </Link>
         </div>
       </header>
@@ -165,6 +206,7 @@ const Index = () => {
           const uniqueNegated = new Set(
             detected.filter((d) => d.assertion === "negated").map((d) => d.entry.term)
           ).size;
+          const alreadySaved = !!savedId;
           return (
             <div className="animate-fade-in">
               <div className="mb-6 flex items-center justify-between">
@@ -177,6 +219,22 @@ const Index = () => {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {/* Save to database */}
+                  {parseResult && reviewTerms && (
+                    <button
+                      onClick={handleSaveToDatabase}
+                      disabled={alreadySaved}
+                      className={
+                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors " +
+                        (alreadySaved
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 cursor-default"
+                          : "border-primary/40 bg-primary/5 text-primary hover:bg-primary/10")
+                      }
+                    >
+                      <BookmarkCheck className="h-3.5 w-3.5" />
+                      {alreadySaved ? "Saved" : "Save to database"}
+                    </button>
+                  )}
                   {parseResult && (
                     <button
                       onClick={() => setStage("review")}

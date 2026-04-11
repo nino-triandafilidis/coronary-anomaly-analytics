@@ -7,6 +7,8 @@
 
 import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai";
 import type { ParsedTerm, ParseResult, UnresolvedRawTerm } from "@/data/mockParseResults";
+import { GEMINI_PARSER_PROMPT } from "@/lib/prompts/geminiParser.prompt";
+import { findTermPosition } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -18,59 +20,8 @@ const MODEL_NAME = "gemini-2.5-flash";
 const INPUT_COST_PER_TOKEN = 0.30 / 1_000_000;
 const OUTPUT_COST_PER_TOKEN = 2.50 / 1_000_000;
 
-// ---------------------------------------------------------------------------
-// Prompt
-// ---------------------------------------------------------------------------
-
-const SYSTEM_PROMPT = `You are a clinical NER system for CT angiogram radiology reports.
-
-YOUR TASK: Extract every anomaly-related term from the report.
-
-WHAT TO EXTRACT:
-- Named conditions: pulmonary embolism, cardiomegaly, aortic aneurysm, DVT, etc.
-- Descriptive findings: filling defect, ground-glass opacity, spiculated nodule, etc.
-- Calcification, effusion, thrombus, nodule, atelectasis, edema, stenosis, etc.
-- All abbreviations and medical jargon: PE, DVT, CAD, LAD, SVG, etc.
-- Any term a cardiologist would consider clinically relevant
-
-WHAT NOT TO EXTRACT:
-- Negated findings: "no evidence of dissection" → do NOT extract "dissection"
-- Section headers: FINDINGS, IMPRESSION, TECHNIQUE
-- Patient demographics, dates, dose information
-- Imaging technique descriptions
-- Normal anatomy described as normal
-- Measurements by themselves without a finding (do NOT extract "measuring up to 1 cm" alone)
-- Symptoms from INDICATION section (e.g. "shortness of breath", "chest pain") — only extract the suspected diagnosis if named (e.g. "pulmonary embolism" in "rule out pulmonary embolism")
-
-NEGATION RULES — CRITICAL:
-- "No evidence of X" → do NOT extract X
-- "No X" → do NOT extract X
-- "Without X" → do NOT extract X
-- "Ruled out X" → do NOT extract X
-- "Not seen / not identified / absent" → do NOT extract
-- BUT: "consistent with X" → DO extract X
-- BUT: "suggesting possible X" → DO extract X
-
-EXACT TEXT RULE — CRITICAL:
-The "term" field MUST be an exact character-for-character copy from the report text. This includes:
-- Preserving typos (e.g. if the report says "calicifications", return "calicifications" NOT "calcifications")
-- Preserving line breaks if the term spans a line break
-- Preserving exact capitalization
-- Do NOT paraphrase, summarize, or construct phrases that do not appear verbatim in the text
-- Do NOT combine separate words into a phrase unless that exact phrase appears contiguously in the report
-
-DEDUPLICATION:
-If the same finding appears in both FINDINGS and IMPRESSION sections, extract BOTH occurrences — each with its own exact text. The UI will show both highlights but the database will deduplicate.
-
-For each term, return a JSON object with:
-- "term": exact verbatim text from the report (character-for-character, including typos)
-- "normalizedName": the canonical medical term in Title Case (correct any typos here)
-- "category": one of "Pulmonary", "Cardiac", "Vascular", "Systemic", "Musculoskeletal"
-- "isAnomaly": true if definite clinical finding, false if borderline/uncertain
-- "context": the full sentence containing this term
-- "hasTypo": true ONLY if the term in the report contains a spelling error that you corrected in normalizedName, false otherwise
-
-Return a JSON array. If no anomalies found, return [].`;
+// Prompt is in src/lib/prompts/geminiParser.prompt.ts
+const SYSTEM_PROMPT = GEMINI_PARSER_PROMPT;
 
 // ---------------------------------------------------------------------------
 // Client
@@ -112,100 +63,8 @@ interface RawLLMTerm {
   hasTypo?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Position resolution — two-pass: exact match → whitespace-normalized
-// ---------------------------------------------------------------------------
-
-interface PositionMatch {
-  startIndex: number;
-  endIndex: number;
-  correctionType: "exact" | "whitespace";
-}
-
-/**
- * Build a whitespace-normalized version of a string, tracking the mapping
- * from each normalized character back to its original index.
- */
-function normalizeForSearch(text: string): { normalized: string; indexMap: number[] } {
-  const chars: string[] = [];
-  const indexMap: number[] = [];
-  let lastWasSpace = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (/\s/.test(ch)) {
-      if (!lastWasSpace) {
-        chars.push(" ");
-        indexMap.push(i);
-        lastWasSpace = true;
-      }
-    } else {
-      chars.push(ch.toLowerCase());
-      indexMap.push(i);
-      lastWasSpace = false;
-    }
-  }
-
-  return { normalized: chars.join(""), indexMap };
-}
-
-/**
- * Locate a term in the report text.
- * Pass 1: exact case-insensitive indexOf.
- * Pass 2: whitespace-normalized search (collapses \n, \t, multi-space).
- */
-function findTermPosition(
-  reportText: string,
-  term: string,
-  searchAfter: number = 0
-): PositionMatch | null {
-  // --- Pass 1: exact (case-insensitive) ---
-  const lowerReport = reportText.toLowerCase();
-  const lowerTerm = term.toLowerCase();
-  let idx = lowerReport.indexOf(lowerTerm, searchAfter);
-
-  if (idx !== -1) {
-    return { startIndex: idx, endIndex: idx + term.length, correctionType: "exact" };
-  }
-
-  // Try from start (in case searchAfter skipped the only occurrence)
-  if (searchAfter > 0) {
-    idx = lowerReport.indexOf(lowerTerm);
-    if (idx !== -1) {
-      return { startIndex: idx, endIndex: idx + term.length, correctionType: "exact" };
-    }
-  }
-
-  // --- Pass 2: whitespace-normalized ---
-  const { normalized: normReport, indexMap: reportMap } = normalizeForSearch(reportText);
-  const { normalized: normTerm } = normalizeForSearch(term);
-
-  // Map searchAfter to normalized space
-  let normSearchAfter = 0;
-  if (searchAfter > 0) {
-    for (let i = 0; i < reportMap.length; i++) {
-      if (reportMap[i] >= searchAfter) {
-        normSearchAfter = i;
-        break;
-      }
-    }
-  }
-
-  let normIdx = normReport.indexOf(normTerm, normSearchAfter);
-
-  // Fallback: try from beginning
-  if (normIdx === -1 && normSearchAfter > 0) {
-    normIdx = normReport.indexOf(normTerm);
-  }
-
-  if (normIdx !== -1 && normIdx + normTerm.length - 1 < reportMap.length) {
-    const originalStart = reportMap[normIdx];
-    const originalEnd = reportMap[normIdx + normTerm.length - 1] + 1;
-    return { startIndex: originalStart, endIndex: originalEnd, correctionType: "whitespace" };
-  }
-
-  return null; // Truly unresolved — will go to the LLM resolver
-}
+// Position resolver lives in src/lib/positionResolver.ts so the Anthropic
+// parser can reuse it.
 
 /**
  * Parse a CT angiogram report using Gemini.
@@ -275,6 +134,9 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
         term: raw.term,
         normalizedName: raw.normalizedName || raw.term,
         category: raw.category || "Systemic",
+        // Gemini parser prompt explicitly skips negated findings, so any term
+        // it returns is an asserted finding by construction.
+        assertion: "asserted",
         isAnomaly: raw.isAnomaly ?? true,
         context: raw.context || "",
       });
@@ -288,6 +150,9 @@ export async function parseReport(reportText: string): Promise<ParseResult> {
       term: reportText.substring(pos.startIndex, pos.endIndex),
       normalizedName: raw.normalizedName || raw.term,
       category: raw.category || "Systemic",
+      // Gemini parser prompt explicitly skips negated findings, so any term
+      // it returns is an asserted finding by construction.
+      assertion: "asserted",
       confidence: 1,
       startIndex: pos.startIndex,
       endIndex: pos.endIndex,

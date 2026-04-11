@@ -5,6 +5,8 @@
       "term": "Fracture",
       "aliases": [],
       "frequency": 130,
+      "frequencyAsserted": 130,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -12,6 +14,8 @@
       "term": "Ascites",
       "aliases": [],
       "frequency": 60,
+      "frequencyAsserted": 60,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -19,6 +23,8 @@
       "term": "Pneumothorax",
       "aliases": [],
       "frequency": 51,
+      "frequencyAsserted": 51,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -26,6 +32,8 @@
       "term": "Lidocaine",
       "aliases": [],
       "frequency": 50,
+      "frequencyAsserted": 50,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -33,6 +41,8 @@
       "term": "Pleural Effusion",
       "aliases": [],
       "frequency": 45,
+      "frequencyAsserted": 45,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -40,6 +50,8 @@
       "term": "Edema",
       "aliases": [],
       "frequency": 42,
+      "frequencyAsserted": 42,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -47,6 +59,8 @@
       "term": "Malignancy",
       "aliases": [],
       "frequency": 37,
+      "frequencyAsserted": 37,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -54,6 +68,8 @@
       "term": "Pain",
       "aliases": [],
       "frequency": 37,
+      "frequencyAsserted": 37,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -61,6 +77,8 @@
       "term": "Lymphadenopathy",
       "aliases": [],
       "frequency": 33,
+      "frequencyAsserted": 33,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -68,6 +86,8 @@
       "term": "Hydronephrosis",
       "aliases": [],
       "frequency": 31,
+      "frequencyAsserted": 31,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -75,6 +95,8 @@
       "term": "Hemorrhage",
       "aliases": [],
       "frequency": 29,
+      "frequencyAsserted": 29,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -82,6 +104,8 @@
       "term": "Cirrhosis",
       "aliases": [],
       "frequency": 24,
+      "frequencyAsserted": 24,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -89,6 +113,8 @@
       "term": "Stenosis",
       "aliases": [],
       "frequency": 24,
+      "frequencyAsserted": 24,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -96,6 +122,8 @@
       "term": "Pneumonia",
       "aliases": [],
       "frequency": 23,
+      "frequencyAsserted": 23,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -103,6 +131,8 @@
       "term": "Infarction",
       "aliases": [],
       "frequency": 22,
+      "frequencyAsserted": 22,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -110,6 +140,8 @@
       "term": "Dislocation",
       "aliases": [],
       "frequency": 22,
+      "frequencyAsserted": 22,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -117,6 +149,8 @@
       "term": "Effusion",
       "aliases": [],
       "frequency": 21,
+      "frequencyAsserted": 21,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -124,6 +158,8 @@
       "term": "Atelectasis",
       "aliases": [],
       "frequency": 20,
+      "frequencyAsserted": 20,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -131,6 +167,8 @@
       "term": "Cad",
       "aliases": [],
       "frequency": 20,
+      "frequencyAsserted": 20,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -138,6 +176,8 @@
       "term": "Diverticulitis",
       "aliases": [],
       "frequency": 19,
+      "frequencyAsserted": 19,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -145,6 +185,8 @@
       "term": "Fractures",
       "aliases": [],
       "frequency": 18,
+      "frequencyAsserted": 18,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -152,6 +194,8 @@
       "term": "Swelling",
       "aliases": [],
       "frequency": 17,
+      "frequencyAsserted": 17,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -159,6 +203,8 @@
       "term": "Pulmonary Edema",
       "aliases": [],
       "frequency": 17,
+      "frequencyAsserted": 17,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -166,6 +212,8 @@
       "term": "Abscess",
       "aliases": [],
       "frequency": 17,
+      "frequencyAsserted": 17,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -173,6 +221,8 @@
       "term": "Blood Loss",
       "aliases": [],
       "frequency": 16,
+      "frequencyAsserted": 16,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -180,6 +230,8 @@
       "term": "Pleural Effusions",
       "aliases": [],
       "frequency": 16,
+      "frequencyAsserted": 16,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -187,6 +239,8 @@
       "term": "Calcification",
       "aliases": [],
       "frequency": 15,
+      "frequencyAsserted": 15,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -194,6 +248,8 @@
       "term": "Adnexa",
       "aliases": [],
       "frequency": 15,
+      "frequencyAsserted": 15,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -201,6 +257,8 @@
       "term": "Cc",
       "aliases": [],
       "frequency": 13,
+      "frequencyAsserted": 13,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -208,6 +266,8 @@
       "term": "Calcifications",
       "aliases": [],
       "frequency": 13,
+      "frequencyAsserted": 13,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -215,6 +275,8 @@
       "term": "Infection",
       "aliases": [],
       "frequency": 12,
+      "frequencyAsserted": 12,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -222,6 +284,8 @@
       "term": "Intracranial Hemorrhage",
       "aliases": [],
       "frequency": 11,
+      "frequencyAsserted": 11,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -229,6 +293,8 @@
       "term": "Cough",
       "aliases": [],
       "frequency": 11,
+      "frequencyAsserted": 11,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -236,6 +302,8 @@
       "term": "Fentanyl",
       "aliases": [],
       "frequency": 11,
+      "frequencyAsserted": 11,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -243,6 +311,8 @@
       "term": "Hematoma",
       "aliases": [],
       "frequency": 10,
+      "frequencyAsserted": 10,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -250,6 +320,8 @@
       "term": "Mr",
       "aliases": [],
       "frequency": 10,
+      "frequencyAsserted": 10,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -257,6 +329,8 @@
       "term": "Thrombosis",
       "aliases": [],
       "frequency": 10,
+      "frequencyAsserted": 10,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -264,6 +338,8 @@
       "term": "Hernia",
       "aliases": [],
       "frequency": 10,
+      "frequencyAsserted": 10,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -271,6 +347,8 @@
       "term": "Gadolinium",
       "aliases": [],
       "frequency": 10,
+      "frequencyAsserted": 10,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -278,6 +356,8 @@
       "term": "Abdominal Pain",
       "aliases": [],
       "frequency": 9,
+      "frequencyAsserted": 9,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -285,6 +365,8 @@
       "term": "Opacity",
       "aliases": [],
       "frequency": 9,
+      "frequencyAsserted": 9,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -292,6 +374,8 @@
       "term": "Optiray",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -299,6 +383,8 @@
       "term": "Hydrocephalus",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -306,6 +392,8 @@
       "term": "Osseous Lesions",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -313,6 +401,8 @@
       "term": "Pericardial Effusion",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -320,6 +410,8 @@
       "term": "Dyspnea",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -327,6 +419,8 @@
       "term": "Dvt",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -334,6 +428,8 @@
       "term": "Thrombus",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -341,6 +437,8 @@
       "term": "Vasogenic Edema",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -348,6 +446,8 @@
       "term": "Hydroureteronephrosis",
       "aliases": [],
       "frequency": 8,
+      "frequencyAsserted": 8,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -355,6 +455,8 @@
       "term": "Intrahepatic Biliary Dilation",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -362,6 +464,8 @@
       "term": "Cbd",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -369,6 +473,8 @@
       "term": "Shortness Of Breath",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -376,6 +482,8 @@
       "term": "White Matter Hypodensities",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -383,6 +491,8 @@
       "term": "Gallstones",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -390,6 +500,8 @@
       "term": "Hip",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -397,6 +509,8 @@
       "term": "Prostate",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -404,6 +518,8 @@
       "term": "Fever",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -411,6 +527,8 @@
       "term": "Liver Disease",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -418,6 +536,8 @@
       "term": "Venous Thrombosis",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -425,6 +545,8 @@
       "term": "Infarct",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -432,6 +554,8 @@
       "term": "Ischemia",
       "aliases": [],
       "frequency": 7,
+      "frequencyAsserted": 7,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -439,6 +563,8 @@
       "term": "Serosanguinous",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -446,6 +572,8 @@
       "term": "Midazolam",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Chemical"
     },
@@ -453,6 +581,8 @@
       "term": "Intracranial Abnormality",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -460,6 +590,8 @@
       "term": "Nausea",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -467,6 +599,8 @@
       "term": "Abdominal Aortic Aneurysm",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -474,6 +608,8 @@
       "term": "Bibasilar Atelectasis",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -481,6 +617,8 @@
       "term": "Small Bowel Obstruction",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -488,6 +626,8 @@
       "term": "Atherosclerotic",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -495,6 +635,8 @@
       "term": "Numbness",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -502,6 +644,8 @@
       "term": "Multiple Sclerosis",
       "aliases": [],
       "frequency": 6,
+      "frequencyAsserted": 6,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -509,6 +653,8 @@
       "term": "Atrophy",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -516,6 +662,8 @@
       "term": "Hemangiomas",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -523,6 +671,8 @@
       "term": "Headache",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -530,6 +680,8 @@
       "term": "Chf",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -537,6 +689,8 @@
       "term": "Pleural Or Pericardial Effusion",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -544,6 +698,8 @@
       "term": "Diverticulosis",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -551,6 +707,8 @@
       "term": "Intra-Abdominal",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     },
@@ -558,6 +716,8 @@
       "term": "Inflammation",
       "aliases": [],
       "frequency": 5,
+      "frequencyAsserted": 5,
+      "frequencyNegated": 0,
       "totalReports": 300,
       "category": "Disease"
     }

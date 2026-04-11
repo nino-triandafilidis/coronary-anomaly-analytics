@@ -4,12 +4,14 @@
 // or transformer-based medical entity extraction model in the future.
 
 import { getAnomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
+import type { Assertion } from "@/data/mockParseResults";
 
 export interface DetectedAnomaly {
   term: string;           // The matched text from the report
   entry: AnomalyEntry;    // Reference to the database entry
   startIndex: number;     // Start position in the text
   endIndex: number;       // End position in the text
+  assertion: Assertion;   // Whether the radiologist asserted or negated this finding
 }
 
 /**
@@ -81,6 +83,11 @@ export function detectAnomalies(text: string): DetectedAnomaly[] {
           entry,
           startIndex: index,
           endIndex: end,
+          // The dictionary detector has no negation logic — it can't tell
+          // "no pleural effusion" from "pleural effusion". This is one of
+          // the reasons we removed it from the live UI fallback path. Any
+          // remaining caller (tests, dataset preview) gets "asserted".
+          assertion: "asserted",
         });
       }
 

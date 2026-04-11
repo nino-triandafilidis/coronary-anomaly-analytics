@@ -173,7 +173,7 @@ export function ReportInput({ onReportSubmit }: ReportInputProps) {
               className="h-7 px-2 text-xs text-primary hover:text-primary"
               onClick={() => loadSample(i)}
             >
-              Patient {String.fromCharCode(65 + i)}
+              Sample {String.fromCharCode(65 + i)}
             </Button>
           ))}
         </div>

@@ -5,7 +5,7 @@ import { ReportInput } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
 import { TermReview } from "@/components/TermReview";
-import { detectAnomalies, getUniqueAnomalies, type DetectedAnomaly } from "@/lib/anomalyDetection";
+import type { DetectedAnomaly } from "@/lib/anomalyDetection";
 import { getAnomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
 import { orchestrateParse, CostLimitError } from "@/lib/parsingOrchestrator";
 import type { ParseResult, ReviewableTerm } from "@/data/mockParseResults";
@@ -16,7 +16,6 @@ const Index = () => {
   const [stage, setStage] = useState<Stage>("upload");
   const [reportText, setReportText] = useState<string | null>(null);
   const [detected, setDetected] = useState<DetectedAnomaly[]>([]);
-  const [unique, setUnique] = useState<AnomalyEntry[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [reviewTerms, setReviewTerms] = useState<ReviewableTerm[] | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -27,25 +26,24 @@ const Index = () => {
     setStage("parsing");
 
     try {
-      // Try LLM pipeline (falls back to mock if no API key)
       const result = await orchestrateParse(text, { runVerifier: true });
       setParseResult(result);
       setReviewTerms(null);
       setStage("review");
     } catch (err) {
-      if (err instanceof CostLimitError) {
-        setParseError(`Cost limit exceeded: ${err.message}`);
-        setStage("upload");
-        return;
-      }
-
-      // Fallback to rule-based detection
-      console.warn("LLM parse failed, falling back to rule-based detection:", err);
-      const results = detectAnomalies(text);
-      setDetected(results);
-      setUnique(getUniqueAnomalies(results));
-      setParseResult(null);
-      setStage("results");
+      // No silent rule-based fallback. The dictionary detector has no negation
+      // logic and was previously masking real LLM failures (e.g. highlighting
+      // "pleural effusion" inside the literal phrase "no pleural effusion").
+      // Surface the failure to the user instead.
+      const message =
+        err instanceof CostLimitError
+          ? `Cost limit exceeded: ${err.message}`
+          : err instanceof Error
+            ? `Parse failed: ${err.message}`
+            : "Parse failed: unknown error. Check the browser console.";
+      console.error("[Index] orchestrateParse failed:", err);
+      setParseError(message);
+      setStage("upload");
     }
   };
 
@@ -65,6 +63,8 @@ const Index = () => {
         term: t.normalizedName,
         aliases: [],
         frequency: 0,
+        frequencyAsserted: 0,
+        frequencyNegated: 0,
         totalReports: 300,
         category: t.category,
       };
@@ -74,11 +74,11 @@ const Index = () => {
         entry,
         startIndex: t.startIndex,
         endIndex: t.endIndex,
+        assertion: t.assertion,
       };
     });
 
     setDetected(mapped);
-    setUnique(getUniqueAnomalies(mapped));
     setStage("results");
   };
 
@@ -86,7 +86,6 @@ const Index = () => {
     setStage("upload");
     setReportText(null);
     setDetected([]);
-    setUnique([]);
     setParseResult(null);
     setReviewTerms(null);
     setParseError(null);
@@ -157,39 +156,50 @@ const Index = () => {
           />
         )}
 
-        {stage === "results" && reportText && (
-          <div className="animate-fade-in">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">Analysis Results</h2>
-                <p className="text-xs text-muted-foreground">
-                  {detected.length} anomaly mention{detected.length !== 1 ? "s" : ""} detected ·{" "}
-                  {unique.length} unique condition{unique.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {parseResult && (
+        {stage === "results" && reportText && (() => {
+          const assertedCount = detected.filter((d) => d.assertion === "asserted").length;
+          const negatedCount = detected.filter((d) => d.assertion === "negated").length;
+          const uniqueAsserted = new Set(
+            detected.filter((d) => d.assertion === "asserted").map((d) => d.entry.term)
+          ).size;
+          const uniqueNegated = new Set(
+            detected.filter((d) => d.assertion === "negated").map((d) => d.entry.term)
+          ).size;
+          return (
+            <div className="animate-fade-in">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Analysis Results</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {assertedCount} asserted · {negatedCount} ruled out ·{" "}
+                    {uniqueAsserted + uniqueNegated} unique condition
+                    {uniqueAsserted + uniqueNegated !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {parseResult && (
+                    <button
+                      onClick={() => setStage("review")}
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      ← Back to Review
+                    </button>
+                  )}
                   <button
-                    onClick={() => setStage("review")}
+                    onClick={handleReset}
                     className="text-sm font-medium text-primary hover:underline"
                   >
-                    ← Back to Review
+                    ← New Report
                   </button>
-                )}
-                <button
-                  onClick={handleReset}
-                  className="text-sm font-medium text-primary hover:underline"
-                >
-                  ← New Report
-                </button>
+                </div>
+              </div>
+              <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+                <ReportViewer text={reportText} anomalies={detected} />
+                <FrequencyPanel detected={detected} />
               </div>
             </div>
-            <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-              <ReportViewer text={reportText} anomalies={detected} />
-              <FrequencyPanel anomalies={unique} />
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </main>
     </div>
   );

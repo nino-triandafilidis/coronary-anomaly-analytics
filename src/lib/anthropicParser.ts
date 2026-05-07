@@ -219,9 +219,6 @@ export async function parseWithAnthropic(reportText: string): Promise<ParseResul
     parsedTerms.push({
       term: reportText.substring(pos.startIndex, pos.endIndex),
       normalizedName: f.normalizedName || f.verbatimText,
-      // The Anthropic schema doesn't carry a category; downstream code that
-      // still expects one (frequency database lookups) gets a placeholder.
-      category: "Other",
       assertion: f.assertion === "negated" ? "negated" : "asserted",
       confidence: 1,
       startIndex: pos.startIndex,
@@ -272,8 +269,6 @@ export async function parseWithAnthropic(reportText: string): Promise<ParseResul
     reportText,
     parsedTerms,
     parserModel: MODEL_NAME,
-    verifierModel: "", // single-call pipeline, no separate verifier
-    verifierAgreement: 0,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,
     estimatedCostUsd: cost,

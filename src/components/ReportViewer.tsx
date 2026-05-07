@@ -1,6 +1,5 @@
 import { Fragment, useRef, useState, useCallback, useEffect } from "react";
-import type { DetectedAnomaly } from "@/lib/anomalyDetection";
-import { getSeverity } from "@/data/anomalyDatabase";
+import { getSeverity, type DetectedAnomaly } from "@/data/anomalyDatabase";
 import {
   Tooltip,
   TooltipContent,
@@ -62,18 +61,19 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
         }
 
         const isNegated = seg.anomaly.assertion === "negated";
-        // Negated terms are shown as a dashed underline with no background fill
-        // so the radiologist can see at a glance which findings are *ruled out*.
-        // Asserted terms keep the existing solid yellow highlight.
+        // Asserted (now "pertinent positive") highlights use the same emerald
+        // shade as the accepted-state badge in TermReview so the colour stays
+        // stable when the user moves from review → results. Negated terms keep
+        // the dashed underline with no fill.
         const markClass = isNegated
           ? "relative cursor-pointer px-0.5 text-muted-foreground/90 underline decoration-muted-foreground/60 decoration-dashed underline-offset-4 transition-colors hover:decoration-muted-foreground"
-          : "relative cursor-pointer rounded-sm bg-highlight/40 px-0.5 transition-colors hover:bg-highlight-hover/50";
+          : "relative cursor-pointer rounded-sm bg-emerald-200/60 px-0.5 transition-colors hover:bg-emerald-300/60 dark:bg-emerald-700/30 dark:hover:bg-emerald-700/50";
 
         const isAssertedFreq = !isNegated;
         const freq = isAssertedFreq
           ? seg.anomaly.entry.frequencyAsserted
           : seg.anomaly.entry.frequencyNegated;
-        const freqLabel = isAssertedFreq ? "asserted in" : "ruled out in";
+        const freqLabel = isAssertedFreq ? "pertinent positive in" : "pertinent negative in";
 
         return (
           <Tooltip key={`${i}-${scrollKey}`}>
@@ -101,7 +101,7 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
                         : "border-primary/30 bg-primary/10 text-primary")
                     }
                   >
-                    {seg.anomaly.assertion}
+                    {isNegated ? "Pertinent negative" : "Pertinent positive"}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">

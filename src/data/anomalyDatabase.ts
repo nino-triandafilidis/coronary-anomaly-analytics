@@ -1,6 +1,8 @@
 // Anomaly frequency database: loaded from public/anomaly_frequencies.json when available (from
 // scripts/mimic_pipeline.py --run-ner), otherwise uses the mock below.
 
+import type { Assertion } from "./mockParseResults";
+
 export type Severity = "low" | "moderate" | "high" | "critical";
 
 export interface AnomalyEntry {
@@ -13,7 +15,20 @@ export interface AnomalyEntry {
   /** Number of reports where the radiologist explicitly ruled this finding out. */
   frequencyNegated: number;
   totalReports: number;
-  category: string;
+}
+
+/**
+ * A user-confirmed finding linked back to its database entry, with positions
+ * in the report text and assertion status. Lives here (rather than in a
+ * separate detector module) because it's just a join between an `AnomalyEntry`
+ * and a parsed/reviewed term span — no detection logic of its own.
+ */
+export interface DetectedAnomaly {
+  term: string;           // The matched text from the report
+  entry: AnomalyEntry;    // Reference to the database entry
+  startIndex: number;     // Start position in the text
+  endIndex: number;       // End position in the text
+  assertion: Assertion;   // Whether the radiologist asserted or negated this finding
 }
 
 const TOTAL_REPORTS = 300;
@@ -86,126 +101,108 @@ const MOCK_ANOMALY_DATABASE: MockAnomalyEntry[] = [
     aliases: ["pulmonary thromboembolism"],
     frequency: 42,
     totalReports: TOTAL_REPORTS,
-    category: "Pulmonary",
   },
   {
     term: "Coronary artery stenosis",
     aliases: ["coronary stenosis", "coronary narrowing", "coronary artery disease"],
     frequency: 87,
     totalReports: TOTAL_REPORTS,
-    category: "Cardiac",
   },
   {
     term: "Aortic aneurysm",
     aliases: ["aortic dilatation", "aortic ectasia"],
     frequency: 23,
     totalReports: TOTAL_REPORTS,
-    category: "Vascular",
   },
   {
     term: "Carotid plaque",
     aliases: ["carotid atherosclerosis", "carotid artery plaque"],
     frequency: 65,
     totalReports: TOTAL_REPORTS,
-    category: "Vascular",
   },
   {
     term: "Dissection",
     aliases: ["aortic dissection", "arterial dissection"],
     frequency: 8,
     totalReports: TOTAL_REPORTS,
-    category: "Vascular",
   },
   {
     term: "Pericardial effusion",
     aliases: ["pericardial fluid"],
     frequency: 31,
     totalReports: TOTAL_REPORTS,
-    category: "Cardiac",
   },
   {
     term: "Pleural effusion",
     aliases: ["pleural fluid"],
     frequency: 58,
     totalReports: TOTAL_REPORTS,
-    category: "Pulmonary",
   },
   {
     term: "Calcification",
     aliases: ["calcified plaque", "vascular calcification", "coronary calcification"],
     frequency: 112,
     totalReports: TOTAL_REPORTS,
-    category: "Vascular",
   },
   {
     term: "Thrombus",
     aliases: ["blood clot", "intraluminal thrombus", "mural thrombus"],
     frequency: 35,
     totalReports: TOTAL_REPORTS,
-    category: "Vascular",
   },
   {
     term: "Lymphadenopathy",
     aliases: ["enlarged lymph nodes", "lymph node enlargement"],
     frequency: 47,
     totalReports: TOTAL_REPORTS,
-    category: "Systemic",
   },
   {
     term: "Atelectasis",
     aliases: ["lung collapse", "partial lung collapse"],
     frequency: 73,
     totalReports: TOTAL_REPORTS,
-    category: "Pulmonary",
   },
   {
     term: "Cardiomegaly",
     aliases: ["enlarged heart", "cardiac enlargement"],
     frequency: 54,
     totalReports: TOTAL_REPORTS,
-    category: "Cardiac",
   },
   {
     term: "Pulmonary nodule",
     aliases: ["lung nodule", "pulmonary mass"],
     frequency: 39,
     totalReports: TOTAL_REPORTS,
-    category: "Pulmonary",
   },
   {
     term: "Mitral valve calcification",
     aliases: ["mitral annular calcification"],
     frequency: 28,
     totalReports: TOTAL_REPORTS,
-    category: "Cardiac",
   },
   {
     term: "Aortic valve calcification",
     aliases: ["aortic valve stenosis", "aortic sclerosis"],
     frequency: 34,
     totalReports: TOTAL_REPORTS,
-    category: "Cardiac",
   },
   {
     term: "Pulmonary hypertension",
     aliases: ["elevated pulmonary pressure"],
     frequency: 19,
     totalReports: TOTAL_REPORTS,
-    category: "Pulmonary",
   },
   {
     term: "Stenosis",
     aliases: ["luminal narrowing", "vessel narrowing"],
     frequency: 96,
     totalReports: TOTAL_REPORTS,
-    category: "Vascular",
   },
   {
     term: "Consolidation",
     aliases: ["lung consolidation", "airspace consolidation"],
     frequency: 41,
     totalReports: TOTAL_REPORTS,
-    category: "Pulmonary",
   },
 ];
 

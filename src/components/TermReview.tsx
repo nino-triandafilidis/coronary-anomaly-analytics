@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
 import { Check, X, Plus, AlertTriangle, Clock, Cpu, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -9,35 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { ParseResult, ReviewableTerm, TermStatus } from "@/data/mockParseResults";
-
-// ---------------------------------------------------------------------------
-// Category color mapping
-// ---------------------------------------------------------------------------
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Pulmonary: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  Cardiac: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",
-  Vascular: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
-  Systemic: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  Anatomy: "bg-slate-100 text-slate-600 dark:bg-slate-800/40 dark:text-slate-400",
-};
-
-function categoryBadgeClass(category: string) {
-  return CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground";
-}
 
 // ---------------------------------------------------------------------------
 // Status → highlight colour mapping
@@ -56,8 +27,6 @@ const STATUS_BORDER: Record<TermStatus, string> = {
   rejected: "border-l-red-400 opacity-60",
   added: "border-l-sky-500",
 };
-
-const CATEGORIES = ["Pulmonary", "Cardiac", "Vascular", "Systemic", "Other"];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -90,7 +59,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     x: number;
     y: number;
   } | null>(null);
-  const [addCategory, setAddCategory] = useState("");
 
   // --- Derived counts ---
   const counts = useMemo(() => {
@@ -162,7 +130,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
         x: rect.left + rect.width / 2,
         y: rect.top,
       });
-      setAddCategory("");
     };
 
     document.addEventListener("mouseup", handleMouseUp);
@@ -174,7 +141,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     const added: ReviewableTerm = {
       term: selectionPopover.text,
       normalizedName: selectionPopover.text,
-      category: addCategory || "Other",
       // Manually-added terms default to asserted — the user is affirmatively
       // marking the span. They can flip it via the assertion toggle if they
       // intended a ruled-out finding the parser missed.
@@ -261,7 +227,11 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
               className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-card-foreground"
             >
               {segments.map((seg, i) => {
-                if (seg.termIdx === null) {
+                // Rejected terms drop the highlight entirely — the user has
+                // already decided this span isn't a finding, so it should read
+                // like the rest of the report. The card on the right keeps the
+                // rejected badge so the choice is still visible.
+                if (seg.termIdx === null || seg.status === "rejected") {
                   return <Fragment key={i}>{seg.text}</Fragment>;
                 }
                 const term = terms[seg.termIdx];
@@ -282,6 +252,12 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                         className={`${baseClass} ${isHovered ? "ring-2 ring-primary" : ""}`}
                         onMouseEnter={() => setHoveredIdx(seg.termIdx)}
                         onMouseLeave={() => setHoveredIdx(null)}
+                        onClick={() => {
+                          const card = document.querySelector(
+                            `[data-term-card-index="${seg.termIdx}"]`
+                          );
+                          card?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }}
                       >
                         {seg.text}
                       </span>
@@ -289,9 +265,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                     <TooltipContent side="top" className="max-w-xs text-xs">
                       <p className="font-semibold">{term.normalizedName}</p>
                       <p className="text-muted-foreground">
-                        {term.category && term.category !== "Other" && (
-                          <>{term.category}{" · "}</>
-                        )}
                         <span
                           className={
                             term.assertion === "negated"
@@ -299,7 +272,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                               : "text-emerald-600 dark:text-emerald-400"
                           }
                         >
-                          {term.assertion}
+                          {term.assertion === "negated" ? "pertinent negative" : "pertinent positive"}
                         </span>
                         {term.correctionType && term.correctionType !== "exact" && (
                           <> · <span className="text-amber-600 dark:text-amber-400">{term.correctionType === "whitespace" ? "whitespace fix" : term.correctionType === "resolved" ? "AI-resolved" : term.correctionType}</span></>
@@ -329,18 +302,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                     Add: "{selectionPopover.text}"
                   </p>
                   <div className="flex gap-2">
-                    <Select value={addCategory} onValueChange={setAddCategory}>
-                      <SelectTrigger className="h-7 w-24 text-xs">
-                        <SelectValue placeholder="Category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map((c) => (
-                          <SelectItem key={c} value={c} className="text-xs">
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <Button size="sm" variant="default" className="h-7 px-2 text-xs" onClick={addSelectedTerm}>
                       <Plus className="h-3 w-3 mr-1" /> Add
                     </Button>
@@ -381,13 +342,25 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
               </div>
             </div>
 
-            {/* Bulk actions */}
+            {/* Bulk actions — only act on the pending pile, never on already-accepted/rejected terms */}
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1" onClick={bulkAccept}>
-                <Check className="h-3.5 w-3.5" /> Accept All
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={bulkAccept}
+                disabled={counts.pending === 0}
+              >
+                <Check className="h-3.5 w-3.5" /> Accept Remaining ({counts.pending})
               </Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={bulkReject}>
-                <X className="h-3.5 w-3.5" /> Reject All
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={bulkReject}
+                disabled={counts.pending === 0}
+              >
+                <X className="h-3.5 w-3.5" /> Reject Remaining ({counts.pending})
               </Button>
             </div>
 
@@ -399,6 +372,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                   return (
                     <div
                       key={idx}
+                      data-term-card-index={idx}
                       className={`rounded-md border border-border bg-card p-3 border-l-4 transition-all duration-150 ${STATUS_BORDER[term.status]} ${isHovered ? "ring-2 ring-primary" : ""}`}
                       onMouseEnter={() => setHoveredIdx(idx)}
                       onMouseLeave={() => setHoveredIdx(null)}
@@ -413,17 +387,6 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                             <span className="text-sm font-medium text-card-foreground truncate">
                               {term.normalizedName}
                             </span>
-                            {/* Anthropic parser doesn't extract a category, so it
-                                stamps everything as "Other" — hide the badge in
-                                that case rather than show a useless placeholder. */}
-                            {term.category && term.category !== "Other" && (
-                              <Badge
-                                variant="secondary"
-                                className={`text-[10px] px-1.5 py-0 ${categoryBadgeClass(term.category)}`}
-                              >
-                                {term.category}
-                              </Badge>
-                            )}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -432,8 +395,8 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                               }}
                               title={
                                 term.assertion === "negated"
-                                  ? "Marked as ruled out — click to flip"
-                                  : "Marked as present — click to flip"
+                                  ? "Marked as pertinent negative — click to flip"
+                                  : "Marked as pertinent positive — click to flip"
                               }
                               className={
                                 "text-[10px] px-1.5 py-0 rounded uppercase tracking-wide font-medium transition-colors " +
@@ -442,7 +405,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                                   : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300")
                               }
                             >
-                              {term.assertion}
+                              {term.assertion === "negated" ? "Pertinent negative" : "Pertinent positive"}
                             </button>
                             {term.correctionType && term.correctionType !== "exact" && (
                               <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">

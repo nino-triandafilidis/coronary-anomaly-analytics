@@ -1,9 +1,5 @@
 import { useMemo } from "react";
-import {
-  getSeverity,
-  type AnomalyEntry,
-  type DetectedAnomaly,
-} from "@/data/anomalyDatabase";
+import type { DetectedAnomaly } from "@/data/anomalyDatabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface FrequencyPanelProps {
@@ -12,16 +8,19 @@ interface FrequencyPanelProps {
 }
 
 interface GroupedAnomaly {
-  entry: AnomalyEntry;
-  /** Database frequency for the active tab (asserted or negated). */
-  frequency: number;
+  normalizedName: string;
+  /** How many of the saved reports contain this term in the active assertion. */
+  count: number;
+  /** Total saved reports in the corpus at lookup time. */
+  totalSaved: number;
 }
 
-function dedupeByEntry(anomalies: DetectedAnomaly[]): DetectedAnomaly[] {
+/** Dedupe by normalized name so a finding mentioned twice in the report shows once. */
+function dedupeByName(anomalies: DetectedAnomaly[]): DetectedAnomaly[] {
   const seen = new Set<string>();
   const out: DetectedAnomaly[] = [];
   for (const a of anomalies) {
-    const key = a.entry.term;
+    const key = a.normalizedName.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(a);
@@ -29,23 +28,6 @@ function dedupeByEntry(anomalies: DetectedAnomaly[]): DetectedAnomaly[] {
   return out;
 }
 
-function severityDot(severity: string): string {
-  switch (severity) {
-    case "critical":
-      return "bg-clinical-danger";
-    case "high":
-      return "bg-clinical-warning";
-    case "moderate":
-      return "bg-primary";
-    default:
-      return "bg-muted-foreground";
-  }
-}
-
-/**
- * Render a list of anomaly cards with the relevant frequency bar.
- * `tab` controls which database frequency we surface (asserted vs negated).
- */
 function AnomalyList({
   anomalies,
   tab,
@@ -64,30 +46,36 @@ function AnomalyList({
 
   return (
     <div className="space-y-2">
-      {anomalies.map(({ entry, frequency }) => {
-        const pct = entry.totalReports > 0 ? (frequency / entry.totalReports) * 100 : 0;
+      {anomalies.map(({ normalizedName, count, totalSaved }) => {
+        const hasHistory = count > 0;
+        const pct = hasHistory && totalSaved > 0 ? (count / totalSaved) * 100 : 0;
         return (
-          <div key={entry.term} className="group">
+          <div key={normalizedName} className="group">
             <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`h-2 w-2 rounded-full ${severityDot(getSeverity(entry))}`}
-                />
-                <span className="font-medium text-card-foreground">{entry.term}</span>
-              </div>
-              <span className="tabular-nums text-muted-foreground">
-                {frequency}/{entry.totalReports}
+              <span className="font-medium text-card-foreground truncate">
+                {normalizedName}
               </span>
+              {hasHistory ? (
+                <span className="tabular-nums text-muted-foreground shrink-0">
+                  {count}/{totalSaved}
+                </span>
+              ) : (
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70 italic shrink-0">
+                  No historical data
+                </span>
+              )}
             </div>
-            <div className="mt-1 ml-4 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className={
-                  "h-full rounded-full transition-all duration-500 " +
-                  (tab === "negated" ? "bg-muted-foreground/50" : "bg-primary/60")
-                }
-                style={{ width: `${Math.min(pct, 100)}%` }}
-              />
-            </div>
+            {hasHistory && (
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={
+                    "h-full rounded-full transition-all duration-500 " +
+                    (tab === "negated" ? "bg-muted-foreground/50" : "bg-primary/60")
+                  }
+                  style={{ width: `${Math.min(pct, 100)}%` }}
+                />
+              </div>
+            )}
           </div>
         );
       })}
@@ -97,15 +85,24 @@ function AnomalyList({
 
 export function FrequencyPanel({ detected }: FrequencyPanelProps) {
   const { asserted, negated } = useMemo(() => {
-    const assertedAnoms = dedupeByEntry(detected.filter((a) => a.assertion === "asserted"));
-    const negatedAnoms = dedupeByEntry(detected.filter((a) => a.assertion === "negated"));
+    const assertedAnoms = dedupeByName(detected.filter((a) => a.assertion === "asserted"));
+    const negatedAnoms = dedupeByName(detected.filter((a) => a.assertion === "negated"));
     return {
       asserted: assertedAnoms
-        .map<GroupedAnomaly>((a) => ({ entry: a.entry, frequency: a.entry.frequencyAsserted }))
-        .sort((a, b) => b.frequency - a.frequency),
+        .map<GroupedAnomaly>((a) => ({
+          normalizedName: a.normalizedName,
+          count: a.history.countAsserted,
+          totalSaved: a.history.totalSaved,
+        }))
+        // Sort: terms with history first (by count desc), then no-history terms.
+        .sort((a, b) => b.count - a.count),
       negated: negatedAnoms
-        .map<GroupedAnomaly>((a) => ({ entry: a.entry, frequency: a.entry.frequencyNegated }))
-        .sort((a, b) => b.frequency - a.frequency),
+        .map<GroupedAnomaly>((a) => ({
+          normalizedName: a.normalizedName,
+          count: a.history.countNegated,
+          totalSaved: a.history.totalSaved,
+        }))
+        .sort((a, b) => b.count - a.count),
     };
   }, [detected]);
 

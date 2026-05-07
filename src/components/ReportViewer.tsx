@@ -1,5 +1,5 @@
 import { Fragment, useRef, useState, useCallback, useEffect } from "react";
-import { getSeverity, type DetectedAnomaly } from "@/data/anomalyDatabase";
+import type { DetectedAnomaly } from "@/data/anomalyDatabase";
 import {
   Tooltip,
   TooltipContent,
@@ -41,15 +41,6 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
     segments.push({ text: text.substring(lastIndex) });
   }
 
-  const severityColor = (severity: string) => {
-    switch (severity) {
-      case "critical": return "bg-clinical-danger/15 border-clinical-danger/30 text-clinical-danger";
-      case "high": return "bg-highlight/30 border-highlight-hover/40 text-highlight-foreground";
-      case "moderate": return "bg-primary/10 border-primary/20 text-primary";
-      default: return "bg-muted border-border text-muted-foreground";
-    }
-  };
-
   return (
     <div
       ref={containerRef}
@@ -69,11 +60,9 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
           ? "relative cursor-pointer px-0.5 text-muted-foreground/90 underline decoration-muted-foreground/60 decoration-dashed underline-offset-4 transition-colors hover:decoration-muted-foreground"
           : "relative cursor-pointer rounded-sm bg-emerald-200/60 px-0.5 transition-colors hover:bg-emerald-300/60 dark:bg-emerald-700/30 dark:hover:bg-emerald-700/50";
 
-        const isAssertedFreq = !isNegated;
-        const freq = isAssertedFreq
-          ? seg.anomaly.entry.frequencyAsserted
-          : seg.anomaly.entry.frequencyNegated;
-        const freqLabel = isAssertedFreq ? "pertinent positive in" : "pertinent negative in";
+        const { history } = seg.anomaly;
+        const count = isNegated ? history.countNegated : history.countAsserted;
+        const hasHistory = count > 0;
 
         return (
           <Tooltip key={`${i}-${scrollKey}`}>
@@ -82,17 +71,10 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={8} className="max-w-xs px-4 py-3">
               <p className="text-sm font-semibold text-popover-foreground">
-                {seg.anomaly.entry.term}
+                {seg.anomaly.normalizedName}
               </p>
               <div className="mt-1.5 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${severityColor(
-                      getSeverity(seg.anomaly.entry)
-                    )}`}
-                  >
-                    {getSeverity(seg.anomaly.entry)}
-                  </span>
                   <span
                     className={
                       "inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide " +
@@ -104,11 +86,20 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
                     {isNegated ? "Pertinent negative" : "Pertinent positive"}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {freqLabel}{" "}
-                  <span className="font-semibold text-foreground">{freq}</span> of{" "}
-                  {seg.anomaly.entry.totalReports} reports
-                </p>
+                {hasHistory ? (
+                  <p className="text-xs text-muted-foreground">
+                    {isNegated ? "pertinent negative in" : "pertinent positive in"}{" "}
+                    <span className="font-semibold text-foreground">{count}</span> of{" "}
+                    {history.totalSaved} saved report{history.totalSaved !== 1 ? "s" : ""}
+                  </p>
+                ) : (
+                  <p className="text-xs italic text-muted-foreground/80">
+                    No historical data
+                    {history.totalSaved > 0 && (
+                      <> · {history.totalSaved} saved report{history.totalSaved !== 1 ? "s" : ""}</>
+                    )}
+                  </p>
+                )}
               </div>
             </TooltipContent>
           </Tooltip>

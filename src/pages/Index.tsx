@@ -6,8 +6,7 @@ import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
 import { TermReview } from "@/components/TermReview";
 import {
-  getAnomalyDatabase,
-  type AnomalyEntry,
+  getHistoryForTerm,
   type DetectedAnomaly,
 } from "@/data/anomalyDatabase";
 import { orchestrateParse, CostLimitError } from "@/lib/parsingOrchestrator";
@@ -64,33 +63,19 @@ const Index = () => {
   const handleReviewConfirm = (accepted: ReviewableTerm[]) => {
     setReviewTerms(accepted);
     setSavedId(null);
-    const db = getAnomalyDatabase();
-    const dbLookup = new Map(db.map((e) => [e.term.toLowerCase(), e]));
 
-    const mapped: DetectedAnomaly[] = accepted.map((t) => {
-      const match =
-        dbLookup.get(t.normalizedName.toLowerCase()) ??
-        db.find((e) =>
-          e.aliases.some((a) => a.toLowerCase() === t.normalizedName.toLowerCase())
-        );
-
-      const entry: AnomalyEntry = match ?? {
-        term: t.normalizedName,
-        aliases: [],
-        frequency: 0,
-        frequencyAsserted: 0,
-        frequencyNegated: 0,
-        totalReports: 300,
-      };
-
-      return {
-        term: t.term,
-        entry,
-        startIndex: t.startIndex,
-        endIndex: t.endIndex,
-        assertion: t.assertion,
-      };
-    });
+    // Historical frequency comes from the saved-report corpus (localStorage),
+    // not a static reference set. Computed at confirm time so the tooltips
+    // reflect whatever was in the DB at the moment of review — the current
+    // report hasn't been saved yet, so it never inflates its own counts.
+    const mapped: DetectedAnomaly[] = accepted.map((t) => ({
+      term: t.term,
+      normalizedName: t.normalizedName,
+      startIndex: t.startIndex,
+      endIndex: t.endIndex,
+      assertion: t.assertion,
+      history: getHistoryForTerm(t.normalizedName),
+    }));
 
     setDetected(mapped);
     setStage("results");
@@ -203,10 +188,10 @@ const Index = () => {
           const assertedCount = detected.filter((d) => d.assertion === "asserted").length;
           const negatedCount = detected.filter((d) => d.assertion === "negated").length;
           const uniqueAsserted = new Set(
-            detected.filter((d) => d.assertion === "asserted").map((d) => d.entry.term)
+            detected.filter((d) => d.assertion === "asserted").map((d) => d.normalizedName)
           ).size;
           const uniqueNegated = new Set(
-            detected.filter((d) => d.assertion === "negated").map((d) => d.entry.term)
+            detected.filter((d) => d.assertion === "negated").map((d) => d.normalizedName)
           ).size;
           const alreadySaved = !!savedId;
           return (

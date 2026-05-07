@@ -2,14 +2,14 @@
 
 Clinical analytics tool for pediatric cardiologists at Stanford Children's Hospital.
 
-User uploads a CT angiogram report, and the system uses LLM-powered named entity recognition to extract clinical findings (asserted as present and ruled out as negated) and track their frequency across a growing database of patients.
+User uploads a CT angiogram report, and the system uses LLM-powered named entity recognition to extract clinical findings (pertinent positives and pertinent negatives) and track how often each finding appears across the cardiologist's saved reports.
 
 ## How it works
 
 1. **Upload** a CT angiogram report (paste text or upload PDF)
 2. **Parse** with a single Anthropic Claude tool-use call — extracts clinical terms with exact text positions and asserted/negated status in one shot
 3. **Review UI** — two-column layout: highlighted report on the left, term cards on the right. Cardiologist accepts, rejects, or manually adds terms
-4. **Save** confirmed terms to a per-browser report database; aggregated counts feed a frequency view
+4. **Save** confirmed terms to the per-browser report database (localStorage). Aggregated counts across saved reports feed the frequency view; terms not yet seen show "No historical data".
 
 ### Parsing pipeline
 
@@ -75,18 +75,12 @@ src/
     Dataset.tsx             # Saved-report browser
   data/
     mockParseResults.ts     # ParseResult / ParsedTerm / ReviewableTerm types
-    anomalyDatabase.ts      # Static frequency dictionary + DetectedAnomaly type
-    sampleReports.ts        # Sample reports for demos
-public/
-  anomaly_frequencies.json  # Optional override for the static frequency dict
+    anomalyDatabase.ts      # getHistoryForTerm: counts from saved reports + DetectedAnomaly type
+    sampleReports.ts        # Sample CTA reports for demos (sourced from real_cta/*.pdf)
 scripts/
-  mimic_pipeline.py         # Generates seed datasets from MIMIC raw data
-  generate_sample_pdf.py    # Creates a test PDF from a report not in the dataset
+  generate_sample_pdf.py    # Creates a test PDF from a report
+real_cta/                   # Source PDFs for the demo samples
 ```
-
-## Data pipeline scripts
-
-See [SCRIPTS.md](./SCRIPTS.md) for details on generating the seed datasets.
 
 ## Design principles
 

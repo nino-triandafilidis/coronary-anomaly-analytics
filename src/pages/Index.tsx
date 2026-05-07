@@ -5,8 +5,11 @@ import { ReportInput } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
 import { TermReview } from "@/components/TermReview";
-import type { DetectedAnomaly } from "@/lib/anomalyDetection";
-import { getAnomalyDatabase, type AnomalyEntry } from "@/data/anomalyDatabase";
+import {
+  getAnomalyDatabase,
+  type AnomalyEntry,
+  type DetectedAnomaly,
+} from "@/data/anomalyDatabase";
 import { orchestrateParse, CostLimitError } from "@/lib/parsingOrchestrator";
 import type { ParseResult, ReviewableTerm } from "@/data/mockParseResults";
 import {
@@ -37,7 +40,7 @@ const Index = () => {
     setStage("parsing");
 
     try {
-      const result = await orchestrateParse(text, { runVerifier: true });
+      const result = await orchestrateParse(text);
       setParseResult(result);
       setReviewTerms(null);
       setStage("review");
@@ -78,7 +81,6 @@ const Index = () => {
         frequencyAsserted: 0,
         frequencyNegated: 0,
         totalReports: 300,
-        category: t.category,
       };
 
       return {
@@ -213,7 +215,8 @@ const Index = () => {
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">Analysis Results</h2>
                   <p className="text-xs text-muted-foreground">
-                    {assertedCount} asserted · {negatedCount} ruled out ·{" "}
+                    {assertedCount} pertinent positive{assertedCount !== 1 ? "s" : ""} ·{" "}
+                    {negatedCount} pertinent negative{negatedCount !== 1 ? "s" : ""} ·{" "}
                     {uniqueAsserted + uniqueNegated} unique condition
                     {uniqueAsserted + uniqueNegated !== 1 ? "s" : ""}
                   </p>

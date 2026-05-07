@@ -1,7 +1,9 @@
 import { useMemo } from "react";
-import type { AnomalyEntry } from "@/data/anomalyDatabase";
-import type { DetectedAnomaly } from "@/lib/anomalyDetection";
-import { getSeverity } from "@/data/anomalyDatabase";
+import {
+  getSeverity,
+  type AnomalyEntry,
+  type DetectedAnomaly,
+} from "@/data/anomalyDatabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface FrequencyPanelProps {
@@ -52,9 +54,10 @@ function AnomalyList({
   tab: "asserted" | "negated";
 }) {
   if (anomalies.length === 0) {
+    const label = tab === "asserted" ? "pertinent positive" : "pertinent negative";
     return (
       <p className="py-4 text-center text-xs text-muted-foreground">
-        No {tab} findings in this report.
+        No {label} findings in this report.
       </p>
     );
   }
@@ -120,11 +123,11 @@ export function FrequencyPanel({ detected }: FrequencyPanelProps) {
       <Tabs defaultValue="asserted" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="asserted" className="text-xs">
-            Asserted
+            Pertinent positive
             <span className="ml-1.5 text-muted-foreground">({asserted.length})</span>
           </TabsTrigger>
           <TabsTrigger value="negated" className="text-xs">
-            Negated
+            Pertinent negative
             <span className="ml-1.5 text-muted-foreground">({negated.length})</span>
           </TabsTrigger>
         </TabsList>

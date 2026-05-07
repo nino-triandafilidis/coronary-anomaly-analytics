@@ -9,7 +9,6 @@ import {
   Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -32,23 +31,7 @@ import { getSavedReports, deleteReport, type SavedReport } from "@/lib/reportDat
 import type { ParsedTerm } from "@/data/mockParseResults";
 
 // ---------------------------------------------------------------------------
-// Category colour helpers
-// ---------------------------------------------------------------------------
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Pulmonary: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  Cardiac: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",
-  Vascular: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
-  Systemic: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  Anatomy: "bg-slate-100 text-slate-600 dark:bg-slate-800/40 dark:text-slate-400",
-};
-
-function categoryBadgeClass(category: string) {
-  return CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground";
-}
-
-// ---------------------------------------------------------------------------
-// ParsedFindingsPanel — read-only asserted + negated list
+// ParsedFindingsPanel — read-only pertinent positives + negatives list
 // ---------------------------------------------------------------------------
 
 function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
@@ -65,24 +48,14 @@ function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
         <div>
           <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Present ({asserted.length})
+            Pertinent positives ({asserted.length})
           </div>
           <div className="flex flex-col gap-1.5">
             {asserted.map((t, i) => (
               <div key={i} className="rounded-md border border-border bg-card px-3 py-2">
-                <div className="flex items-start gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-card-foreground flex-1">
-                    {t.normalizedName}
-                  </span>
-                  {t.category && t.category !== "Other" && (
-                    <Badge
-                      variant="secondary"
-                      className={`shrink-0 text-[10px] px-1.5 py-0 ${categoryBadgeClass(t.category)}`}
-                    >
-                      {t.category}
-                    </Badge>
-                  )}
-                </div>
+                <span className="text-sm font-medium text-card-foreground">
+                  {t.normalizedName}
+                </span>
                 {t.context && (
                   <p className="mt-1 text-[11px] text-muted-foreground italic line-clamp-2">
                     "{t.context}"
@@ -98,24 +71,14 @@ function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
         <div>
           <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <MinusCircle className="h-3.5 w-3.5" />
-            Ruled Out ({negated.length})
+            Pertinent negatives ({negated.length})
           </div>
           <div className="flex flex-col gap-1.5">
             {negated.map((t, i) => (
               <div key={i} className="rounded-md border border-border bg-muted/30 px-3 py-2">
-                <div className="flex items-start gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-muted-foreground line-through decoration-muted-foreground/40 decoration-dashed flex-1">
-                    {t.normalizedName}
-                  </span>
-                  {t.category && t.category !== "Other" && (
-                    <Badge
-                      variant="secondary"
-                      className={`shrink-0 text-[10px] px-1.5 py-0 opacity-60 ${categoryBadgeClass(t.category)}`}
-                    >
-                      {t.category}
-                    </Badge>
-                  )}
-                </div>
+                <span className="text-sm font-medium text-muted-foreground line-through decoration-muted-foreground/40 decoration-dashed">
+                  {t.normalizedName}
+                </span>
                 {t.context && (
                   <p className="mt-1 text-[11px] text-muted-foreground/70 italic line-clamp-2">
                     "{t.context}"
@@ -228,13 +191,13 @@ export default function Dataset() {
                     {asserted.length > 0 && (
                       <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                         <CheckCircle2 className="h-3 w-3" />
-                        {asserted.length} present
+                        {asserted.length} pertinent positive{asserted.length !== 1 ? "s" : ""}
                       </span>
                     )}
                     {negated.length > 0 && (
                       <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                         <MinusCircle className="h-3 w-3" />
-                        {negated.length} ruled out
+                        {negated.length} pertinent negative{negated.length !== 1 ? "s" : ""}
                       </span>
                     )}
                   </div>

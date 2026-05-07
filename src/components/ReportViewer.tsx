@@ -56,8 +56,11 @@ export function ReportViewer({ text, anomalies }: ReportViewerProps) {
         // shade as the accepted-state badge in TermReview so the colour stays
         // stable when the user moves from review → results. Negated terms keep
         // the dashed underline with no fill.
+        // bg-transparent overrides the user-agent default yellow background
+        // on <mark> for the negated case (we want muted text + dashed
+        // underline only, no fill). The asserted case sets its own bg-emerald.
         const markClass = isNegated
-          ? "relative cursor-pointer px-0.5 text-muted-foreground/90 underline decoration-muted-foreground/60 decoration-dashed underline-offset-4 transition-colors hover:decoration-muted-foreground"
+          ? "relative cursor-pointer bg-transparent px-0.5 text-muted-foreground/90 underline decoration-muted-foreground/60 decoration-dashed underline-offset-4 transition-colors hover:decoration-muted-foreground"
           : "relative cursor-pointer rounded-sm bg-emerald-200/60 px-0.5 transition-colors hover:bg-emerald-300/60 dark:bg-emerald-700/30 dark:hover:bg-emerald-700/50";
 
         const { history } = seg.anomaly;

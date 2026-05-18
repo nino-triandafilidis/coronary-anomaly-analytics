@@ -1,7 +1,7 @@
 /**
  * Position resolver — locate a term verbatim within a report.
  *
- * Used by both the Anthropic and Gemini parsers to map LLM-returned terms
+ * Used by LLM parsers to map returned terms
  * back to character offsets in the source text. Two-pass strategy:
  *   1. Case-insensitive exact substring match.
  *   2. Whitespace-normalized match (collapses \n, \t, runs of spaces) so a

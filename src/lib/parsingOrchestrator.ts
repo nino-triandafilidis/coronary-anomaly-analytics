@@ -1,7 +1,7 @@
 /**
- * Parsing orchestrator — single-call Anthropic pipeline with a cost guard.
+ * Parsing orchestrator — single-call OpenAI pipeline with a cost guard.
  *
- * The orchestrator wraps `parseWithAnthropic` (one Claude tool-use call that
+ * The orchestrator wraps `parseWithOpenAI` (one GPT function call that
  * returns asserted/negated findings in one shot) with a per-call cost ceiling.
  * On any error it throws and the UI surfaces the failure — there is no silent
  * mock-data fallback (canned mocks were masking real LLM failures).
@@ -10,7 +10,7 @@
  * dictionary-based `anomalyDetection` fallback have been removed.
  */
 
-import { parseWithAnthropic, estimateAnthropicCost } from "@/lib/anthropicParser";
+import { parseWithOpenAI, estimateOpenAICost } from "@/lib/openaiParser";
 import type { ParseResult } from "@/data/mockParseResults";
 
 // ---------------------------------------------------------------------------
@@ -35,10 +35,10 @@ export class CostLimitError extends Error {
 // ---------------------------------------------------------------------------
 
 export async function orchestrateParse(reportText: string): Promise<ParseResult> {
-  console.group("🏗 [Orchestrator] Anthropic single-call");
+  console.group("[Orchestrator] OpenAI single-call");
 
   try {
-    const estimate = estimateAnthropicCost(reportText);
+    const estimate = estimateOpenAICost(reportText);
     console.log(
       `💲 Estimated cost: $${estimate.estimatedCostUsd.toFixed(5)} (limit: $${COST_LIMIT_PER_CALL})`
     );
@@ -46,7 +46,7 @@ export async function orchestrateParse(reportText: string): Promise<ParseResult>
       throw new CostLimitError(estimate.estimatedCostUsd);
     }
 
-    const result = await parseWithAnthropic(reportText);
+    const result = await parseWithOpenAI(reportText);
     console.log(
       `✅ [Orchestrator] ${result.parsedTerms.length} terms, ` +
         `$${result.estimatedCostUsd.toFixed(5)}, ${result.parseTimeMs}ms`

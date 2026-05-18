@@ -16,6 +16,7 @@ import {
   getReportCount,
   deriveTitleFromText,
 } from "@/lib/reportDatabase";
+import { storeParsedReportFiles } from "@/lib/parsedReportStorage";
 import { useToast } from "@/hooks/use-toast";
 
 type Stage = "upload" | "parsing" | "review" | "results";
@@ -40,6 +41,7 @@ const Index = () => {
 
     try {
       const result = await orchestrateParse(text);
+      await storeParsedReportFiles(text, result);
       setParseResult(result);
       setReviewTerms(null);
       setStage("review");

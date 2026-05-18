@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -27,12 +27,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getSavedReports, deleteReport, type SavedReport } from "@/lib/reportDatabase";
+import { ReportViewer } from "@/components/ReportViewer";
+import {
+  deleteStoredParsedReport,
+  getStoredParsedReports,
+  getStoredParsedTerms,
+  type StoredParsedReport,
+} from "@/lib/parsedReportStorage";
 import type { ParsedTerm } from "@/data/mockParseResults";
-
-// ---------------------------------------------------------------------------
-// ParsedFindingsPanel — read-only pertinent positives + negatives list
-// ---------------------------------------------------------------------------
+import type { DetectedAnomaly } from "@/data/anomalyDatabase";
+import { getHistoryForTerm } from "@/data/anomalyDatabase";
 
 function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
   const asserted = terms.filter((t) => t.assertion === "asserted");
@@ -57,7 +61,7 @@ function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
                   {t.normalizedName}
                 </span>
                 {t.context && (
-                  <p className="mt-1 text-[11px] text-muted-foreground italic line-clamp-2">
+                  <p className="mt-1 line-clamp-2 text-[11px] italic text-muted-foreground">
                     "{t.context}"
                   </p>
                 )}
@@ -80,7 +84,7 @@ function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
                   {t.normalizedName}
                 </span>
                 {t.context && (
-                  <p className="mt-1 text-[11px] text-muted-foreground/70 italic line-clamp-2">
+                  <p className="mt-1 line-clamp-2 text-[11px] italic text-muted-foreground/70">
                     "{t.context}"
                   </p>
                 )}
@@ -93,17 +97,42 @@ function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+function toDetectedAnomalies(terms: ParsedTerm[]): DetectedAnomaly[] {
+  return terms.map((t) => ({
+    term: t.term,
+    normalizedName: t.normalizedName,
+    startIndex: t.startIndex,
+    endIndex: t.endIndex,
+    assertion: t.assertion,
+    history: getHistoryForTerm(t.normalizedName),
+  }));
+}
 
 export default function Dataset() {
-  const [reports, setReports] = useState<SavedReport[]>(() => getSavedReports());
-  const [previewReport, setPreviewReport] = useState<SavedReport | null>(null);
+  const [reports, setReports] = useState<StoredParsedReport[]>([]);
+  const [previewReport, setPreviewReport] = useState<StoredParsedReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const handleDelete = (id: string) => {
-    deleteReport(id);
-    setReports(getSavedReports());
+  const refreshReports = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      setReports(await getStoredParsedReports());
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load parsed reports.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshReports();
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    await deleteStoredParsedReport(id);
+    await refreshReports();
     if (previewReport?.id === id) setPreviewReport(null);
   };
 
@@ -116,32 +145,28 @@ export default function Dataset() {
               <Activity className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-card-foreground leading-tight">
+              <h1 className="text-base font-semibold leading-tight text-card-foreground">
                 CT Angiogram Analyzer
               </h1>
-              <p className="text-[11px] text-muted-foreground">
-                Dataset · Parsed Reports
-              </p>
+              <p className="text-[11px] text-muted-foreground">Dataset - Parsed Reports</p>
             </div>
           </Link>
           <Link to="/">
             <Button variant="ghost" size="sm">
-              ← Analyzer
+              Back to Analyzer
             </Button>
           </Link>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-6 flex items-start justify-between">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-semibold text-foreground">
               Parsed report database
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Reports saved from the analyzer after human term review.
-              Run a report, accept findings, then click{" "}
-              <span className="font-medium text-foreground">Save to database</span>.
+              Reports parsed by the analyzer and stored as local txt/json files.
             </p>
           </div>
           <span className="mt-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
@@ -149,14 +174,25 @@ export default function Dataset() {
           </span>
         </div>
 
-        {/* Empty state */}
-        {reports.length === 0 && (
+        {loading && (
+          <div className="rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground">
+            Loading parsed reports...
+          </div>
+        )}
+
+        {loadError && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {loadError}
+          </div>
+        )}
+
+        {!loading && !loadError && reports.length === 0 && (
           <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border py-24 text-center">
             <Database className="h-10 w-10 text-muted-foreground/40" />
             <div>
-              <p className="text-sm font-medium text-muted-foreground">No reports saved yet</p>
+              <p className="text-sm font-medium text-muted-foreground">No reports parsed yet</p>
               <p className="mt-1 text-xs text-muted-foreground/70">
-                Upload a report, run the AI parser, review the findings, then save.
+                Upload a report and run the AI parser to create local txt/json files.
               </p>
             </div>
             <Link to="/">
@@ -167,12 +203,13 @@ export default function Dataset() {
           </div>
         )}
 
-        {/* Report grid */}
-        {reports.length > 0 && (
+        {!loading && !loadError && reports.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {reports.map((report) => {
-              const asserted = report.parsedTerms.filter((t) => t.assertion === "asserted");
-              const negated = report.parsedTerms.filter((t) => t.assertion === "negated");
+              const parsedTerms = getStoredParsedTerms(report);
+              const asserted = parsedTerms.filter((t) => t.assertion === "asserted");
+              const negated = parsedTerms.filter((t) => t.assertion === "negated");
+
               return (
                 <button
                   key={report.id}
@@ -181,28 +218,31 @@ export default function Dataset() {
                   className="group flex flex-col items-start rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
                 >
                   <FileText className="mb-2 h-8 w-8 text-muted-foreground group-hover:text-primary" />
-                  <span className="text-sm font-medium text-foreground leading-snug line-clamp-2">
-                    {report.title}
+                  <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
+                    {report.id}
                   </span>
                   <span className="mt-1 text-xs text-muted-foreground">
-                    {new Date(report.savedAt).toLocaleString()}
+                    {new Date(report.storedAt).toLocaleString()}
                   </span>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     {asserted.length > 0 && (
                       <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                         <CheckCircle2 className="h-3 w-3" />
-                        {asserted.length} pertinent positive{asserted.length !== 1 ? "s" : ""}
+                        {asserted.length} positive{asserted.length !== 1 ? "s" : ""}
                       </span>
                     )}
                     {negated.length > 0 && (
                       <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                         <MinusCircle className="h-3 w-3" />
-                        {negated.length} pertinent negative{negated.length !== 1 ? "s" : ""}
+                        {negated.length} negative{negated.length !== 1 ? "s" : ""}
                       </span>
                     )}
                   </div>
+                  <span className="mt-2 text-[11px] text-muted-foreground">
+                    {report.textFile} / {report.jsonFile}
+                  </span>
                   <span className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                    {report.text.slice(0, 120)}…
+                    {report.text.slice(0, 120)}...
                   </span>
                 </button>
               );
@@ -210,13 +250,12 @@ export default function Dataset() {
           </div>
         )}
 
-        {/* Preview dialog */}
         <Dialog open={!!previewReport} onOpenChange={(open) => !open && setPreviewReport(null)}>
           <DialogContent className="max-h-[90vh] max-w-5xl">
             <DialogHeader>
               <div className="flex items-start justify-between gap-4 pr-8">
                 <DialogTitle className="leading-snug">
-                  {previewReport?.title ?? "Report preview"}
+                  {previewReport?.id ?? "Report preview"}
                 </DialogTitle>
                 {previewReport && (
                   <AlertDialog>
@@ -233,8 +272,8 @@ export default function Dataset() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete report?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will remove "{previewReport.title}" from the local database. This
-                          cannot be undone.
+                          This will remove "{previewReport.id}" from the local txt/json folders.
+                          This cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -255,37 +294,34 @@ export default function Dataset() {
             {previewReport && (
               <ScrollArea className="max-h-[74vh]">
                 <div className="grid gap-5 pr-4 lg:grid-cols-[1fr_300px]">
-                  {/* Report text */}
-                  <div className="rounded-lg border border-border bg-card p-5 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-card-foreground overflow-auto max-h-[65vh]">
-                    {previewReport.text}
-                  </div>
+                  <ReportViewer
+                    text={previewReport.text}
+                    anomalies={toDetectedAnomalies(getStoredParsedTerms(previewReport))}
+                  />
 
-                  {/* Right panel */}
                   <div className="flex flex-col gap-3">
-                    {/* Model metadata */}
                     <div className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
                         <span>
                           <span className="font-medium text-foreground">Model</span>{" "}
-                          {previewReport.parserModel}
+                          {previewReport.parseResult.parserModel}
                         </span>
                         <span>
                           <span className="font-medium text-foreground">Time</span>{" "}
-                          {previewReport.parseTimeMs}ms
+                          {previewReport.parseResult.parseTimeMs}ms
                         </span>
                         <span>
                           <span className="font-medium text-foreground">Cost</span>{" "}
-                          ${previewReport.estimatedCostUsd.toFixed(4)}
+                          ${previewReport.parseResult.estimatedCostUsd.toFixed(4)}
                         </span>
                         <span>
-                          <span className="font-medium text-foreground">Saved</span>{" "}
-                          {new Date(previewReport.savedAt).toLocaleString()}
+                          <span className="font-medium text-foreground">Stored</span>{" "}
+                          {new Date(previewReport.storedAt).toLocaleString()}
                         </span>
                       </div>
                     </div>
 
-                    {/* Parsed findings */}
-                    <ParsedFindingsPanel terms={previewReport.parsedTerms} />
+                    <ParsedFindingsPanel terms={getStoredParsedTerms(previewReport)} />
                   </div>
                 </div>
               </ScrollArea>

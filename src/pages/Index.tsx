@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, Heart, Loader2, BookmarkCheck } from "lucide-react";
+import { Activity, BarChart3, Heart, Loader2, BookmarkCheck } from "lucide-react";
 import { ReportInput } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
@@ -181,15 +181,24 @@ const Index = () => {
               </p>
             </div>
           </div>
-          <Link
-            to="/dataset"
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <Heart className="h-3.5 w-3.5 text-clinical-danger" />
-            <span>
-              {dbCount} report{dbCount !== 1 ? "s" : ""} in database
-            </span>
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/analysis"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-primary" />
+              <span>Analysis Page</span>
+            </Link>
+            <Link
+              to="/dataset"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Heart className="h-3.5 w-3.5 text-clinical-danger" />
+              <span>
+                {dbCount} report{dbCount !== 1 ? "s" : ""} in database
+              </span>
+            </Link>
+          </div>
         </div>
       </header>
 

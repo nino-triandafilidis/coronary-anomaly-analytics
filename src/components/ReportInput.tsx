@@ -3,7 +3,6 @@ import { Upload, FileText, ClipboardPaste, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { sampleReports } from "@/data/sampleReports";
 import {
   parseFile,
   isSupportedFile,
@@ -84,12 +83,6 @@ export function ReportInput({ onReportSubmit }: ReportInputProps) {
     onReportSubmit(trimmed);
   };
 
-  const loadSample = (index: number) => {
-    const report = sampleReports[index];
-    setText(report.text);
-    onReportSubmit(report.text);
-  };
-
   return (
     <div className="space-y-4">
       {/* Upload Zone */}
@@ -159,24 +152,10 @@ export function ReportInput({ onReportSubmit }: ReportInputProps) {
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex justify-center">
         <Button onClick={handleAnalyze} disabled={!text.trim()}>
           Analyze Report
         </Button>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Load sample:</span>
-          {sampleReports.map((report, i) => (
-            <Button
-              key={report.id}
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-primary hover:text-primary"
-              onClick={() => loadSample(i)}
-            >
-              Sample {String.fromCharCode(65 + i)}
-            </Button>
-          ))}
-        </div>
       </div>
     </div>
   );

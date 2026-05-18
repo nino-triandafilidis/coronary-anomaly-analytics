@@ -69,7 +69,8 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     return c;
   }, [terms]);
 
-  const confirmedCount = counts.accepted + counts.added;
+  const keptCount = counts.accepted + counts.added;
+  const reviewedCount = counts.accepted + counts.rejected + counts.added;
 
   // --- Actions ---
   const toggleStatus = useCallback(
@@ -481,12 +482,12 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             {/* Confirm CTA */}
             <Button
               onClick={handleConfirm}
-              disabled={confirmedCount === 0 || confirming}
+              disabled={reviewedCount === 0 || confirming}
               className="w-full"
             >
               {confirming
                 ? "Saving..."
-                : `Confirm ${confirmedCount} term${confirmedCount !== 1 ? "s" : ""}`}
+                : `Confirm ${reviewedCount} reviewed term${reviewedCount !== 1 ? "s" : ""}`}
             </Button>
           </div>
         </div>

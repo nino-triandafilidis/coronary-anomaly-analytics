@@ -51,6 +51,24 @@ export async function deleteStoredParsedReport(reportId: string): Promise<void> 
   }
 }
 
+export async function updateStoredParsedReport(
+  reportId: string,
+  parseResult: ParseResult
+): Promise<StoredParsedReport> {
+  const response = await fetch(`/api/parsed-reports/${encodeURIComponent(reportId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parseResult }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? "Failed to update parsed report file.");
+  }
+
+  return response.json();
+}
+
 export function getStoredParsedTerms(report: StoredParsedReport): ParsedTerm[] {
   return report.parseResult.parsedTerms ?? [];
 }

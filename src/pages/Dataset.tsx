@@ -26,93 +26,31 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ReportViewer } from "@/components/ReportViewer";
+import { TermReview } from "@/components/TermReview";
 import {
   deleteStoredParsedReport,
   getStoredParsedReports,
   getStoredParsedTerms,
+  updateStoredParsedReport,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ParsedTerm } from "@/data/mockParseResults";
-import type { DetectedAnomaly } from "@/data/anomalyDatabase";
-import { getHistoryForTerm } from "@/data/anomalyDatabase";
+import type { ParsedTerm, ReviewableTerm } from "@/data/mockParseResults";
+import { useToast } from "@/hooks/use-toast";
 
-function ParsedFindingsPanel({ terms }: { terms: ParsedTerm[] }) {
-  const asserted = terms.filter((t) => t.assertion === "asserted");
-  const negated = terms.filter((t) => t.assertion === "negated");
-
-  if (terms.length === 0) {
-    return <p className="text-xs text-muted-foreground">No parsed findings.</p>;
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {asserted.length > 0 && (
-        <div>
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Pertinent positives ({asserted.length})
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {asserted.map((t, i) => (
-              <div key={i} className="rounded-md border border-border bg-card px-3 py-2">
-                <span className="text-sm font-medium text-card-foreground">
-                  {t.normalizedName}
-                </span>
-                {t.context && (
-                  <p className="mt-1 line-clamp-2 text-[11px] italic text-muted-foreground">
-                    "{t.context}"
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {negated.length > 0 && (
-        <div>
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <MinusCircle className="h-3.5 w-3.5" />
-            Pertinent negatives ({negated.length})
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {negated.map((t, i) => (
-              <div key={i} className="rounded-md border border-border bg-muted/30 px-3 py-2">
-                <span className="text-sm font-medium text-muted-foreground line-through decoration-muted-foreground/40 decoration-dashed">
-                  {t.normalizedName}
-                </span>
-                {t.context && (
-                  <p className="mt-1 line-clamp-2 text-[11px] italic text-muted-foreground/70">
-                    "{t.context}"
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function toDetectedAnomalies(terms: ParsedTerm[]): DetectedAnomaly[] {
-  return terms.map((t) => ({
-    term: t.term,
-    normalizedName: t.normalizedName,
-    startIndex: t.startIndex,
-    endIndex: t.endIndex,
-    assertion: t.assertion,
-    history: getHistoryForTerm(t.normalizedName),
-  }));
+function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
+  const { status: _status, ...parsedTerm } = term;
+  return parsedTerm;
 }
 
 export default function Dataset() {
+  const { toast } = useToast();
+
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
   const [previewReport, setPreviewReport] = useState<StoredParsedReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [savingError, setSavingError] = useState<string | null>(null);
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const refreshReports = async () => {
     setLoading(true);
@@ -134,6 +72,32 @@ export default function Dataset() {
     await deleteStoredParsedReport(id);
     await refreshReports();
     if (previewReport?.id === id) setPreviewReport(null);
+  };
+
+  const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
+    if (!previewReport) return;
+
+    setSavingError(null);
+    const nextParseResult = {
+      ...previewReport.parseResult,
+      parsedTerms: accepted.map(stripReviewStatus),
+    };
+
+    try {
+      const updated = await updateStoredParsedReport(previewReport.id, nextParseResult);
+      setPreviewReport(updated);
+      setReports((prev) => prev.map((report) => (report.id === updated.id ? updated : report)));
+      setSavedNotice(`Saved ${updated.id}.json`);
+      toast({
+        title: "Saved",
+        description: `Updated ${updated.id}.json`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update parsed report.";
+      setSavingError(message);
+      toast({ title: "Could not save", description: message });
+      throw err;
+    }
   };
 
   return (
@@ -214,7 +178,11 @@ export default function Dataset() {
                 <button
                   key={report.id}
                   type="button"
-                  onClick={() => setPreviewReport(report)}
+                  onClick={() => {
+                    setSavingError(null);
+                    setSavedNotice(null);
+                    setPreviewReport(report);
+                  }}
                   className="group flex flex-col items-start rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
                 >
                   <FileText className="mb-2 h-8 w-8 text-muted-foreground group-hover:text-primary" />
@@ -250,13 +218,31 @@ export default function Dataset() {
           </div>
         )}
 
-        <Dialog open={!!previewReport} onOpenChange={(open) => !open && setPreviewReport(null)}>
-          <DialogContent className="max-h-[90vh] max-w-5xl">
+        <Dialog
+          open={!!previewReport}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPreviewReport(null);
+              setSavedNotice(null);
+            }
+          }}
+        >
+          <DialogContent className="max-h-[94vh] max-w-7xl overflow-y-auto">
             <DialogHeader>
               <div className="flex items-start justify-between gap-4 pr-8">
-                <DialogTitle className="leading-snug">
-                  {previewReport?.id ?? "Report preview"}
-                </DialogTitle>
+                <div>
+                  <DialogTitle className="leading-snug">
+                    {previewReport?.id ?? "Report preview"}
+                  </DialogTitle>
+                  {savingError && (
+                    <p className="mt-2 text-xs text-destructive">{savingError}</p>
+                  )}
+                  {savedNotice && !savingError && (
+                    <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      {savedNotice}
+                    </p>
+                  )}
+                </div>
                 {previewReport && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -292,39 +278,12 @@ export default function Dataset() {
             </DialogHeader>
 
             {previewReport && (
-              <ScrollArea className="max-h-[74vh]">
-                <div className="grid gap-5 pr-4 lg:grid-cols-[1fr_300px]">
-                  <ReportViewer
-                    text={previewReport.text}
-                    anomalies={toDetectedAnomalies(getStoredParsedTerms(previewReport))}
-                  />
-
-                  <div className="flex flex-col gap-3">
-                    <div className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <span>
-                          <span className="font-medium text-foreground">Model</span>{" "}
-                          {previewReport.parseResult.parserModel}
-                        </span>
-                        <span>
-                          <span className="font-medium text-foreground">Time</span>{" "}
-                          {previewReport.parseResult.parseTimeMs}ms
-                        </span>
-                        <span>
-                          <span className="font-medium text-foreground">Cost</span>{" "}
-                          ${previewReport.parseResult.estimatedCostUsd.toFixed(4)}
-                        </span>
-                        <span>
-                          <span className="font-medium text-foreground">Stored</span>{" "}
-                          {new Date(previewReport.storedAt).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    <ParsedFindingsPanel terms={getStoredParsedTerms(previewReport)} />
-                  </div>
-                </div>
-              </ScrollArea>
+              <TermReview
+                key={`${previewReport.id}-${previewReport.parseResult.parsedTerms.length}`}
+                parseResult={previewReport.parseResult}
+                onConfirm={handleReviewConfirm}
+                onBack={() => setPreviewReport(null)}
+              />
             )}
           </DialogContent>
         </Dialog>

@@ -16,7 +16,11 @@ import {
   getReportCount,
   deriveTitleFromText,
 } from "@/lib/reportDatabase";
-import { getStoredParsedReports, storeParsedReportFiles } from "@/lib/parsedReportStorage";
+import {
+  getStoredParsedReports,
+  storeParsedReportFiles,
+  updateStoredParsedReport,
+} from "@/lib/parsedReportStorage";
 import { useToast } from "@/hooks/use-toast";
 
 type Stage = "upload" | "parsing" | "review" | "results";
@@ -77,7 +81,32 @@ const Index = () => {
     }
   };
 
-  const handleReviewConfirm = (accepted: ReviewableTerm[]) => {
+  const stripReviewStatus = (term: ReviewableTerm) => {
+    const { status: _status, ...parsedTerm } = term;
+    return parsedTerm;
+  };
+
+  const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
+    if (!parseResult) return;
+
+    const nextParseResult: ParseResult = {
+      ...parseResult,
+      parsedTerms: accepted.map(stripReviewStatus),
+    };
+
+    try {
+      await updateStoredParsedReport(nextParseResult.reportId, nextParseResult);
+      setParseResult(nextParseResult);
+      toast({
+        title: "Saved",
+        description: `Updated ${nextParseResult.reportId}.json`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update parsed JSON.";
+      toast({ title: "Could not save", description: message });
+      throw err;
+    }
+
     setReviewTerms(accepted);
     setSavedId(null);
 

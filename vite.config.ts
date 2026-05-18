@@ -108,6 +108,42 @@ function parsedReportsFileApi() {
             return;
           }
 
+          if (method === "PUT" && reportIdFromPath) {
+            const reportId = sanitizeReportId(reportIdFromPath);
+            if (!reportId) {
+              sendJson(res, 400, { error: "Invalid report id." });
+              return;
+            }
+
+            const jsonPath = path.join(parsedJsonDir, `${reportId}.json`);
+            const txtPath = path.join(parsedTxtDir, `${reportId}.txt`);
+            if (!existsSync(jsonPath) || !existsSync(txtPath)) {
+              sendJson(res, 404, { error: "Report not found." });
+              return;
+            }
+
+            const body = JSON.parse(await getRequestBody(req));
+            if (typeof body.parseResult !== "object") {
+              sendJson(res, 400, { error: "Expected parseResult." });
+              return;
+            }
+
+            const existing = JSON.parse(await fs.readFile(jsonPath, "utf8"));
+            const text = await fs.readFile(txtPath, "utf8");
+            const updatedAt = new Date().toISOString();
+            const jsonPayload = {
+              ...existing,
+              id: reportId,
+              text,
+              updatedAt,
+              parseResult: body.parseResult,
+            };
+
+            await fs.writeFile(jsonPath, JSON.stringify(jsonPayload, null, 2), "utf8");
+            sendJson(res, 200, jsonPayload);
+            return;
+          }
+
           if (method === "DELETE" && reportIdFromPath) {
             const reportId = sanitizeReportId(reportIdFromPath);
             if (!reportId) {

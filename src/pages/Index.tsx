@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, Heart, Loader2, BookmarkCheck } from "lucide-react";
 import { ReportInput } from "@/components/ReportInput";
@@ -16,7 +16,7 @@ import {
   getReportCount,
   deriveTitleFromText,
 } from "@/lib/reportDatabase";
-import { storeParsedReportFiles } from "@/lib/parsedReportStorage";
+import { getStoredParsedReports, storeParsedReportFiles } from "@/lib/parsedReportStorage";
 import { useToast } from "@/hooks/use-toast";
 
 type Stage = "upload" | "parsing" | "review" | "results";
@@ -30,8 +30,22 @@ const Index = () => {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [reviewTerms, setReviewTerms] = useState<ReviewableTerm[] | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [dbCount, setDbCount] = useState(() => getReportCount());
+  const [dbCount, setDbCount] = useState(0);
   const [savedId, setSavedId] = useState<string | null>(null);
+
+  const refreshParsedReportCount = async () => {
+    try {
+      const reports = await getStoredParsedReports();
+      setDbCount(reports.length);
+    } catch (err) {
+      console.warn("[Index] Failed to load parsed report count:", err);
+      setDbCount(getReportCount());
+    }
+  };
+
+  useEffect(() => {
+    refreshParsedReportCount();
+  }, []);
 
   const handleReport = async (text: string) => {
     setReportText(text);
@@ -42,6 +56,7 @@ const Index = () => {
     try {
       const result = await orchestrateParse(text);
       await storeParsedReportFiles(text, result);
+      await refreshParsedReportCount();
       setParseResult(result);
       setReviewTerms(null);
       setStage("review");

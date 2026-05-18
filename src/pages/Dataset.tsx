@@ -115,11 +115,18 @@ export default function Dataset() {
               <p className="text-[11px] text-muted-foreground">Dataset - Parsed Reports</p>
             </div>
           </Link>
-          <Link to="/">
-            <Button variant="ghost" size="sm">
-              Back to Analyzer
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/analysis">
+              <Button variant="ghost" size="sm">
+                Analysis Page
+              </Button>
+            </Link>
+            <Link to="/">
+              <Button variant="ghost" size="sm">
+                Back to Analyzer
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 

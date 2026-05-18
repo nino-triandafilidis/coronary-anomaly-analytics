@@ -91,11 +91,18 @@ export default function Analysis() {
               <p className="text-[11px] text-muted-foreground">Analysis Page</p>
             </div>
           </Link>
-          <Link to="/">
-            <Button variant="ghost" size="sm">
-              Back to Analyzer
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/dataset">
+              <Button variant="ghost" size="sm">
+                Reports in Database
+              </Button>
+            </Link>
+            <Link to="/">
+              <Button variant="ghost" size="sm">
+                Back to Analyzer
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 

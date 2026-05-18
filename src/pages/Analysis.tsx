@@ -250,39 +250,70 @@ export default function Analysis() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h2 className="text-2xl font-semibold text-foreground">Summary Cards</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Overview of parsed reports and highlighted terminology.
-          </p>
-          {loadError && (
-            <p className="mt-3 text-sm text-destructive">{loadError}</p>
-          )}
-        </div>
+      <main className="container mx-auto grid gap-8 px-4 py-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-6 lg:self-start">
+          <nav className="rounded-lg border border-border bg-card p-3">
+            <p className="px-2 pb-2 text-xs font-medium uppercase text-muted-foreground">
+              Navigation
+            </p>
+            <div className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+              <a
+                href="#summary-cards"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Summary Cards
+              </a>
+              <a
+                href="#overview-charts"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Overview Charts
+              </a>
+              <a
+                href="#frequency-table"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Freq Table
+              </a>
+            </div>
+          </nav>
+        </aside>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {summaryCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <Card key={card.title}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium leading-snug text-muted-foreground">
-                    {card.title}
-                  </CardTitle>
-                  <Icon className="h-4 w-4 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-semibold text-foreground">
-                    {loading ? "..." : card.value}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <div className="min-w-0">
+          <section id="summary-cards" className="scroll-mt-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-foreground">Summary Cards</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Overview of parsed reports and highlighted terminology.
+              </p>
+              {loadError && (
+                <p className="mt-3 text-sm text-destructive">{loadError}</p>
+              )}
+            </div>
 
-        <section className="mt-10">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {summaryCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <Card key={card.title}>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium leading-snug text-muted-foreground">
+                        {card.title}
+                      </CardTitle>
+                      <Icon className="h-4 w-4 text-primary" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-semibold text-foreground">
+                        {loading ? "..." : card.value}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </section>
+
+        <section id="overview-charts" className="mt-10 scroll-mt-6">
           <div className="mb-6">
             <h2 className="text-2xl font-semibold text-foreground">Overview Charts</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -386,7 +417,7 @@ export default function Analysis() {
           </div>
         </section>
 
-        <section className="mt-10">
+        <section id="frequency-table" className="mt-10 scroll-mt-6">
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-foreground">Normalized Feature Table</h2>
@@ -449,6 +480,7 @@ export default function Analysis() {
             </CardContent>
           </Card>
         </section>
+        </div>
       </main>
     </div>
   );

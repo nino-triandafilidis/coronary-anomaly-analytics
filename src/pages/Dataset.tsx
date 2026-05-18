@@ -84,7 +84,7 @@ export default function Dataset() {
     };
 
     try {
-      const updated = await updateStoredParsedReport(previewReport.id, nextParseResult);
+      const updated = await updateStoredParsedReport(previewReport.id, nextParseResult, true);
       setPreviewReport(updated);
       setReports((prev) => prev.map((report) => (report.id === updated.id ? updated : report)));
       setSavedNotice(`Saved ${updated.id}.json`);
@@ -185,7 +185,24 @@ export default function Dataset() {
                   }}
                   className="group flex flex-col items-start rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
                 >
-                  <FileText className="mb-2 h-8 w-8 text-muted-foreground group-hover:text-primary" />
+                  <div className="mb-2 flex w-full items-start justify-between gap-3">
+                    <FileText className="h-8 w-8 text-muted-foreground group-hover:text-primary" />
+                    <span
+                      className={
+                        "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium " +
+                        (report.reviewed
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "bg-muted text-muted-foreground")
+                      }
+                    >
+                      {report.reviewed ? (
+                        <CheckCircle2 className="h-3 w-3" />
+                      ) : (
+                        <MinusCircle className="h-3 w-3" />
+                      )}
+                      {report.reviewed ? "Reviewed" : "Not reviewed"}
+                    </span>
+                  </div>
                   <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
                     {report.id}
                   </span>

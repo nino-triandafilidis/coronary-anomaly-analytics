@@ -5,6 +5,7 @@ export interface StoredParsedReport {
   textFile: string;
   jsonFile: string;
   storedAt: string;
+  reviewed: boolean;
   text: string;
   parseResult: ParseResult;
 }
@@ -38,7 +39,10 @@ export async function getStoredParsedReports(): Promise<StoredParsedReport[]> {
     throw new Error(body.error ?? "Failed to load parsed report files.");
   }
   const body = (await response.json()) as { reports?: StoredParsedReport[] };
-  return body.reports ?? [];
+  return (body.reports ?? []).map((report) => ({
+    ...report,
+    reviewed: report.reviewed ?? false,
+  }));
 }
 
 export async function deleteStoredParsedReport(reportId: string): Promise<void> {
@@ -53,12 +57,13 @@ export async function deleteStoredParsedReport(reportId: string): Promise<void> 
 
 export async function updateStoredParsedReport(
   reportId: string,
-  parseResult: ParseResult
+  parseResult: ParseResult,
+  reviewed?: boolean
 ): Promise<StoredParsedReport> {
   const response = await fetch(`/api/parsed-reports/${encodeURIComponent(reportId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ parseResult }),
+    body: JSON.stringify({ parseResult, reviewed }),
   });
 
   if (!response.ok) {

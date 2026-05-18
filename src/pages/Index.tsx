@@ -95,7 +95,7 @@ const Index = () => {
     };
 
     try {
-      await updateStoredParsedReport(nextParseResult.reportId, nextParseResult);
+      await updateStoredParsedReport(nextParseResult.reportId, nextParseResult, true);
       setParseResult(nextParseResult);
       toast({
         title: "Saved",

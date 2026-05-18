@@ -54,7 +54,11 @@ function parsedReportsFileApi() {
                   const raw = await fs.readFile(fullPath, "utf8");
                   const report = JSON.parse(raw);
                   const stat = await fs.stat(fullPath);
-                  return { ...report, storedAt: report.storedAt ?? stat.mtime.toISOString() };
+                  return {
+                    ...report,
+                    reviewed: report.reviewed ?? false,
+                    storedAt: report.storedAt ?? stat.mtime.toISOString(),
+                  };
                 })
             );
             reports.sort((a, b) => String(b.storedAt).localeCompare(String(a.storedAt)));
@@ -73,7 +77,8 @@ function parsedReportsFileApi() {
               sendJson(res, 404, { error: "Report not found." });
               return;
             }
-            sendJson(res, 200, JSON.parse(await fs.readFile(jsonPath, "utf8")));
+            const report = JSON.parse(await fs.readFile(jsonPath, "utf8"));
+            sendJson(res, 200, { ...report, reviewed: report.reviewed ?? false });
             return;
           }
 
@@ -98,6 +103,7 @@ function parsedReportsFileApi() {
               textFile: path.relative(__dirname, txtPath).replace(/\\/g, "/"),
               jsonFile: path.relative(__dirname, jsonPath).replace(/\\/g, "/"),
               storedAt,
+              reviewed: false,
               text: body.text,
               parseResult: body.parseResult,
             };
@@ -136,6 +142,7 @@ function parsedReportsFileApi() {
               id: reportId,
               text,
               updatedAt,
+              reviewed: existing.reviewed === true || body.reviewed === true,
               parseResult: body.parseResult,
             };
 

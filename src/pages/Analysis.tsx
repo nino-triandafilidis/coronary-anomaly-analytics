@@ -41,6 +41,8 @@ import {
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 const PLACEHOLDER_WORDS = Array.from({ length: 10 }, (_, index) => `Placeholder ${index + 1}`);
+const truncateLabel = (value: string, maxLength = 34) =>
+  value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 
 const reviewChartConfig = {
   reviewed: {
@@ -321,96 +323,99 @@ export default function Analysis() {
             </p>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Review Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer config={reviewChartConfig} className="mx-auto h-[260px] max-w-[360px]">
-                  <PieChart>
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                    <Pie
-                      data={reviewPieData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={58}
-                      outerRadius={92}
-                      paddingAngle={2}
-                    >
-                      {reviewPieData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ChartContainer>
-                <div className="mt-3 flex justify-center gap-4 text-xs text-muted-foreground">
-                  <span>Reviewed: {loading ? "..." : reviewedReportCount}</span>
-                  <span>Not reviewed: {loading ? "..." : notReviewedReportCount}</span>
-                </div>
-              </CardContent>
-            </Card>
-
+          <div className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Top 10 Normalized Highlighted Terms</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={termFrequencyChartConfig} className="h-[320px]">
+                <ChartContainer
+                  config={termFrequencyChartConfig}
+                  className="h-[420px] w-full max-w-none aspect-auto justify-start"
+                >
                   <BarChart
                     data={topNormalizedTerms}
                     layout="vertical"
-                    margin={{ left: 12, right: 20 }}
+                    margin={{ left: 24, right: 48 }}
                   >
                     <CartesianGrid horizontal={false} />
                     <XAxis type="number" allowDecimals={false} />
                     <YAxis
                       dataKey="name"
                       type="category"
-                      width={150}
+                      width={360}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(value: string) =>
-                        value.length > 24 ? `${value.slice(0, 24)}...` : value
-                      }
+                      tickFormatter={(value: string) => truncateLabel(value, 52)}
                     />
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                    <ChartTooltip content={<NormalizedTermTooltip />} />
                     <Bar dataKey="count" fill="var(--color-count)" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Pertinent Positive / Negative</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer config={assertionChartConfig} className="mx-auto h-[260px] max-w-[360px]">
-                  <PieChart>
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                    <Pie
-                      data={assertionPieData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={58}
-                      outerRadius={92}
-                      paddingAngle={2}
-                    >
-                      {assertionPieData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ChartContainer>
-                <div className="mt-3 flex justify-center gap-4 text-xs text-muted-foreground">
-                  <span>Positive: {loading ? "..." : assertedTermCount}</span>
-                  <span>Negative: {loading ? "..." : negatedTermCount}</span>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Review Status</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={reviewChartConfig} className="mx-auto h-[260px] max-w-[360px]">
+                    <PieChart>
+                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                      <Pie
+                        data={reviewPieData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={58}
+                        outerRadius={92}
+                        paddingAngle={2}
+                      >
+                        {reviewPieData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ChartContainer>
+                  <div className="mt-3 flex justify-center gap-4 text-xs text-muted-foreground">
+                    <span>Reviewed: {loading ? "..." : reviewedReportCount}</span>
+                    <span>Not reviewed: {loading ? "..." : notReviewedReportCount}</span>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Pertinent Positive / Negative</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={assertionChartConfig} className="mx-auto h-[260px] max-w-[360px]">
+                    <PieChart>
+                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                      <Pie
+                        data={assertionPieData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={58}
+                        outerRadius={92}
+                        paddingAngle={2}
+                      >
+                        {assertionPieData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ChartContainer>
+                  <div className="mt-3 flex justify-center gap-4 text-xs text-muted-foreground">
+                    <span>Positive: {loading ? "..." : assertedTermCount}</span>
+                    <span>Negative: {loading ? "..." : negatedTermCount}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
               <PlaceholderWordList title="Top 10 Keeped Words" words={PLACEHOLDER_WORDS} />
               <PlaceholderWordList title="Top 10 Skipped Words" words={PLACEHOLDER_WORDS} />
             </div>
@@ -482,6 +487,27 @@ export default function Analysis() {
         </section>
         </div>
       </main>
+    </div>
+  );
+}
+
+function NormalizedTermTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: { name?: string; count?: number } }>;
+}) {
+  const item = payload?.[0]?.payload;
+
+  if (!active || !item) {
+    return null;
+  }
+
+  return (
+    <div className="max-w-sm rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
+      <p className="font-medium text-foreground">{item.name}</p>
+      <p className="mt-1 text-muted-foreground">Count: {item.count ?? 0}</p>
     </div>
   );
 }

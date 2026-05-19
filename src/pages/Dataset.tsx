@@ -7,6 +7,7 @@ import {
   MinusCircle,
   Trash2,
   Database,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,7 @@ export default function Dataset() {
 
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
   const [previewReport, setPreviewReport] = useState<StoredParsedReport | null>(null);
+  const [previewReadOnly, setPreviewReadOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [savingError, setSavingError] = useState<string | null>(null);
@@ -71,7 +73,10 @@ export default function Dataset() {
   const handleDelete = async (id: string) => {
     await deleteStoredParsedReport(id);
     await refreshReports();
-    if (previewReport?.id === id) setPreviewReport(null);
+    if (previewReport?.id === id) {
+      setPreviewReport(null);
+      setPreviewReadOnly(true);
+    }
   };
 
   const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
@@ -188,6 +193,7 @@ export default function Dataset() {
                   onClick={() => {
                     setSavingError(null);
                     setSavedNotice(null);
+                    setPreviewReadOnly(true);
                     setPreviewReport(report);
                   }}
                   className="group flex flex-col items-start rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
@@ -248,6 +254,7 @@ export default function Dataset() {
             if (!open) {
               setPreviewReport(null);
               setSavedNotice(null);
+              setPreviewReadOnly(true);
             }
           }}
         >
@@ -268,45 +275,73 @@ export default function Dataset() {
                   )}
                 </div>
                 {previewReport && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {previewReadOnly && (
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => {
+                          setSavingError(null);
+                          setSavedNotice(null);
+                          setPreviewReadOnly(false);
+                        }}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
+                        Edit
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete report?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will remove "{previewReport.id}" from the local txt/json folders.
-                          This cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={() => handleDelete(previewReport.id)}
+                    )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-destructive"
                         >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete report?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will remove "{previewReport.id}" from the local txt/json folders.
+                            This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => handleDelete(previewReport.id)}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 )}
               </div>
             </DialogHeader>
 
             {previewReport && (
               <TermReview
-                key={`${previewReport.id}-${previewReport.parseResult.parsedTerms.length}`}
+                key={`${previewReport.id}-${previewReadOnly ? "preview" : "edit"}-${previewReport.parseResult.parsedTerms.length}`}
                 parseResult={previewReport.parseResult}
+                initialTerms={
+                  previewReadOnly
+                    ? undefined
+                    : previewReport.parseResult.parsedTerms.map((term) => ({
+                        ...term,
+                        status: "accepted",
+                      }))
+                }
                 onConfirm={handleReviewConfirm}
-                onBack={() => setPreviewReport(null)}
+                onBack={() => {
+                  setPreviewReport(null);
+                  setPreviewReadOnly(true);
+                }}
+                readOnly={previewReadOnly}
               />
             )}
           </DialogContent>

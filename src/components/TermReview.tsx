@@ -37,16 +37,26 @@ interface TermReviewProps {
   initialTerms?: ReviewableTerm[];
   onConfirm: (accepted: ReviewableTerm[]) => void | Promise<void>;
   onBack: () => void;
+  readOnly?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: TermReviewProps) {
+export function TermReview({
+  parseResult,
+  initialTerms,
+  onConfirm,
+  onBack,
+  readOnly = false,
+}: TermReviewProps) {
   const [terms, setTerms] = useState<ReviewableTerm[]>(() =>
     initialTerms ??
-    parseResult.parsedTerms.map((t) => ({ ...t, status: "pending" as TermStatus }))
+    parseResult.parsedTerms.map((t) => ({
+      ...t,
+      status: (readOnly ? "accepted" : "pending") as TermStatus,
+    }))
   );
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -75,6 +85,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
   // --- Actions ---
   const toggleStatus = useCallback(
     (idx: number, target: TermStatus) => {
+      if (readOnly) return;
       setTerms((prev) =>
         prev.map((t, i) => {
           if (i !== idx) return t;
@@ -82,21 +93,28 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
         })
       );
     },
-    []
+    [readOnly]
   );
 
   const bulkAccept = () =>
+    !readOnly &&
     setTerms((prev) =>
       prev.map((t) => (t.status === "pending" ? { ...t, status: "accepted" } : t))
     );
 
   const bulkReject = () =>
+    !readOnly &&
     setTerms((prev) =>
       prev.map((t) => (t.status === "pending" ? { ...t, status: "rejected" } : t))
     );
 
   // --- Text selection handler ---
   useEffect(() => {
+    if (readOnly) {
+      setSelectionPopover(null);
+      return;
+    }
+
     const handleMouseUp = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !reportRef.current) {
@@ -137,10 +155,10 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
 
     document.addEventListener("mouseup", handleMouseUp);
     return () => document.removeEventListener("mouseup", handleMouseUp);
-  }, [parseResult.reportText]);
+  }, [parseResult.reportText, readOnly]);
 
   const addSelectedTerm = () => {
-    if (!selectionPopover) return;
+    if (readOnly || !selectionPopover) return;
     const added: ReviewableTerm = {
       term: selectionPopover.text,
       normalizedName: selectionPopover.text,
@@ -161,6 +179,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
   };
 
   const toggleAssertion = useCallback((idx: number) => {
+    if (readOnly) return;
     setTerms((prev) =>
       prev.map((t, i) => {
         if (i !== idx) return t;
@@ -189,7 +208,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
         };
       })
     );
-  }, [parseResult.parsedTerms]);
+  }, [parseResult.parsedTerms, readOnly]);
 
   const dismissPopover = () => {
     setSelectionPopover(null);
@@ -197,6 +216,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
   };
 
   const handleConfirm = async () => {
+    if (readOnly) return;
     setConfirming(true);
     try {
       await onConfirm(terms.filter((t) => t.status === "accepted" || t.status === "added"));
@@ -238,9 +258,13 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Review AI Findings</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {readOnly ? "Preview AI Findings" : "Review AI Findings"}
+            </h2>
             <p className="text-xs text-muted-foreground">
-              {terms.length} terms extracted · approve or reject before continuing
+              {readOnly
+                ? `${terms.length} terms extracted`
+                : `${terms.length} terms extracted · approve or reject before continuing`}
             </p>
           </div>
           <button onClick={onBack} className="text-sm font-medium text-primary hover:underline">
@@ -319,7 +343,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             </p>
 
             {/* Floating popover for text selection */}
-            {selectionPopover && (
+            {!readOnly && selectionPopover && (
               <div
                 className="fixed z-50"
                 style={{
@@ -374,6 +398,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             </div>
 
             {/* Bulk actions — only act on the pending pile, never on already-accepted/rejected terms */}
+            {!readOnly && (
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -394,6 +419,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                 <X className="h-3.5 w-3.5" /> Reject Remaining ({counts.pending})
               </Button>
             </div>
+            )}
 
             {/* Term cards */}
             <ScrollArea className="max-h-[45vh]">
@@ -424,6 +450,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                                 e.stopPropagation();
                                 toggleAssertion(idx);
                               }}
+                              disabled={readOnly}
                               title={
                                 term.assertion === "negated"
                                   ? "Marked as pertinent negative — click to flip"
@@ -451,6 +478,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                             )}
                           </div>
                         </div>
+                        {!readOnly && (
                         <div className="flex gap-1 shrink-0">
                           <button
                             onClick={() => toggleStatus(idx, "accepted")}
@@ -467,6 +495,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                             <X className="h-4 w-4" />
                           </button>
                         </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -475,11 +504,14 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             </ScrollArea>
 
             {/* Hint for adding terms */}
+            {!readOnly && (
             <p className="text-[11px] text-muted-foreground text-center">
               Select text in the report to add a term
             </p>
+            )}
 
             {/* Confirm CTA */}
+            {!readOnly && (
             <Button
               onClick={handleConfirm}
               disabled={reviewedCount === 0 || confirming}
@@ -489,6 +521,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                 ? "Saving..."
                 : `Confirm ${reviewedCount} reviewed term${reviewedCount !== 1 ? "s" : ""}`}
             </Button>
+            )}
           </div>
         </div>
       </div>

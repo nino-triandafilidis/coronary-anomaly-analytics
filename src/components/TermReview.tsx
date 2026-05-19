@@ -438,10 +438,10 @@ export function TermReview({
                         span?.scrollIntoView({ behavior: "smooth", block: "center" });
                       }}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium text-card-foreground truncate">
+                            <span className="min-w-0 break-words text-sm font-medium text-card-foreground">
                               {term.normalizedName}
                             </span>
                             <button
@@ -479,20 +479,30 @@ export function TermReview({
                           </div>
                         </div>
                         {!readOnly && (
-                        <div className="flex gap-1 shrink-0">
-                          <button
-                            onClick={() => toggleStatus(idx, "accepted")}
-                            className={`rounded p-1 transition-colors ${term.status === "accepted" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"}`}
-                            aria-label="Accept"
+                        <div className="flex w-full flex-wrap justify-end gap-1 sm:w-auto sm:shrink-0">
+                          {/* <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleStatus(idx, "accepted");
+                            }}
+                            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${term.status === "accepted" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"}`}
+                            aria-label="Keep term"
                           >
-                            <Check className="h-4 w-4" />
-                          </button>
+                            <Check className="h-3.5 w-3.5" />
+                            Keep
+                          </button> */}
                           <button
-                            onClick={() => toggleStatus(idx, "rejected")}
-                            className={`rounded p-1 transition-colors ${term.status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : "text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"}`}
-                            aria-label="Reject"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleStatus(idx, "rejected");
+                            }}
+                            className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs font-medium transition-colors ${term.status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : "text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"}`}
+                            aria-label="Skip term"
                           >
-                            <X className="h-4 w-4" />
+                            <X className="h-3.5 w-3.5" />
+                            Skip
                           </button>
                         </div>
                         )}

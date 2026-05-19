@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, Heart, Loader2, BookmarkCheck } from "lucide-react";
 import { ReportInput } from "@/components/ReportInput";
@@ -16,6 +16,11 @@ import {
   getReportCount,
   deriveTitleFromText,
 } from "@/lib/reportDatabase";
+import {
+  getStoredParsedReports,
+  storeParsedReportFiles,
+  updateStoredParsedReport,
+} from "@/lib/parsedReportStorage";
 import { useToast } from "@/hooks/use-toast";
 
 type Stage = "upload" | "parsing" | "review" | "results";
@@ -29,8 +34,22 @@ const Index = () => {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [reviewTerms, setReviewTerms] = useState<ReviewableTerm[] | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [dbCount, setDbCount] = useState(() => getReportCount());
+  const [dbCount, setDbCount] = useState(0);
   const [savedId, setSavedId] = useState<string | null>(null);
+
+  const refreshParsedReportCount = async () => {
+    try {
+      const reports = await getStoredParsedReports();
+      setDbCount(reports.length);
+    } catch (err) {
+      console.warn("[Index] Failed to load parsed report count:", err);
+      setDbCount(getReportCount());
+    }
+  };
+
+  useEffect(() => {
+    refreshParsedReportCount();
+  }, []);
 
   const handleReport = async (text: string) => {
     setReportText(text);
@@ -40,6 +59,8 @@ const Index = () => {
 
     try {
       const result = await orchestrateParse(text);
+      await storeParsedReportFiles(text, result);
+      await refreshParsedReportCount();
       setParseResult(result);
       setReviewTerms(null);
       setStage("review");
@@ -60,7 +81,32 @@ const Index = () => {
     }
   };
 
-  const handleReviewConfirm = (accepted: ReviewableTerm[]) => {
+  const stripReviewStatus = (term: ReviewableTerm) => {
+    const { status: _status, ...parsedTerm } = term;
+    return parsedTerm;
+  };
+
+  const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
+    if (!parseResult) return;
+
+    const nextParseResult: ParseResult = {
+      ...parseResult,
+      parsedTerms: accepted.map(stripReviewStatus),
+    };
+
+    try {
+      await updateStoredParsedReport(nextParseResult.reportId, nextParseResult);
+      setParseResult(nextParseResult);
+      toast({
+        title: "Saved",
+        description: `Updated ${nextParseResult.reportId}.json`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update parsed JSON.";
+      toast({ title: "Could not save", description: message });
+      throw err;
+    }
+
     setReviewTerms(accepted);
     setSavedId(null);
 

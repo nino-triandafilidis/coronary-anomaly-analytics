@@ -1,6 +1,6 @@
 // Type definitions for the parse pipeline.
 //
-// The orchestrator always calls a live Anthropic LLM and surfaces errors to the
+// The orchestrator always calls a live OpenAI LLM and surfaces errors to the
 // UI; there is no mock-data fallback. Hand-written ParseResult mocks were
 // removed when we switched to real coronary CTAs — the offsets and term lists
 // no longer matched, and the silent fallback was hiding real LLM failures.
@@ -29,7 +29,7 @@ export interface ParseResult {
   reportId: string;
   reportText: string;
   parsedTerms: ParsedTerm[];
-  parserModel: string;    // e.g. "claude-sonnet-4-6"
+  parserModel: string;    // e.g. "gpt-5.4"
   parseTimeMs: number;
   totalTokensUsed: number;
   estimatedCostUsd: number;

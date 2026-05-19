@@ -35,7 +35,7 @@ const STATUS_BORDER: Record<TermStatus, string> = {
 interface TermReviewProps {
   parseResult: ParseResult;
   initialTerms?: ReviewableTerm[];
-  onConfirm: (accepted: ReviewableTerm[]) => void;
+  onConfirm: (accepted: ReviewableTerm[]) => void | Promise<void>;
   onBack: () => void;
 }
 
@@ -49,6 +49,8 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     parseResult.parsedTerms.map((t) => ({ ...t, status: "pending" as TermStatus }))
   );
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const statusBeforeAssertionToggle = useRef(new Map<number, TermStatus>());
 
   // --- Selection-based add-term state ---
   const reportRef = useRef<HTMLParagraphElement>(null);
@@ -67,7 +69,8 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
     return c;
   }, [terms]);
 
-  const confirmedCount = counts.accepted + counts.added;
+  const keptCount = counts.accepted + counts.added;
+  const reviewedCount = counts.accepted + counts.rejected + counts.added;
 
   // --- Actions ---
   const toggleStatus = useCallback(
@@ -159,21 +162,49 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
 
   const toggleAssertion = useCallback((idx: number) => {
     setTerms((prev) =>
-      prev.map((t, i) =>
-        i === idx
-          ? { ...t, assertion: t.assertion === "negated" ? "asserted" : "negated" }
-          : t
-      )
+      prev.map((t, i) => {
+        if (i !== idx) return t;
+
+        const nextAssertion = t.assertion === "negated" ? "asserted" : "negated";
+        const originalAssertion = parseResult.parsedTerms[idx]?.assertion;
+        const isBackToOriginal = originalAssertion === nextAssertion;
+
+        if (t.status === "added") {
+          return { ...t, assertion: nextAssertion };
+        }
+
+        if (!statusBeforeAssertionToggle.current.has(idx)) {
+          statusBeforeAssertionToggle.current.set(idx, t.status);
+        }
+
+        const restoredStatus = statusBeforeAssertionToggle.current.get(idx) ?? "pending";
+        if (isBackToOriginal) {
+          statusBeforeAssertionToggle.current.delete(idx);
+        }
+
+        return {
+          ...t,
+          assertion: nextAssertion,
+          status: isBackToOriginal ? restoredStatus : "accepted",
+        };
+      })
     );
-  }, []);
+  }, [parseResult.parsedTerms]);
 
   const dismissPopover = () => {
     setSelectionPopover(null);
     window.getSelection()?.removeAllRanges();
   };
 
-  const handleConfirm = () => {
-    onConfirm(terms.filter((t) => t.status === "accepted" || t.status === "added"));
+  const handleConfirm = async () => {
+    setConfirming(true);
+    try {
+      await onConfirm(terms.filter((t) => t.status === "accepted" || t.status === "added"));
+    } catch (err) {
+      console.error("[TermReview] Confirm failed:", err);
+    } finally {
+      setConfirming(false);
+    }
   };
 
   // --- Build highlighted text segments ---
@@ -449,8 +480,14 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             </p>
 
             {/* Confirm CTA */}
-            <Button onClick={handleConfirm} disabled={confirmedCount === 0} className="w-full">
-              Confirm {confirmedCount} term{confirmedCount !== 1 ? "s" : ""}
+            <Button
+              onClick={handleConfirm}
+              disabled={reviewedCount === 0 || confirming}
+              className="w-full"
+            >
+              {confirming
+                ? "Saving..."
+                : `Confirm ${reviewedCount} reviewed term${reviewedCount !== 1 ? "s" : ""}`}
             </Button>
           </div>
         </div>

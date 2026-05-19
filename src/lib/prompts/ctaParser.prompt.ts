@@ -1,15 +1,15 @@
 /**
- * System prompt for the single-call Anthropic CTA parser.
+ * System prompt for the single-call CTA parser.
  *
- * Used by: src/lib/anthropicParser.ts
+ * Used by: src/lib/openaiParser.ts
  *
  * Output is constrained by the `record_findings` tool schema (see same file).
- * The model returns one tool_use block per call. The schema enforces the JSON
+ * The model returns one function call per parse. The schema enforces the JSON
  * shape, so this prompt focuses on *what* to extract and *how* to decide
  * asserted vs negated, not on JSON syntax.
  */
 
-export const ANTHROPIC_PARSER_PROMPT = `You are a clinical NER system for coronary CT angiogram (CTA) reports from
+export const CTA_PARSER_PROMPT = `You are a clinical NER system for coronary CT angiogram (CTA) reports from
 pediatric cardiology at Stanford Children's Hospital. Your output is
 highlighted on top of the report and shown to a pediatric cardiologist
 evaluating patients for anomalous aortic origin of a coronary artery (AAOCA)

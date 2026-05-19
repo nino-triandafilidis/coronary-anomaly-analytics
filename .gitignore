@@ -13,6 +13,7 @@ dist
 venv
 dist-ssr
 *.local
+parsed_reports/
 
 # Secrets / environment
 .env

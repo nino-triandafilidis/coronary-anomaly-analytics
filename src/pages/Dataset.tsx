@@ -49,6 +49,26 @@ function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
   return parsedTerm;
 }
 
+function getReviewDecisionKey(term: ParsedTerm): string {
+  return [
+    term.startIndex,
+    term.endIndex,
+    term.normalizedName.trim().toLowerCase(),
+    term.term.trim().toLowerCase(),
+  ].join("|");
+}
+
+function mergeReviewDecisions(
+  previous: ReviewDecisionRecord[] | undefined,
+  next: ReviewDecisionRecord[]
+): ReviewDecisionRecord[] {
+  const nextKeys = new Set(next.map(getReviewDecisionKey));
+  return [
+    ...(previous ?? []).filter((decision) => !nextKeys.has(getReviewDecisionKey(decision))),
+    ...next,
+  ];
+}
+
 export default function Dataset() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -131,13 +151,17 @@ export default function Dataset() {
       ...previewReport.parseResult,
       parsedTerms: accepted.map(stripReviewStatus),
     };
+    const mergedReviewDecisions = mergeReviewDecisions(
+      previewReport.reviewDecisions,
+      reviewDecisions
+    );
 
     try {
       const updated = await updateStoredParsedReport(
         previewReport.id,
         nextParseResult,
         true,
-        reviewDecisions
+        mergedReviewDecisions
       );
       setPreviewReport(updated);
       setReports((prev) => prev.map((report) => (report.id === updated.id ? updated : report)));

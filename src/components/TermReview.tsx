@@ -295,7 +295,7 @@ export function TermReview({
           </button>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
           {/* LEFT — Report with highlights. min-w-0 (via minmax(0,1fr) above)
               lets the column shrink past its content width so the right
               column never gets pushed off-screen. */}
@@ -393,7 +393,7 @@ export function TermReview({
           </div>
 
           {/* RIGHT — Term review panel */}
-          <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:max-h-[75vh]">
             {/* Model metadata */}
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -445,7 +445,7 @@ export function TermReview({
             )}
 
             {/* Term cards */}
-            <ScrollArea className="max-h-[45vh]">
+            <ScrollArea className="min-h-0 flex-1">
               <div className="flex flex-col gap-2 pr-3">
                 {terms.map((term, idx) => {
                   const isHovered = hoveredIdx === idx;

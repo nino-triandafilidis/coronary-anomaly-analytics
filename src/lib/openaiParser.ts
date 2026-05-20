@@ -22,6 +22,7 @@ import { findTermPosition } from "@/lib/positionResolver";
 const MODEL_NAME = "gpt-5.4";
 const MAX_TOKENS = 8192;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const OPENAI_REQUEST_TIMEOUT_MS = 120_000;
 
 // Pricing placeholder per 1M tokens. Update these if your OpenAI account shows
 // different GPT-5.4 rates.
@@ -140,32 +141,52 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   console.log("Model:", MODEL_NAME);
   console.log("Report length:", reportText.length, "chars");
 
-  const rawResponse = await fetch(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL_NAME,
-      instructions: CTA_PARSER_PROMPT,
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `REPORT:\n\n${reportText}`,
-            },
-          ],
-        },
-      ],
-      tools: [RECORD_FINDINGS_TOOL],
-      tool_choice: { type: "function", name: "record_findings" },
-      parallel_tool_calls: false,
-      max_output_tokens: MAX_TOKENS,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    OPENAI_REQUEST_TIMEOUT_MS
+  );
+
+  let rawResponse: Response;
+  try {
+    rawResponse = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        instructions: CTA_PARSER_PROMPT,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `REPORT:\n\n${reportText}`,
+              },
+            ],
+          },
+        ],
+        tools: [RECORD_FINDINGS_TOOL],
+        tool_choice: { type: "function", name: "record_findings" },
+        parallel_tool_calls: false,
+        max_output_tokens: MAX_TOKENS,
+      }),
+    });
+  } catch (err) {
+    console.groupEnd();
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(
+        `OpenAI parser timed out after ${OPENAI_REQUEST_TIMEOUT_MS / 1000} seconds. Please retry or use a shorter report.`
+      );
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   const response = (await rawResponse.json()) as OpenAIResponse;
   if (!rawResponse.ok) {

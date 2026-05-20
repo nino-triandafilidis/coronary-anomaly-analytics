@@ -351,19 +351,25 @@ export default function Analysis() {
                 href="#summary-cards"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                Summary Cards
+                Dataset Snapshot
               </a>
               <a
                 href="#overview-charts"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                Overview Charts
+                Term Distributions
+              </a>
+              <a
+                href="#top-review-words"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Review Decisions
               </a>
               <a
                 href="#frequency-table"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                Freq Table
+                Feature Counts
               </a>
             </div>
           </nav>

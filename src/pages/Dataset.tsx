@@ -8,6 +8,7 @@ import {
   Trash2,
   Database,
   Pencil,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ import {
   deleteStoredParsedReport,
   getStoredParsedReports,
   getStoredParsedTerms,
+  restoreStoredParsedReport,
   updateStoredParsedReport,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
@@ -53,6 +55,7 @@ export default function Dataset() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [savingError, setSavingError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   const refreshReports = async () => {
     setLoading(true);
@@ -102,6 +105,29 @@ export default function Dataset() {
       setSavingError(message);
       toast({ title: "Could not save", description: message });
       throw err;
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    setRestoring(true);
+    setSavingError(null);
+    setSavedNotice(null);
+
+    try {
+      const restored = await restoreStoredParsedReport(id);
+      setPreviewReport(restored);
+      setReports((prev) => prev.map((report) => (report.id === restored.id ? restored : report)));
+      setSavedNotice(`Restored ${restored.id}.json from original parsed JSON`);
+      toast({
+        title: "Restored",
+        description: `Current ${restored.id}.json now matches the original parsed report.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to restore parsed report.";
+      setSavingError(message);
+      toast({ title: "Could not restore", description: message });
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -290,6 +316,37 @@ export default function Dataset() {
                         Edit
                       </Button>
                     )}
+                    {!previewReadOnly && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={restoring}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            {restoring ? "Restoring..." : "Restore"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Restore original parsed report?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently replace the current editable JSON for
+                              "{previewReport.id}" with the original parsed JSON snapshot.
+                              Existing edits to highlighted terms will be lost.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleRestore(previewReport.id)}>
+                              Restore
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -326,7 +383,7 @@ export default function Dataset() {
 
             {previewReport && (
               <TermReview
-                key={`${previewReport.id}-${previewReadOnly ? "preview" : "edit"}-${previewReport.parseResult.parsedTerms.length}`}
+                key={`${previewReport.id}-${previewReadOnly ? "preview" : "edit"}-${previewReport.updatedAt ?? previewReport.storedAt}-${previewReport.parseResult.parsedTerms.length}`}
                 parseResult={previewReport.parseResult}
                 initialTerms={
                   previewReadOnly

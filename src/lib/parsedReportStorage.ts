@@ -4,7 +4,9 @@ export interface StoredParsedReport {
   id: string;
   textFile: string;
   jsonFile: string;
+  originalJsonFile?: string;
   storedAt: string;
+  updatedAt?: string;
   reviewed: boolean;
   text: string;
   parseResult: ParseResult;
@@ -69,6 +71,24 @@ export async function updateStoredParsedReport(
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error ?? "Failed to update parsed report file.");
+  }
+
+  return response.json();
+}
+
+export async function restoreStoredParsedReport(
+  reportId: string
+): Promise<StoredParsedReport> {
+  const response = await fetch(
+    `/api/parsed-reports/${encodeURIComponent(reportId)}/restore`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? "Failed to restore parsed report file.");
   }
 
   return response.json();

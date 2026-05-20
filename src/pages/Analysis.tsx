@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
   ExternalLink,
   FileText,
@@ -69,6 +71,18 @@ interface DecisionSummary {
   occurrences: DecisionOccurrence[];
 }
 
+interface NormalizedFeatureRow {
+  name: string;
+  count: number;
+  pertinentPositive: number;
+  pertinentNegative: number;
+  keep: number;
+  skip: number;
+}
+
+type FeatureSortKey = keyof NormalizedFeatureRow;
+type FeatureSortDirection = "asc" | "desc";
+
 const reviewChartConfig = {
   reviewed: {
     label: "Reviewed",
@@ -103,6 +117,10 @@ export default function Analysis() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [featureSearch, setFeatureSearch] = useState("");
+  const [featureSort, setFeatureSort] = useState<{
+    key: FeatureSortKey;
+    direction: FeatureSortDirection;
+  }>({ key: "count", direction: "desc" });
   const [selectedDecision, setSelectedDecision] = useState<{
     title: string;
     decision: ReviewDecision;
@@ -227,14 +245,7 @@ export default function Analysis() {
   const normalizedFeatureRows = useMemo(() => {
     const rows = new Map<
       string,
-      {
-        name: string;
-        count: number;
-        pertinentPositive: number;
-        pertinentNegative: number;
-        keep: number;
-        skip: number;
-      }
+      NormalizedFeatureRow
     >();
 
     allTerms.forEach((term) => {
@@ -278,15 +289,34 @@ export default function Analysis() {
       rows.set(name, existing);
     });
 
-    return Array.from(rows.values()).sort(
-      (a, b) => b.count - a.count || a.name.localeCompare(b.name)
-    );
+    return Array.from(rows.values());
   }, [allReviewDecisions, allTerms]);
   const filteredFeatureRows = useMemo(() => {
     const query = featureSearch.trim().toLowerCase();
-    if (!query) return normalizedFeatureRows;
-    return normalizedFeatureRows.filter((row) => row.name.toLowerCase().includes(query));
-  }, [featureSearch, normalizedFeatureRows]);
+    const rows = query
+      ? normalizedFeatureRows.filter((row) => row.name.toLowerCase().includes(query))
+      : normalizedFeatureRows;
+
+    return [...rows].sort((a, b) => {
+      const aValue = a[featureSort.key];
+      const bValue = b[featureSort.key];
+      const direction = featureSort.direction === "asc" ? 1 : -1;
+
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return aValue.localeCompare(bValue) * direction;
+      }
+
+      const numericDiff = Number(aValue) - Number(bValue);
+      if (numericDiff !== 0) return numericDiff * direction;
+      return a.name.localeCompare(b.name);
+    });
+  }, [featureSearch, featureSort, normalizedFeatureRows]);
+  const handleFeatureSort = (key: FeatureSortKey) => {
+    setFeatureSort((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
   const summaryCards = [
     {
       title: "Number of Parsed Reports",
@@ -562,12 +592,59 @@ export default function Analysis() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[320px]">Name</TableHead>
-                    <TableHead className="text-right">Count</TableHead>
-                    <TableHead className="text-right">Pertinent Positive</TableHead>
-                    <TableHead className="text-right">Pertinent Negative</TableHead>
-                    <TableHead className="text-right">Keep</TableHead>
-                    <TableHead className="text-right">Skip</TableHead>
+                    <TableHead className="min-w-[320px]">
+                      <FeatureSortButton
+                        label="Name"
+                        sortKey="name"
+                        activeSort={featureSort}
+                        onSort={handleFeatureSort}
+                      />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <FeatureSortButton
+                        label="Count"
+                        sortKey="count"
+                        activeSort={featureSort}
+                        onSort={handleFeatureSort}
+                        align="right"
+                      />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <FeatureSortButton
+                        label="Pertinent Positive"
+                        sortKey="pertinentPositive"
+                        activeSort={featureSort}
+                        onSort={handleFeatureSort}
+                        align="right"
+                      />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <FeatureSortButton
+                        label="Pertinent Negative"
+                        sortKey="pertinentNegative"
+                        activeSort={featureSort}
+                        onSort={handleFeatureSort}
+                        align="right"
+                      />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <FeatureSortButton
+                        label="Keep"
+                        sortKey="keep"
+                        activeSort={featureSort}
+                        onSort={handleFeatureSort}
+                        align="right"
+                      />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <FeatureSortButton
+                        label="Skip"
+                        sortKey="skip"
+                        activeSort={featureSort}
+                        onSort={handleFeatureSort}
+                        align="right"
+                      />
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -652,6 +729,37 @@ export default function Analysis() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function FeatureSortButton({
+  label,
+  sortKey,
+  activeSort,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  sortKey: FeatureSortKey;
+  activeSort: { key: FeatureSortKey; direction: FeatureSortDirection };
+  onSort: (key: FeatureSortKey) => void;
+  align?: "left" | "right";
+}) {
+  const isActive = activeSort.key === sortKey;
+  const Icon = activeSort.direction === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={
+        "inline-flex w-full items-center gap-1.5 text-xs font-medium transition-colors hover:text-foreground " +
+        (align === "right" ? "justify-end" : "justify-start")
+      }
+    >
+      <span>{label}</span>
+      {isActive && <Icon className="h-3.5 w-3.5" />}
+    </button>
   );
 }
 

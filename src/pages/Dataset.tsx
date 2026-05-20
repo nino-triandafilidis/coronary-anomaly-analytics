@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Activity,
   FileText,
@@ -37,7 +37,11 @@ import {
   updateStoredParsedReport,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ParsedTerm, ReviewableTerm } from "@/data/mockParseResults";
+import type {
+  ParsedTerm,
+  ReviewableTerm,
+  ReviewDecisionRecord,
+} from "@/data/parseTypes";
 import { useToast } from "@/hooks/use-toast";
 
 function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
@@ -47,6 +51,7 @@ function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
 
 export default function Dataset() {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
   const [previewReport, setPreviewReport] = useState<StoredParsedReport | null>(null);
@@ -73,16 +78,44 @@ export default function Dataset() {
     refreshReports();
   }, []);
 
+  useEffect(() => {
+    const reportId = searchParams.get("reportId");
+    if (!reportId || reports.length === 0 || previewReport?.id === reportId) return;
+
+    const report = reports.find((item) => item.id === reportId);
+    if (report) {
+      setSavingError(null);
+      setSavedNotice(null);
+      setPreviewReadOnly(true);
+      setPreviewReport(report);
+    }
+  }, [previewReport?.id, reports, searchParams]);
+
+  const closePreview = () => {
+    setPreviewReport(null);
+    setSavedNotice(null);
+    setSavingError(null);
+    setPreviewReadOnly(true);
+
+    if (searchParams.has("reportId")) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("reportId");
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     await deleteStoredParsedReport(id);
     await refreshReports();
     if (previewReport?.id === id) {
-      setPreviewReport(null);
-      setPreviewReadOnly(true);
+      closePreview();
     }
   };
 
-  const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
+  const handleReviewConfirm = async (
+    accepted: ReviewableTerm[],
+    reviewDecisions: ReviewDecisionRecord[]
+  ) => {
     if (!previewReport) return;
 
     setSavingError(null);
@@ -92,7 +125,12 @@ export default function Dataset() {
     };
 
     try {
-      const updated = await updateStoredParsedReport(previewReport.id, nextParseResult, true);
+      const updated = await updateStoredParsedReport(
+        previewReport.id,
+        nextParseResult,
+        true,
+        reviewDecisions
+      );
       setPreviewReport(updated);
       setReports((prev) => prev.map((report) => (report.id === updated.id ? updated : report)));
       setSavedNotice(`Saved ${updated.id}.json`);
@@ -278,9 +316,7 @@ export default function Dataset() {
           open={!!previewReport}
           onOpenChange={(open) => {
             if (!open) {
-              setPreviewReport(null);
-              setSavedNotice(null);
-              setPreviewReadOnly(true);
+              closePreview();
             }
           }}
         >
@@ -395,8 +431,7 @@ export default function Dataset() {
                 }
                 onConfirm={handleReviewConfirm}
                 onBack={() => {
-                  setPreviewReport(null);
-                  setPreviewReadOnly(true);
+                  closePreview();
                 }}
                 readOnly={previewReadOnly}
               />

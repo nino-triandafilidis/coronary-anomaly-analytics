@@ -8,7 +8,7 @@
  * localStorage is synchronous, so all helpers are plain functions (no async).
  */
 
-import type { ParsedTerm } from "@/data/mockParseResults";
+import type { ParsedTerm } from "@/data/parseTypes";
 
 // ---------------------------------------------------------------------------
 // Types

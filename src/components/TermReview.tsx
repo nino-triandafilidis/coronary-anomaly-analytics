@@ -8,7 +8,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ParseResult, ReviewableTerm, TermStatus } from "@/data/mockParseResults";
+import type {
+  ParseResult,
+  ReviewableTerm,
+  ReviewDecisionRecord,
+  TermStatus,
+} from "@/data/parseTypes";
 
 // ---------------------------------------------------------------------------
 // Status → highlight colour mapping
@@ -35,7 +40,10 @@ const STATUS_BORDER: Record<TermStatus, string> = {
 interface TermReviewProps {
   parseResult: ParseResult;
   initialTerms?: ReviewableTerm[];
-  onConfirm: (accepted: ReviewableTerm[]) => void | Promise<void>;
+  onConfirm: (
+    accepted: ReviewableTerm[],
+    reviewDecisions: ReviewDecisionRecord[]
+  ) => void | Promise<void>;
   onBack: () => void;
   readOnly?: boolean;
 }
@@ -219,7 +227,22 @@ export function TermReview({
     if (readOnly) return;
     setConfirming(true);
     try {
-      await onConfirm(terms.filter((t) => t.status === "accepted" || t.status === "added"));
+      const reviewedAt = new Date().toISOString();
+      const reviewDecisions: ReviewDecisionRecord[] = terms
+        .filter((t) => t.status === "accepted" || t.status === "added" || t.status === "rejected")
+        .map((term) => {
+          const { status: _status, ...parsedTerm } = term;
+          return {
+            ...parsedTerm,
+            decision: term.status === "rejected" ? "skip" : "keep",
+            reviewedAt,
+          };
+        });
+
+      await onConfirm(
+        terms.filter((t) => t.status === "accepted" || t.status === "added"),
+        reviewDecisions
+      );
     } catch (err) {
       console.error("[TermReview] Confirm failed:", err);
     } finally {
@@ -480,7 +503,7 @@ export function TermReview({
                         </div>
                         {!readOnly && (
                         <div className="flex w-full flex-wrap justify-end gap-1 sm:w-auto sm:shrink-0">
-                          {/* <button
+                          <button
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -491,7 +514,7 @@ export function TermReview({
                           >
                             <Check className="h-3.5 w-3.5" />
                             Keep
-                          </button> */}
+                          </button>
                           <button
                             type="button"
                             onClick={(event) => {

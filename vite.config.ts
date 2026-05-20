@@ -38,7 +38,8 @@ function buildStoredReportPayload(
   parseResult: unknown,
   storedAt: string,
   reviewed: boolean,
-  updatedAt?: string
+  updatedAt?: string,
+  reviewDecisions: unknown[] = []
 ) {
   const txtPath = path.join(parsedTxtDir, `${reportId}.txt`);
   const jsonPath = path.join(parsedJsonDir, `${reportId}.json`);
@@ -54,6 +55,7 @@ function buildStoredReportPayload(
     reviewed,
     text,
     parseResult,
+    reviewDecisions,
   };
 }
 
@@ -94,6 +96,7 @@ function parsedReportsFileApi() {
                       report.originalJsonFile ??
                       path.relative(__dirname, originalJsonPath).replace(/\\/g, "/"),
                     reviewed: report.reviewed ?? false,
+                    reviewDecisions: report.reviewDecisions ?? [],
                     storedAt: report.storedAt ?? stat.mtime.toISOString(),
                   };
                 })
@@ -126,6 +129,7 @@ function parsedReportsFileApi() {
                 report.originalJsonFile ??
                 path.relative(__dirname, originalJsonPath).replace(/\\/g, "/"),
               reviewed: report.reviewed ?? false,
+              reviewDecisions: report.reviewDecisions ?? [],
             });
             return;
           }
@@ -155,7 +159,8 @@ function parsedReportsFileApi() {
               original.parseResult,
               existing.storedAt ?? original.storedAt ?? updatedAt,
               false,
-              updatedAt
+              updatedAt,
+              []
             );
 
             await fs.writeFile(jsonPath, JSON.stringify(restoredPayload, null, 2), "utf8");
@@ -214,6 +219,14 @@ function parsedReportsFileApi() {
               sendJson(res, 400, { error: "Expected parseResult." });
               return;
             }
+            if (
+              "reviewDecisions" in body &&
+              body.reviewDecisions !== undefined &&
+              !Array.isArray(body.reviewDecisions)
+            ) {
+              sendJson(res, 400, { error: "Expected reviewDecisions to be an array." });
+              return;
+            }
 
             const existing = JSON.parse(await fs.readFile(jsonPath, "utf8"));
             const text = await fs.readFile(txtPath, "utf8");
@@ -229,7 +242,10 @@ function parsedReportsFileApi() {
                 body.parseResult,
                 existing.storedAt ?? updatedAt,
                 existing.reviewed === true || body.reviewed === true,
-                updatedAt
+                updatedAt,
+                Array.isArray(body.reviewDecisions)
+                  ? body.reviewDecisions
+                  : existing.reviewDecisions ?? []
               ),
               ...("originalJsonFile" in existing ? { originalJsonFile: existing.originalJsonFile } : {}),
             };

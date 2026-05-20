@@ -10,7 +10,11 @@ import {
   type DetectedAnomaly,
 } from "@/data/anomalyDatabase";
 import { orchestrateParse, CostLimitError } from "@/lib/parsingOrchestrator";
-import type { ParseResult, ReviewableTerm } from "@/data/mockParseResults";
+import type {
+  ParseResult,
+  ReviewableTerm,
+  ReviewDecisionRecord,
+} from "@/data/parseTypes";
 import {
   saveReport,
   getReportCount,
@@ -86,7 +90,10 @@ const Index = () => {
     return parsedTerm;
   };
 
-  const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
+  const handleReviewConfirm = async (
+    accepted: ReviewableTerm[],
+    reviewDecisions: ReviewDecisionRecord[]
+  ) => {
     if (!parseResult) return;
 
     const nextParseResult: ParseResult = {
@@ -95,7 +102,12 @@ const Index = () => {
     };
 
     try {
-      await updateStoredParsedReport(nextParseResult.reportId, nextParseResult, true);
+      await updateStoredParsedReport(
+        nextParseResult.reportId,
+        nextParseResult,
+        true,
+        reviewDecisions
+      );
       setParseResult(nextParseResult);
       toast({
         title: "Saved",

@@ -11,7 +11,7 @@
  * The prompt is in src/lib/prompts/ctaParser.prompt.ts.
  */
 
-import type { ParsedTerm, ParseResult, Assertion } from "@/data/mockParseResults";
+import type { ParsedTerm, ParseResult, Assertion } from "@/data/parseTypes";
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
 import { findTermPosition } from "@/lib/positionResolver";
 

@@ -1,4 +1,8 @@
-import type { ParseResult, ParsedTerm } from "@/data/mockParseResults";
+import type {
+  ParseResult,
+  ParsedTerm,
+  ReviewDecisionRecord,
+} from "@/data/parseTypes";
 
 export interface StoredParsedReport {
   id: string;
@@ -10,6 +14,7 @@ export interface StoredParsedReport {
   reviewed: boolean;
   text: string;
   parseResult: ParseResult;
+  reviewDecisions?: ReviewDecisionRecord[];
 }
 
 export async function storeParsedReportFiles(
@@ -44,6 +49,7 @@ export async function getStoredParsedReports(): Promise<StoredParsedReport[]> {
   return (body.reports ?? []).map((report) => ({
     ...report,
     reviewed: report.reviewed ?? false,
+    reviewDecisions: report.reviewDecisions ?? [],
   }));
 }
 
@@ -60,12 +66,13 @@ export async function deleteStoredParsedReport(reportId: string): Promise<void> 
 export async function updateStoredParsedReport(
   reportId: string,
   parseResult: ParseResult,
-  reviewed?: boolean
+  reviewed?: boolean,
+  reviewDecisions?: ReviewDecisionRecord[]
 ): Promise<StoredParsedReport> {
   const response = await fetch(`/api/parsed-reports/${encodeURIComponent(reportId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ parseResult, reviewed }),
+    body: JSON.stringify({ parseResult, reviewed, reviewDecisions }),
   });
 
   if (!response.ok) {

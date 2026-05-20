@@ -4,11 +4,13 @@
  */
 
 import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import mammoth from "mammoth";
 
-// PDF.js worker: use CDN so the worker loads in browser (Vite doesn't serve node_modules worker)
+// Keep PDF parsing off the main thread. Loading this from the bundle avoids
+// CDN failures that can make PDF.js fall back to expensive main-thread work.
 if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.5.207/build/pdf.worker.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 }
 
 const SUPPORTED_TYPES = {
@@ -51,6 +53,12 @@ export function parseTxt(content: string): string {
   return content;
 }
 
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => window.setTimeout(resolve, 0));
+  });
+}
+
 /**
  * Extract text from PDF buffer. Returns concatenated text from all pages.
  * Optional onProgress for multi-page progress (0-1).
@@ -81,6 +89,7 @@ export async function parsePdf(
     if (onProgress && numPages > 0) {
       onProgress(i, numPages);
     }
+    await yieldToBrowser();
   }
   return pageTexts.join("\n\n");
 }

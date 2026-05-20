@@ -29,6 +29,12 @@ import { useToast } from "@/hooks/use-toast";
 
 type Stage = "upload" | "parsing" | "review" | "results";
 
+function waitForBrowserPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => window.setTimeout(resolve, 0));
+  });
+}
+
 const Index = () => {
   const { toast } = useToast();
 
@@ -62,6 +68,7 @@ const Index = () => {
     setStage("parsing");
 
     try {
+      await waitForBrowserPaint();
       const result = await orchestrateParse(text);
       await storeParsedReportFiles(text, result);
       await refreshParsedReportCount();

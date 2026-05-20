@@ -149,6 +149,8 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
 
   let rawResponse: Response;
   try {
+    console.time("[OpenAIParser] fetch");
+    console.log("[OpenAIParser] Sending request to OpenAI...");
     rawResponse = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       signal: controller.signal,
@@ -176,7 +178,9 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
         max_output_tokens: MAX_TOKENS,
       }),
     });
+    console.timeEnd("[OpenAIParser] fetch");
   } catch (err) {
+    console.timeEnd("[OpenAIParser] fetch");
     console.groupEnd();
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(

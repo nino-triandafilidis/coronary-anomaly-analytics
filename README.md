@@ -74,12 +74,11 @@ src/
     Index.tsx               # Upload → parsing → review → results flow
     Dataset.tsx             # Saved-report browser
   data/
-    mockParseResults.ts     # ParseResult / ParsedTerm / ReviewableTerm types
+    parseTypes.ts           # ParseResult / ParsedTerm / ReviewableTerm types
     anomalyDatabase.ts      # getHistoryForTerm: counts from saved reports + DetectedAnomaly type
     sampleReports.ts        # Sample CTA reports for demos (sourced from real_cta/*.pdf)
 scripts/
   generate_sample_pdf.py    # Creates a test PDF from a report
-real_cta/                   # Source PDFs for the demo samples
 ```
 
 ## Design principles

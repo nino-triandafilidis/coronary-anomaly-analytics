@@ -393,7 +393,7 @@ export function TermReview({
           </div>
 
           {/* RIGHT — Term review panel */}
-          <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:max-h-[75vh]">
+          <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:h-[75vh] lg:max-h-[75vh]">
             {/* Model metadata */}
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">

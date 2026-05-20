@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity,
   FileText,
@@ -51,6 +51,7 @@ function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
 
 export default function Dataset() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
@@ -92,10 +93,17 @@ export default function Dataset() {
   }, [previewReport?.id, reports, searchParams]);
 
   const closePreview = () => {
+    const returnTo = searchParams.get("returnTo");
+
     setPreviewReport(null);
     setSavedNotice(null);
     setSavingError(null);
     setPreviewReadOnly(true);
+
+    if (returnTo) {
+      navigate(returnTo, { replace: true });
+      return;
+    }
 
     if (searchParams.has("reportId")) {
       const nextParams = new URLSearchParams(searchParams);

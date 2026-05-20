@@ -443,7 +443,7 @@ export default function Analysis() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div id="top-review-words" className="grid scroll-mt-6 gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Review Status</CardTitle>
@@ -627,7 +627,11 @@ export default function Analysis() {
                           : "pertinent positive"}
                       </p>
                     </div>
-                    <Link to={`/dataset?reportId=${encodeURIComponent(occurrence.reportId)}`}>
+                    <Link
+                      to={`/dataset?reportId=${encodeURIComponent(
+                        occurrence.reportId
+                      )}&returnTo=${encodeURIComponent("/analysis#top-review-words")}`}
+                    >
                       <Button variant="outline" size="sm">
                         <ExternalLink className="h-4 w-4" />
                         Preview

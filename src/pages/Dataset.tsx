@@ -222,6 +222,11 @@ export default function Dataset() {
                 Analysis Page
               </Button>
             </Link>
+            <Link to="/comparison">
+              <Button variant="ghost" size="sm">
+                Comparison Page
+              </Button>
+            </Link>
             <Link to="/">
               <Button variant="ghost" size="sm">
                 Back to Analyzer

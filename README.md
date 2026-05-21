@@ -79,6 +79,10 @@ src/
     sampleReports.ts        # Sample CTA reports for demos (sourced from real_cta/*.pdf)
 scripts/
   generate_sample_pdf.py    # Creates a test PDF from a report
+parsed_reports/
+  json/                     # Current editable parsed-report outputs used by the UI
+  original_json/            # Immutable original parser outputs saved before any reviewer modifications
+  txt/                      # Plain-text versions of uploaded reports extracted from original PDF
 ```
 
 ## Design principles

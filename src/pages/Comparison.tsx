@@ -186,6 +186,18 @@ export default function Comparison() {
             <p className="mt-1 text-sm text-muted-foreground">
               Query every txt report with the paper parser prompt and save matching JSON files.
             </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Comparison keywords are sourced from{" "}
+              <a
+                href="https://www.jacc.org/doi/10.1016/j.jcmg.2026.02.005"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-primary hover:underline"
+              >
+                JACC Cardiovascular Imaging
+              </a>
+              .
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={loadCompareReports} disabled={loading || running}>

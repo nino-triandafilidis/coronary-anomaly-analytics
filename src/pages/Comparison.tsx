@@ -54,6 +54,98 @@ interface KeywordRow {
   count: number;
 }
 
+const controlledVocabulary = [
+  {
+    category: "Anomalous vessel",
+    items: [
+      ["R-AAOCA", "right coronary artery anomalous origin"],
+      ["L-AAOCA", "left main coronary artery anomalous origin"],
+      ["LAD-AAOCA", "left anterior descending anomalous origin"],
+      ["LCX-AAOCA", "left circumflex anomalous origin"],
+      ["ST-AAOCA", "single trunk"],
+    ],
+  },
+  {
+    category: "Sinus of origin",
+    items: [
+      ["LS", "left sinus / left sinus of Valsalva"],
+      ["RS", "right sinus / right sinus of Valsalva"],
+      ["NS", "nonfacing sinus / noncoronary sinus"],
+      ["HO", "high origin"],
+      ["LR", "left-right juxtacommissural"],
+      ["LN", "left-nonfacing juxtacommissural"],
+      ["RN", "right-nonfacing juxtacommissural"],
+      ["AS", "anterior sinus (bicuspid aortic valve)"],
+      ["PS", "posterior sinus (bicuspid aortic valve)"],
+    ],
+  },
+  {
+    category: "Proximal course",
+    items: [
+      ["IA", "interarterial"],
+      ["IM", "intramural"],
+      ["IS", "intraseptal"],
+      ["PP", "prepulmonic"],
+      ["RA", "retroaortic"],
+      ["Pulmonary-facing", "interarterial subtype"],
+      ["RVOT-facing", "interarterial subtype"],
+    ],
+  },
+  {
+    category: "Ostial location - circumferential",
+    items: [
+      ["Sinus 1 / sinus 2 / sinus 3", "circumferential sinus location"],
+      ["Segment a / segment b / segment c", "circumferential segment location"],
+      ["JC", "juxtacommissural"],
+    ],
+  },
+  {
+    category: "Ostial location - height",
+    items: [
+      ["Level I", "within sinus"],
+      ["Level II", "between commissure and sinutubular junction"],
+      ["Level III", "just above sinutubular junction, <5 mm or <20%"],
+      ["Level IV", ">=5 mm or >=20% above sinutubular junction"],
+    ],
+  },
+  {
+    category: "Ostial relationship",
+    items: [
+      ["Type 1", "separate ostia"],
+      ["Type 2", "adjacent ostia"],
+      ["Type 3", "single ostium with intramural bifurcation"],
+      ["Type 4", "single coronary trunk"],
+    ],
+  },
+  {
+    category: "Ostial morphology",
+    items: [
+      ["Round", "round ostial morphology"],
+      ["Oval", "oval ostial morphology"],
+      ["Slit-like", "slit-like ostial morphology"],
+      ["Hypoplastic / pinhole", "hypoplastic or pinhole ostium"],
+    ],
+  },
+  {
+    category: "Proximal course details, quantitative",
+    items: [
+      ["Intramural segment length", "measurement in mm"],
+      ["Ellipticity / ellipticity index", "major/minor axis ratio"],
+      ["%CSA narrowing", "cross-sectional area narrowing"],
+      ["Effective lumen diameter narrowing", "percentage narrowing"],
+      ["Acute angle of takeoff", "<45 degrees"],
+    ],
+  },
+  {
+    category: "Coronary dominance",
+    items: [
+      ["RD / Right dominance", "right dominance"],
+      ["LD / Left dominance", "left dominance"],
+      ["CD / Codominance", "codominance"],
+    ],
+  },
+] as const;
+
 const keywordChartConfig = {
   count: {
     label: "Occurrences",
@@ -227,6 +319,29 @@ export default function Comparison() {
             {runSummary.failed > 0 ? `; ${runSummary.failed} failed.` : "."}
           </div>
         )}
+
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-base">Controlled Vocabulary Reference</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {controlledVocabulary.map((group) => (
+                <div key={group.category} className="rounded-md border border-border p-3">
+                  <h3 className="text-sm font-semibold text-foreground">{group.category}</h3>
+                  <div className="mt-3 space-y-2">
+                    {group.items.map(([shortName, fullName]) => (
+                      <div key={`${group.category}-${shortName}`} className="text-sm">
+                        <span className="font-medium text-foreground">{shortName}</span>
+                        <span className="text-muted-foreground"> / {fullName}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="mb-6 grid gap-4 md:grid-cols-3">
           <Card>

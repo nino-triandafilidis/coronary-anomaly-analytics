@@ -361,11 +361,6 @@ export default function Analysis() {
                 Reports in Database
               </Button>
             </Link>
-            <Link to="/comparison">
-              <Button variant="ghost" size="sm">
-                Comparison Page
-              </Button>
-            </Link>
             <Link to="/">
               <Button variant="ghost" size="sm">
                 Back to Analyzer

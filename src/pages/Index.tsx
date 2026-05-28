@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, BarChart3, GitCompare, Heart, Loader2, BookmarkCheck } from "lucide-react";
+import { Activity, BarChart3, Heart, Loader2, BookmarkCheck } from "lucide-react";
 import { ReportInput, type ReportSubmission } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
@@ -308,13 +308,6 @@ const Index = () => {
             >
               <BarChart3 className="h-3.5 w-3.5 text-primary" />
               <span>Analysis Page</span>
-            </Link>
-            <Link
-              to="/comparison"
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <GitCompare className="h-3.5 w-3.5 text-primary" />
-              <span>Comparison Page</span>
             </Link>
             <Link
               to="/dataset"

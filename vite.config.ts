@@ -1,20 +1,15 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { componentTagger } from "lovable-tagger";
-import { CTA_PARSER_PROMPT } from "./src/lib/prompts/paperParser.prompt";
 
 const parsedReportsRoot = path.resolve(__dirname, "parsed_reports");
 const parsedTxtDir = path.join(parsedReportsRoot, "txt");
 const parsedJsonDir = path.join(parsedReportsRoot, "json");
 const originalParsedJsonDir = path.join(parsedReportsRoot, "original_json");
-const compareJsonDir = path.join(parsedReportsRoot, "compare_json");
 const uploadedReportsDir = path.join(parsedReportsRoot, "uploads");
-const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const COMPARE_MODEL_NAME = "gpt-5.4";
-const COMPARE_MAX_OUTPUT_TOKENS = 8192;
 
 function sendJson(res: { statusCode: number; setHeader: (name: string, value: string) => void; end: (body?: string) => void }, status: number, body: unknown) {
   res.statusCode = status;
@@ -42,75 +37,6 @@ function sanitizeFileName(name: unknown): string | null {
   if (typeof name !== "string") return null;
   const cleaned = name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^_+/, "");
   return cleaned || null;
-}
-
-function stripJsonFence(text: string): string {
-  return text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-}
-
-function extractResponseText(response: unknown): string {
-  if (
-    response &&
-    typeof response === "object" &&
-    "output_text" in response &&
-    typeof response.output_text === "string"
-  ) {
-    return response.output_text;
-  }
-
-  const output = response && typeof response === "object" && "output" in response
-    ? (response as { output?: unknown }).output
-    : undefined;
-  if (!Array.isArray(output)) return "";
-
-  const textParts: string[] = [];
-  output.forEach((item) => {
-    if (!item || typeof item !== "object") return;
-    const content = "content" in item ? (item as { content?: unknown }).content : undefined;
-    if (!Array.isArray(content)) return;
-    content.forEach((part) => {
-      if (!part || typeof part !== "object") return;
-      if ("text" in part && typeof part.text === "string") textParts.push(part.text);
-    });
-  });
-
-  return textParts.join("\n");
-}
-
-async function queryPaperParser(reportText: string, apiKey: string): Promise<unknown> {
-  const prompt = CTA_PARSER_PROMPT.replace("{{REPORT_TEXT}}", reportText);
-  const rawResponse = await fetch(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: COMPARE_MODEL_NAME,
-      input: prompt,
-      max_output_tokens: COMPARE_MAX_OUTPUT_TOKENS,
-    }),
-  });
-
-  const response = await rawResponse.json();
-  if (!rawResponse.ok) {
-    const message =
-      response && typeof response === "object" && "error" in response
-        ? (response as { error?: { message?: string } }).error?.message
-        : rawResponse.statusText;
-    throw new Error(message ?? "OpenAI comparison parse failed.");
-  }
-
-  const outputText = stripJsonFence(extractResponseText(response));
-  if (!outputText) {
-    throw new Error("OpenAI comparison parse returned no text output.");
-  }
-
-  return JSON.parse(outputText);
 }
 
 function buildStoredReportPayload(
@@ -411,102 +337,8 @@ function uploadedReportsFileApi() {
   };
 }
 
-function compareReportsFileApi(apiKey: string | undefined) {
-  return {
-    name: "compare-reports-file-api",
-    configureServer(server) {
-      server.middlewares.use("/api/compare-reports", async (req, res, next) => {
-        try {
-          await fs.mkdir(parsedTxtDir, { recursive: true });
-          await fs.mkdir(compareJsonDir, { recursive: true });
-
-          const method = req.method ?? "GET";
-          const url = new URL(req.url ?? "/", "http://localhost");
-          const pathParts = url.pathname.replace(/^\/+/, "").split("/").filter(Boolean);
-          const actionFromPath = pathParts[0] ? decodeURIComponent(pathParts[0]) : "";
-
-          if (method === "GET" && !actionFromPath) {
-            const files = await fs.readdir(compareJsonDir);
-            const reports = await Promise.all(
-              files
-                .filter((file) => file.endsWith(".json"))
-                .map(async (file) => {
-                  const fullPath = path.join(compareJsonDir, file);
-                  const raw = await fs.readFile(fullPath, "utf8");
-                  const stat = await fs.stat(fullPath);
-                  return {
-                    id: file.replace(/\.json$/, ""),
-                    jsonFile: path.relative(__dirname, fullPath).replace(/\\/g, "/"),
-                    parsedAt: stat.mtime.toISOString(),
-                    result: JSON.parse(raw),
-                  };
-                })
-            );
-            reports.sort((a, b) => a.id.localeCompare(b.id));
-            sendJson(res, 200, { reports });
-            return;
-          }
-
-          if (method === "POST" && actionFromPath === "run") {
-            if (!apiKey) {
-              sendJson(res, 400, {
-                error: "VITE_OPENAI_API_KEY is not set. Add it to .env before running comparison.",
-              });
-              return;
-            }
-
-            const files = (await fs.readdir(parsedTxtDir)).filter((file) => file.endsWith(".txt"));
-            const results: Array<{ id: string; status: "saved" | "failed"; error?: string }> = [];
-
-            for (const file of files) {
-              const id = file.replace(/\.txt$/, "");
-              if (!sanitizeReportId(id)) {
-                results.push({ id, status: "failed", error: "Invalid report id." });
-                continue;
-              }
-
-              try {
-                const text = await fs.readFile(path.join(parsedTxtDir, file), "utf8");
-                const parsed = await queryPaperParser(text, apiKey);
-                await fs.writeFile(
-                  path.join(compareJsonDir, `${id}.json`),
-                  JSON.stringify(parsed, null, 2),
-                  "utf8"
-                );
-                results.push({ id, status: "saved" });
-              } catch (err) {
-                results.push({
-                  id,
-                  status: "failed",
-                  error: err instanceof Error ? err.message : "Unknown comparison parse error.",
-                });
-              }
-            }
-
-            sendJson(res, 200, {
-              total: files.length,
-              saved: results.filter((item) => item.status === "saved").length,
-              failed: results.filter((item) => item.status === "failed").length,
-              results,
-            });
-            return;
-          }
-
-          next();
-        } catch (err) {
-          sendJson(res, 500, {
-            error: err instanceof Error ? err.message : "Compare report file API failed.",
-          });
-        }
-      });
-    },
-  };
-}
-
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
-
   return {
     server: {
       host: "::",
@@ -519,7 +351,6 @@ export default defineConfig(({ mode }) => {
       react(),
       uploadedReportsFileApi(),
       parsedReportsFileApi(),
-      compareReportsFileApi(env.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY),
       mode === "development" && componentTagger(),
     ].filter(Boolean),
     resolve: {

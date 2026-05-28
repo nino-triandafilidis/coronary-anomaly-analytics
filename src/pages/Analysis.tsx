@@ -11,16 +11,6 @@ import {
   PlusCircle,
   Search,
 } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,12 +34,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
-import {
   getStoredParsedReports,
   getStoredParsedTerms,
   type StoredParsedReport,
@@ -57,8 +41,6 @@ import {
 import type { ReviewDecision, ReviewDecisionRecord } from "@/data/parseTypes";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
-const truncateLabel = (value: string, maxLength = 34) =>
-  value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 
 interface DecisionOccurrence extends ReviewDecisionRecord {
   reportId: string;
@@ -74,43 +56,12 @@ interface DecisionSummary {
 interface NormalizedFeatureRow {
   name: string;
   count: number;
-  pertinentPositive: number;
-  pertinentNegative: number;
   keep: number;
   skip: number;
 }
 
 type FeatureSortKey = keyof NormalizedFeatureRow;
 type FeatureSortDirection = "asc" | "desc";
-
-const reviewChartConfig = {
-  reviewed: {
-    label: "Reviewed",
-    color: "hsl(var(--primary))",
-  },
-  notReviewed: {
-    label: "Not reviewed",
-    color: "hsl(var(--muted-foreground))",
-  },
-} satisfies ChartConfig;
-
-const assertionChartConfig = {
-  positive: {
-    label: "Pertinent positive",
-    color: "hsl(142 70% 45%)",
-  },
-  negative: {
-    label: "Pertinent negative",
-    color: "hsl(var(--muted-foreground))",
-  },
-} satisfies ChartConfig;
-
-const termFrequencyChartConfig = {
-  count: {
-    label: "Count",
-    color: "hsl(var(--primary))",
-  },
-} satisfies ChartConfig;
 
 export default function Analysis() {
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
@@ -175,46 +126,6 @@ export default function Analysis() {
 
   const reportCount = reports.length;
   const reviewedReportCount = reports.filter((report) => report.reviewed).length;
-  const notReviewedReportCount = reportCount - reviewedReportCount;
-  const assertedTermCount = allTerms.filter((term) => term.assertion === "asserted").length;
-  const negatedTermCount = allTerms.filter((term) => term.assertion === "negated").length;
-  const reviewPieData = [
-    {
-      name: "Reviewed",
-      value: reviewedReportCount,
-      fill: "var(--color-reviewed)",
-    },
-    {
-      name: "Not reviewed",
-      value: notReviewedReportCount,
-      fill: "var(--color-notReviewed)",
-    },
-  ];
-  const assertionPieData = [
-    {
-      name: "Pertinent positive",
-      value: assertedTermCount,
-      fill: "var(--color-positive)",
-    },
-    {
-      name: "Pertinent negative",
-      value: negatedTermCount,
-      fill: "var(--color-negative)",
-    },
-  ];
-  const topNormalizedTerms = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    allTerms.forEach((term) => {
-      const name = term.normalizedName?.trim();
-      if (!name) return;
-      counts.set(name, (counts.get(name) ?? 0) + 1);
-    });
-
-    return Array.from(counts, ([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-      .slice(0, 10);
-  }, [allTerms]);
   const summarizeReviewDecisions = (decision: ReviewDecision): DecisionSummary[] => {
     const rows = new Map<string, DecisionSummary>();
 
@@ -257,15 +168,11 @@ export default function Analysis() {
         {
           name,
           count: 0,
-          pertinentPositive: 0,
-          pertinentNegative: 0,
           keep: 0,
           skip: 0,
         };
 
       existing.count += 1;
-      if (term.assertion === "asserted") existing.pertinentPositive += 1;
-      if (term.assertion === "negated") existing.pertinentNegative += 1;
       rows.set(name, existing);
     });
 
@@ -278,8 +185,6 @@ export default function Analysis() {
         {
           name,
           count: 0,
-          pertinentPositive: 0,
-          pertinentNegative: 0,
           keep: 0,
           skip: 0,
         };
@@ -387,12 +292,6 @@ export default function Analysis() {
                 href="#overview-charts"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                Term Distributions
-              </a>
-              <a
-                href="#top-review-words"
-                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
                 Review Decisions
               </a>
               <a
@@ -441,104 +340,13 @@ export default function Analysis() {
 
         <section id="overview-charts" className="mt-10 scroll-mt-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-foreground">Overview Charts</h2>
+            <h2 className="text-2xl font-semibold text-foreground">Review Decisions</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Distribution views for review status and highlighted terminology.
+              Most frequently kept and skipped terms from reviewed reports.
             </p>
           </div>
 
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Top 10 Normalized Highlighted Terms</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer
-                  config={termFrequencyChartConfig}
-                  className="h-[420px] w-full max-w-none aspect-auto justify-start"
-                >
-                  <BarChart
-                    data={topNormalizedTerms}
-                    layout="vertical"
-                    margin={{ left: 24, right: 48 }}
-                  >
-                    <CartesianGrid horizontal={false} />
-                    <XAxis type="number" allowDecimals={false} />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      width={360}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value: string) => truncateLabel(value, 52)}
-                    />
-                    <ChartTooltip content={<NormalizedTermTooltip />} />
-                    <Bar dataKey="count" fill="var(--color-count)" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-
-            <div id="top-review-words" className="grid scroll-mt-6 gap-4 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Review Status</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ChartContainer config={reviewChartConfig} className="mx-auto h-[260px] max-w-[360px]">
-                    <PieChart>
-                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                      <Pie
-                        data={reviewPieData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={58}
-                        outerRadius={92}
-                        paddingAngle={2}
-                      >
-                        {reviewPieData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ChartContainer>
-                  <div className="mt-3 flex justify-center gap-4 text-xs text-muted-foreground">
-                    <span>Reviewed: {loading ? "..." : reviewedReportCount}</span>
-                    <span>Not reviewed: {loading ? "..." : notReviewedReportCount}</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Pertinent Positive / Negative</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ChartContainer config={assertionChartConfig} className="mx-auto h-[260px] max-w-[360px]">
-                    <PieChart>
-                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                      <Pie
-                        data={assertionPieData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={58}
-                        outerRadius={92}
-                        paddingAngle={2}
-                      >
-                        {assertionPieData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ChartContainer>
-                  <div className="mt-3 flex justify-center gap-4 text-xs text-muted-foreground">
-                    <span>Positive: {loading ? "..." : assertedTermCount}</span>
-                    <span>Negative: {loading ? "..." : negatedTermCount}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
             <div className="grid gap-4 lg:grid-cols-2">
               <DecisionWordList
                 title="Top 10 Keeped Words"
@@ -611,24 +419,6 @@ export default function Analysis() {
                     </TableHead>
                     <TableHead className="text-right">
                       <FeatureSortButton
-                        label="Pertinent Positive"
-                        sortKey="pertinentPositive"
-                        activeSort={featureSort}
-                        onSort={handleFeatureSort}
-                        align="right"
-                      />
-                    </TableHead>
-                    <TableHead className="text-right">
-                      <FeatureSortButton
-                        label="Pertinent Negative"
-                        sortKey="pertinentNegative"
-                        activeSort={featureSort}
-                        onSort={handleFeatureSort}
-                        align="right"
-                      />
-                    </TableHead>
-                    <TableHead className="text-right">
-                      <FeatureSortButton
                         label="Keep"
                         sortKey="keep"
                         activeSort={featureSort}
@@ -653,12 +443,6 @@ export default function Analysis() {
                       <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {row.pertinentPositive}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {row.pertinentNegative}
-                        </TableCell>
                         <TableCell className="text-right tabular-nums">{row.keep}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.skip}</TableCell>
                       </TableRow>
@@ -666,7 +450,7 @@ export default function Analysis() {
                   ) : (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={4}
                         className="h-24 text-center text-sm text-muted-foreground"
                       >
                         No normalized feature match.
@@ -706,8 +490,8 @@ export default function Analysis() {
                       <p className="text-xs text-muted-foreground">
                         Position {occurrence.startIndex}-{occurrence.endIndex} ·{" "}
                         {occurrence.assertion === "negated"
-                          ? "pertinent negative"
-                          : "pertinent positive"}
+                          ? "negated"
+                          : "asserted"}
                       </p>
                     </div>
                     <Link
@@ -760,27 +544,6 @@ function FeatureSortButton({
       <span>{label}</span>
       {isActive && <Icon className="h-3.5 w-3.5" />}
     </button>
-  );
-}
-
-function NormalizedTermTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload?: { name?: string; count?: number } }>;
-}) {
-  const item = payload?.[0]?.payload;
-
-  if (!active || !item) {
-    return null;
-  }
-
-  return (
-    <div className="max-w-sm rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
-      <p className="font-medium text-foreground">{item.name}</p>
-      <p className="mt-1 text-muted-foreground">Count: {item.count ?? 0}</p>
-    </div>
   );
 }
 

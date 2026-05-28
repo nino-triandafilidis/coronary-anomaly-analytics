@@ -11,6 +11,7 @@ const parsedTxtDir = path.join(parsedReportsRoot, "txt");
 const parsedJsonDir = path.join(parsedReportsRoot, "json");
 const originalParsedJsonDir = path.join(parsedReportsRoot, "original_json");
 const compareJsonDir = path.join(parsedReportsRoot, "compare_json");
+const uploadedReportsDir = path.join(parsedReportsRoot, "uploads");
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const COMPARE_MODEL_NAME = "gpt-5.4";
 const COMPARE_MAX_OUTPUT_TOKENS = 8192;
@@ -35,6 +36,12 @@ function getRequestBody(req: NodeJS.ReadableStream): Promise<string> {
 function sanitizeReportId(id: unknown): string | null {
   if (typeof id !== "string") return null;
   return /^[a-zA-Z0-9._-]+$/.test(id) ? id : null;
+}
+
+function sanitizeFileName(name: unknown): string | null {
+  if (typeof name !== "string") return null;
+  const cleaned = name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^_+/, "");
+  return cleaned || null;
 }
 
 function stripJsonFence(text: string): string {
@@ -355,6 +362,55 @@ function parsedReportsFileApi() {
   };
 }
 
+function uploadedReportsFileApi() {
+  return {
+    name: "uploaded-reports-file-api",
+    configureServer(server) {
+      server.middlewares.use("/api/uploaded-reports", async (req, res, next) => {
+        try {
+          await fs.mkdir(uploadedReportsDir, { recursive: true });
+
+          const method = req.method ?? "GET";
+          if (method !== "POST") {
+            next();
+            return;
+          }
+
+          const body = JSON.parse(await getRequestBody(req));
+          const uploadId = sanitizeReportId(body.uploadId);
+          const fileName = sanitizeFileName(body.fileName);
+          const dataBase64 = typeof body.dataBase64 === "string" ? body.dataBase64 : "";
+
+          if (!uploadId || !fileName || !dataBase64) {
+            sendJson(res, 400, {
+              error: "Expected uploadId, fileName, and dataBase64.",
+            });
+            return;
+          }
+
+          const ext = path.extname(fileName);
+          const base = path.basename(fileName, ext);
+          const storedName = `${uploadId}-${base}${ext}`;
+          const storedPath = path.join(uploadedReportsDir, storedName);
+
+          await fs.writeFile(storedPath, Buffer.from(dataBase64, "base64"));
+
+          sendJson(res, 201, {
+            uploadId,
+            fileName,
+            storedFile: path.relative(__dirname, storedPath).replace(/\\/g, "/"),
+            storedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          sendJson(res, 500, {
+            error: err instanceof Error ? err.message : "Uploaded report file API failed.",
+          });
+        }
+      });
+    },
+  };
+}
+
 function compareReportsFileApi(apiKey: string | undefined) {
   return {
     name: "compare-reports-file-api",
@@ -461,6 +517,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      uploadedReportsFileApi(),
       parsedReportsFileApi(),
       compareReportsFileApi(env.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY),
       mode === "development" && componentTagger(),

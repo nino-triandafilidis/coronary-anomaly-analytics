@@ -17,6 +17,53 @@ export interface StoredParsedReport {
   reviewDecisions?: ReviewDecisionRecord[];
 }
 
+export interface StoredUploadedReportFile {
+  uploadId: string;
+  fileName: string;
+  storedFile: string;
+  storedAt: string;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+export async function storeUploadedReportFile(
+  file: File,
+  uploadId: string
+): Promise<StoredUploadedReportFile> {
+  console.time(`[UploadedReportStorage] store ${file.name}`);
+  const response = await fetch("/api/uploaded-reports", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      uploadId,
+      fileName: file.name,
+      mimeType: file.type,
+      dataBase64: arrayBufferToBase64(await file.arrayBuffer()),
+    }),
+  });
+
+  if (!response.ok) {
+    console.timeEnd(`[UploadedReportStorage] store ${file.name}`);
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? "Failed to store uploaded report file.");
+  }
+
+  const storedFile = await response.json();
+  console.timeEnd(`[UploadedReportStorage] store ${file.name}`);
+  return storedFile;
+}
+
 export async function storeParsedReportFiles(
   text: string,
   parseResult: ParseResult

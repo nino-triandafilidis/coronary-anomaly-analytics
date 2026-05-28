@@ -1,9 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 const MAX_TEXT_ITEMS_PER_PAGE = 50_000;
 const MAX_EXTRACTED_CHARS = 200_000;
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 type WorkerRequest = {
   type: "parse";

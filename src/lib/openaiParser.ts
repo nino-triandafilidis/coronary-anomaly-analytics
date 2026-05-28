@@ -13,7 +13,7 @@
 
 import type { ParsedTerm, ParseResult, Assertion } from "@/data/parseTypes";
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
-import { findTermPosition } from "@/lib/positionResolver";
+import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -28,6 +28,12 @@ const OPENAI_REQUEST_TIMEOUT_MS = 120_000;
 // different GPT-5.4 rates.
 const INPUT_COST_PER_TOKEN = 10.0 / 1_000_000;
 const OUTPUT_COST_PER_TOKEN = 30.0 / 1_000_000;
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => window.setTimeout(resolve, 0));
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Tool schema: forces structured JSON output
@@ -241,25 +247,38 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   // ---------------------------------------------------------------
   // Position-resolve every finding back to source text
   // ---------------------------------------------------------------
+  console.time("[OpenAIParser] position resolve");
   const usedPositions = new Set<number>();
   const parsedTerms: ParsedTerm[] = [];
   const dropped: { verbatimText: string; reason: string }[] = [];
   let whitespaceFixCount = 0;
+  const positionResolver = createReportPositionResolver(reportText);
 
-  for (const f of findings) {
+  for (const [index, f] of findings.entries()) {
+    if (index > 0 && index % 25 === 0) {
+      await yieldToBrowser();
+    }
+
     if (!f.verbatimText) {
       dropped.push({ verbatimText: "(empty)", reason: "missing verbatimText" });
       continue;
     }
 
     let searchAfter = 0;
-    let pos = findTermPosition(reportText, f.verbatimText, searchAfter);
+    let pos = positionResolver.findTermPosition(f.verbatimText, searchAfter);
 
     // Skip already-claimed start positions so duplicates can each find their own
     // occurrence (e.g. same finding appears in FINDINGS and IMPRESSION).
+    let duplicateSearchCount = 0;
     while (pos && usedPositions.has(pos.startIndex)) {
       searchAfter = pos.startIndex + 1;
-      pos = findTermPosition(reportText, f.verbatimText, searchAfter);
+      pos = positionResolver.findTermPosition(f.verbatimText, searchAfter);
+      duplicateSearchCount++;
+
+      if (duplicateSearchCount > usedPositions.size + 1) {
+        pos = null;
+        break;
+      }
     }
 
     if (!pos) {
@@ -317,9 +336,9 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
       match: t.correctionType ?? "exact",
     }))
   );
-  console.groupEnd();
-
   parsedTerms.sort((a, b) => a.startIndex - b.startIndex);
+  console.timeEnd("[OpenAIParser] position resolve");
+  console.groupEnd();
 
   return {
     reportId: crypto.randomUUID(),

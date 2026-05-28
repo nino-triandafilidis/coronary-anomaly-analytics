@@ -4,14 +4,8 @@
  */
 
 import * as pdfjsLib from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import PdfJsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 import mammoth from "mammoth";
-
-// Keep PDF parsing off the main thread. Loading this from the bundle avoids
-// CDN failures that can make PDF.js fall back to expensive main-thread work.
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-}
 
 const SUPPORTED_TYPES = {
   "text/plain": "txt",
@@ -67,8 +61,11 @@ export async function parsePdf(
   arrayBuffer: ArrayBuffer,
   onProgress?: (loaded: number, total: number) => void
 ): Promise<string> {
+  const workerPort = new PdfJsWorker();
+  const pdfWorker = pdfjsLib.PDFWorker.create({ port: workerPort });
   const loadingTask = pdfjsLib.getDocument({
-    data: arrayBuffer,
+    data: new Uint8Array(arrayBuffer),
+    worker: pdfWorker,
     useSystemFonts: true,
   });
   if (onProgress) {
@@ -76,22 +73,29 @@ export async function parsePdf(
       if (p.total > 0) onProgress(p.loaded, p.total);
     });
   }
-  const pdf = await loadingTask.promise;
-  const numPages = pdf.numPages;
-  const pageTexts: string[] = [];
-  for (let i = 1; i <= numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ");
-    pageTexts.push(text);
-    if (onProgress && numPages > 0) {
-      onProgress(i, numPages);
+  let pdf: pdfjsLib.PDFDocumentProxy | null = null;
+  try {
+    pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+    const pageTexts: string[] = [];
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      pageTexts.push(text);
+      page.cleanup();
+      if (onProgress && numPages > 0) {
+        onProgress(i, numPages);
+      }
+      await yieldToBrowser();
     }
-    await yieldToBrowser();
+    return pageTexts.join("\n\n");
+  } finally {
+    await pdf?.destroy();
+    pdfWorker.destroy();
   }
-  return pageTexts.join("\n\n");
 }
 
 /**

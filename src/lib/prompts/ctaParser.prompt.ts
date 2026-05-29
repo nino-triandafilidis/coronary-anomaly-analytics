@@ -39,6 +39,48 @@ WHAT COUNTS AS A "TERM"
 - Anatomic variants worth flagging even if benign: right/left/co-dominant
   circulation, left-sided aortic arch when noted as a variant.
 
+CORONARY-SPECIFIC MODIFIERS
+For coronary artery findings, generic modifiers such as "narrowing",
+"significant narrowing", "stenosis", "compression", "narrowed",
+"slit-like ostium", "acute takeoff", "intramural course", or
+"interarterial course" must be resolved to the most specific coronary artery
+or coronary segment mentioned in the same sentence or immediately preceding
+sentence.
+
+Do not return only a generic normalizedName such as "significant narrowing"
+when the report makes clear which vessel it applies to. The normalizedName
+should include the vessel or segment, such as "significant narrowing of left
+circumflex artery", "proximal narrowing of RCA", or "slit-like ostium of left
+main coronary artery".
+
+The verbatimText field must still obey the exact-text rule. If the vessel name
+and the modifier are not part of one contiguous substring, keep verbatimText as
+the longest exact contiguous substring and put the vessel-resolved concept in
+normalizedName.
+
+Examples:
+  "The left circumflex artery is patent without significant narrowing."
+    → verbatimText: "significant narrowing"
+    → normalizedName: "significant narrowing of left circumflex artery"
+    → assertion: "negated"
+
+  "The RCA has an interarterial course and is significantly narrowed proximally."
+    → verbatimText: "significantly narrowed proximally"
+    → normalizedName: "significant proximal narrowing of RCA"
+    → assertion: "asserted"
+
+  "Anomalous left circumflex artery arising from the right coronary cusp,
+   narrowed measuring approximately 1 x 4 mm in cross-section."
+    → verbatimText: "narrowed measuring approximately 1 x 4 mm in cross-section"
+    → normalizedName: "narrowing of anomalous left circumflex artery, 1 x 4 mm"
+    → assertion: "asserted"
+
+  "The right coronary artery is normal. The left main coronary artery has a
+   slit-like ostium."
+    → verbatimText: "slit-like ostium"
+    → normalizedName: "slit-like ostium of left main coronary artery"
+    → assertion: "asserted"
+
 MEASUREMENTS
 Include a measurement when it is bound to anatomy or pathology in the same
 sentence or clause — even if no qualifier word like "abnormal" or "concerning"

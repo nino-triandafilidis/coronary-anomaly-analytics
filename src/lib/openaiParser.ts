@@ -58,7 +58,8 @@ const FINDINGS_SCHEMA = {
           },
           normalizedName: {
             type: "string",
-            description: "Canonical name in Title Case (e.g. 'Pericardial Effusion').",
+            description:
+              "Canonical name in Title Case. For coronary modifiers, resolve the concept to the most specific vessel or segment when available, e.g. 'Significant Narrowing Of Left Circumflex Artery' rather than only 'Significant Narrowing'.",
           },
           assertion: {
             type: "string",

@@ -12,7 +12,7 @@ export type Assertion = "asserted" | "negated";
 
 export interface ParsedTerm {
   term: string;           // The exact text span found in the report
-  normalizedName: string; // Canonical/normalized name (e.g. "Pulmonary Embolism")
+  normalizedName: string; // Canonical name; coronary modifiers should include the resolved vessel/segment
   assertion: Assertion;   // "asserted" = present, "negated" = ruled out
   confidence: number;     // Kept for backward compatibility; always 1
   startIndex: number;     // Position in report text

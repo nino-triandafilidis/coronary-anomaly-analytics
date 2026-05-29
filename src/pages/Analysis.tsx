@@ -5,7 +5,6 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
-  Cable,
   ExternalLink,
   FileText,
   Highlighter,
@@ -139,12 +138,19 @@ interface CoronaryNarrowingRow {
 }
 
 type BridgeDashboardCategory = "notPresent" | "grade1" | "grade2" | "grade3";
+type BridgeCountCategory = "notPresent" | "one" | "two" | "threePlus";
 
 interface BridgeDashboardStats {
   totalPatients: number;
   bridgePatients: number;
   multipleBridgePatients: number;
   categories: Record<BridgeDashboardCategory, number>;
+  bridgeCounts: Record<BridgeCountCategory, number>;
+}
+
+interface HorizontalBarDatum {
+  label: string;
+  value: number;
 }
 
 type FeatureSortKey = keyof NormalizedFeatureRow;
@@ -326,6 +332,12 @@ export default function Analysis() {
       grade2: 0,
       grade3: 0,
     };
+    const bridgeCounts: BridgeDashboardStats["bridgeCounts"] = {
+      notPresent: 0,
+      one: 0,
+      two: 0,
+      threePlus: 0,
+    };
     let bridgePatients = 0;
     let multipleBridgePatients = 0;
 
@@ -348,11 +360,15 @@ export default function Analysis() {
 
       if (bridgeCount <= 0 || !highestGrade) {
         categories.notPresent += 1;
+        bridgeCounts.notPresent += 1;
         return;
       }
 
       bridgePatients += 1;
       if (bridgeCount > 1) multipleBridgePatients += 1;
+      if (bridgeCount === 1) bridgeCounts.one += 1;
+      else if (bridgeCount === 2) bridgeCounts.two += 1;
+      else bridgeCounts.threePlus += 1;
       categories[`grade${highestGrade}` as BridgeDashboardCategory] += 1;
     });
 
@@ -361,8 +377,27 @@ export default function Analysis() {
       bridgePatients,
       multipleBridgePatients,
       categories,
+      bridgeCounts,
     };
   }, [reports]);
+  const bridgeCountChartData = useMemo<HorizontalBarDatum[]>(
+    () => [
+      { label: "Not Present", value: bridgeDashboardStats.bridgeCounts.notPresent },
+      { label: "1", value: bridgeDashboardStats.bridgeCounts.one },
+      { label: "2", value: bridgeDashboardStats.bridgeCounts.two },
+      { label: "3+", value: bridgeDashboardStats.bridgeCounts.threePlus },
+    ],
+    [bridgeDashboardStats]
+  );
+  const bridgeGradeChartData = useMemo<HorizontalBarDatum[]>(
+    () => [
+      { label: "Not Present", value: bridgeDashboardStats.categories.notPresent },
+      { label: "Grade 1", value: bridgeDashboardStats.categories.grade1 },
+      { label: "Grade 2", value: bridgeDashboardStats.categories.grade2 },
+      { label: "Grade 3", value: bridgeDashboardStats.categories.grade3 },
+    ],
+    [bridgeDashboardStats]
+  );
   const handleFeatureSort = (key: FeatureSortKey) => {
     setFeatureSort((prev) => ({
       key,
@@ -446,6 +481,12 @@ export default function Analysis() {
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 Coronary Narrowing
+              </a>
+              <a
+                href="#myocardial-bridges"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Myocardial Bridges
               </a>
               <a
                 href="#frequency-table"
@@ -571,65 +612,32 @@ export default function Analysis() {
               </Table>
             </CardContent>
           </Card>
+        </section>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            {[
-              {
-                title: "Patients With Bridges",
-                value: bridgeDashboardStats.bridgePatients,
-                note: `${bridgeDashboardStats.totalPatients} total patients`,
-              },
-              {
-                title: "Not Present",
-                value: bridgeDashboardStats.categories.notPresent,
-                note: "No asserted myocardial bridge",
-              },
-              {
-                title: "Grade 1",
-                value: bridgeDashboardStats.categories.grade1,
-                note: "Highest bridge grade per patient",
-              },
-              {
-                title: "Grade 2",
-                value: bridgeDashboardStats.categories.grade2,
-                note: "Highest bridge grade per patient",
-              },
-              {
-                title: "Grade 3",
-                value: bridgeDashboardStats.categories.grade3,
-                note: "Highest bridge grade per patient",
-              },
-            ].map((item) => (
-              <Card key={item.title}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    {item.title}
-                  </CardTitle>
-                  <Cable className="h-4 w-4 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-semibold text-foreground">
-                    {loading ? "..." : item.value}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>
-                </CardContent>
-              </Card>
-            ))}
+        <section id="myocardial-bridges" className="mt-10 scroll-mt-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-foreground">
+              Myocardial Bridge Distribution
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Patient-level bridge count and highest grade distributions.
+            </p>
           </div>
 
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="text-base">Multiple Bridge Patients</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-semibold text-foreground">
-                {loading ? "..." : bridgeDashboardStats.multipleBridgePatients}
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Patients with more than one asserted myocardial bridge.
-              </p>
-            </CardContent>
-          </Card>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <HorizontalBarChart
+              title="Bridge Count"
+              subtitle={`${bridgeDashboardStats.bridgePatients} patients with bridges; ${bridgeDashboardStats.multipleBridgePatients} with more than one`}
+              data={bridgeCountChartData}
+              loading={loading}
+            />
+            <HorizontalBarChart
+              title="Highest Bridge Grade"
+              subtitle="If multiple bridges are present, only the highest grade is counted"
+              data={bridgeGradeChartData}
+              loading={loading}
+            />
+          </div>
         </section>
 
         <section id="frequency-table" className="mt-10 scroll-mt-6">
@@ -800,6 +808,50 @@ function FeatureSortButton({
       <span>{label}</span>
       {isActive && <Icon className="h-3.5 w-3.5" />}
     </button>
+  );
+}
+
+function HorizontalBarChart({
+  title,
+  subtitle,
+  data,
+  loading,
+}: {
+  title: string;
+  subtitle: string;
+  data: HorizontalBarDatum[];
+  loading: boolean;
+}) {
+  const maxValue = Math.max(1, ...data.map((item) => item.value));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {data.map((item) => {
+            const width = loading ? 0 : Math.max(3, (item.value / maxValue) * 100);
+            return (
+              <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3">
+                <span className="text-sm text-muted-foreground">{item.label}</span>
+                <div className="h-7 overflow-hidden rounded-md bg-muted">
+                  <div
+                    className="h-full rounded-md bg-primary transition-all"
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+                <span className="text-right text-sm font-medium tabular-nums text-foreground">
+                  {loading ? "..." : item.value}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

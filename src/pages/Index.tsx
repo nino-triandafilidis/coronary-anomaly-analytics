@@ -464,7 +464,7 @@ const Index = () => {
                     onClick={handleReset}
                     className="text-sm font-medium text-primary hover:underline"
                   >
-                    New Batch
+                    New Upload
                   </button>
                 </div>
               </div>

@@ -42,6 +42,34 @@ import type { ReviewDecision, ReviewDecisionRecord } from "@/data/parseTypes";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 
+function getAnalysisFeatureName(record: {
+  normalizedName?: string;
+  term?: string;
+}): string {
+  return (record.normalizedName?.trim() || record.term?.trim() || "").replace(/\s+/g, " ");
+}
+
+function isCoronaryNarrowingFeature(name: string): boolean {
+  const normalized = name.toLowerCase();
+  const hasNarrowingConcept =
+    /\bnarrow(?:ing|ed)?\b/.test(normalized) ||
+    /\bstenos(?:is|ed)\b/.test(normalized) ||
+    /\bcompression\b/.test(normalized) ||
+    /\bcompressed\b/.test(normalized);
+  const hasCoronaryTarget =
+    /\bcoronary\b/.test(normalized) ||
+    /\bartery\b/.test(normalized) ||
+    /\brca\b/.test(normalized) ||
+    /\blad\b/.test(normalized) ||
+    /\blcx\b/.test(normalized) ||
+    /\bcircumflex\b/.test(normalized) ||
+    /\bleft main\b/.test(normalized) ||
+    /\bright coronary\b/.test(normalized) ||
+    /\bleft coronary\b/.test(normalized);
+
+  return hasNarrowingConcept && hasCoronaryTarget;
+}
+
 interface DecisionOccurrence extends ReviewDecisionRecord {
   reportId: string;
   reportText: string;
@@ -100,7 +128,7 @@ export default function Analysis() {
 
     reports.forEach((report) => {
       getStoredParsedTerms(report).forEach((term) => {
-        const name = term.normalizedName?.trim();
+        const name = getAnalysisFeatureName(term);
         if (name) uniqueNames.add(name);
       });
     });
@@ -132,7 +160,7 @@ export default function Analysis() {
     allReviewDecisions
       .filter((record) => record.decision === decision)
       .forEach((record) => {
-        const name = record.normalizedName?.trim() || record.term?.trim();
+        const name = getAnalysisFeatureName(record);
         if (!name) return;
 
         const existing = rows.get(name) ?? { name, count: 0, occurrences: [] };
@@ -160,7 +188,7 @@ export default function Analysis() {
     >();
 
     allTerms.forEach((term) => {
-      const name = term.normalizedName?.trim();
+      const name = getAnalysisFeatureName(term);
       if (!name) return;
 
       const existing =
@@ -177,7 +205,7 @@ export default function Analysis() {
     });
 
     allReviewDecisions.forEach((record) => {
-      const name = record.normalizedName?.trim() || record.term?.trim();
+      const name = getAnalysisFeatureName(record);
       if (!name) return;
 
       const existing =
@@ -216,6 +244,13 @@ export default function Analysis() {
       return a.name.localeCompare(b.name);
     });
   }, [featureSearch, featureSort, normalizedFeatureRows]);
+  const coronaryNarrowingRows = useMemo(
+    () =>
+      normalizedFeatureRows
+        .filter((row) => isCoronaryNarrowingFeature(row.name))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    [normalizedFeatureRows]
+  );
   const handleFeatureSort = (key: FeatureSortKey) => {
     setFeatureSort((prev) => ({
       key,
@@ -293,6 +328,12 @@ export default function Analysis() {
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 Review Decisions
+              </a>
+              <a
+                href="#coronary-narrowing"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Coronary Narrowing
               </a>
               <a
                 href="#frequency-table"
@@ -374,6 +415,50 @@ export default function Analysis() {
               />
             </div>
           </div>
+        </section>
+
+        <section id="coronary-narrowing" className="mt-10 scroll-mt-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-foreground">Coronary Narrowing Details</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Narrowing-related findings resolved to the specific coronary artery or segment.
+            </p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Narrowing By Coronary Artery</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[360px]">Resolved narrowing feature</TableHead>
+                    <TableHead className="text-right">Count</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {coronaryNarrowingRows.length > 0 ? (
+                    coronaryNarrowingRows.map((row) => (
+                      <TableRow key={row.name}>
+                        <TableCell className="font-medium">{row.name}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.count}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={2}
+                        className="h-24 text-center text-sm text-muted-foreground"
+                      >
+                        No vessel-specific coronary narrowing features found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </section>
 
         <section id="frequency-table" className="mt-10 scroll-mt-6">

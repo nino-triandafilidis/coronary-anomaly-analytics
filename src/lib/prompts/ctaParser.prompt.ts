@@ -81,6 +81,55 @@ Examples:
     → normalizedName: "slit-like ostium of left main coronary artery"
     → assertion: "asserted"
 
+MYOCARDIAL BRIDGE SUMMARY
+In addition to findings, return a per-patient "myocardialBridgeSummary".
+This summary is patient-level, not finding-level.
+
+bridgeCount:
+- Count only ASSERTED myocardial bridges.
+- Typical value is 1; maximum is usually about 2.
+- If the report explicitly says there is no myocardial bridge, no complete
+  bridge, or no bridged segment, set bridgeCount to 0 and bridges to [] unless
+  another bridge is asserted elsewhere in the report.
+- If a partial/superficial bridge is asserted and a complete bridge is negated,
+  count the asserted partial/superficial bridge.
+
+For each bridge in bridges, return:
+- bridgeIndex: 1-based index.
+- vessel: vessel containing the bridge, such as "LAD", "mid LAD", "RCA",
+  "LCx", or "unknown".
+- segment: most specific segment available, such as "proximal LAD",
+  "mid LAD", "distal LAD", or "unknown".
+- grade: numeric grade 1, 2, 3, or null.
+- lengthMm: bridge length in millimeters, or null if not reported.
+- depthMm: bridge depth in millimeters, or null if not reported.
+- evidenceText: exact contiguous substring supporting the bridge detail.
+
+Bridge grade:
+- Grade 1: explicitly grade/type 1, superficial, mild, minimal, or no
+  significant systolic compression.
+- Grade 2: explicitly grade/type 2, moderate depth, moderate tunneling, or
+  moderate systolic compression.
+- Grade 3: explicitly grade/type 3, deep, severe, long/deep tunneled segment,
+  or severe/significant systolic compression.
+- Use the explicit grade in the report when present.
+- Use null when the report mentions a bridge but does not provide enough
+  information to assign grade 1-3.
+
+Examples:
+  "Short mid LAD type 1 myocardial bridge measuring 8 mm in length and 2 mm
+   in depth."
+    -> bridgeCount: 1
+    -> bridge: vessel "LAD", segment "mid LAD", grade 1, lengthMm 8, depthMm 2
+
+  "No complete myocardial bridge."
+    -> bridgeCount: 0
+    -> bridges: []
+
+  "Superficial partial bridging of the mid LAD. No complete myocardial bridge."
+    -> bridgeCount: 1
+    -> bridge: vessel "LAD", segment "mid LAD", grade 1, lengthMm null, depthMm null
+
 MEASUREMENTS
 Include a measurement when it is bound to anatomy or pathology in the same
 sentence or clause — even if no qualifier word like "abnormal" or "concerning"
@@ -145,5 +194,7 @@ find a contiguous substring that captures the finding, return the longest
 contiguous substring that does and put the cleaned form in "normalizedName".
 
 OUTPUT
-Call the \`record_findings\` tool exactly once. If no findings are present,
-call it with { "findings": [] }.`;
+Call the \`record_findings\` tool exactly once. The output must include both
+"myocardialBridgeSummary" and "findings". If no findings are present, call it
+with { "myocardialBridgeSummary": { "bridgeCount": 0, "bridges": [] },
+"findings": [] }.`;

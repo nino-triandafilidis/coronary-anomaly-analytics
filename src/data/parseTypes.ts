@@ -23,10 +23,26 @@ export interface ParsedTerm {
   resolutionNote?: string; // Human-readable description of the correction
 }
 
+export interface MyocardialBridgeDetail {
+  bridgeIndex: number;
+  vessel: string;
+  segment: string;
+  grade: 1 | 2 | 3 | null;
+  lengthMm: number | null;
+  depthMm: number | null;
+  evidenceText: string;
+}
+
+export interface MyocardialBridgeSummary {
+  bridgeCount: number;
+  bridges: MyocardialBridgeDetail[];
+}
+
 export interface ParseResult {
   reportId: string;
   reportText: string;
   parsedTerms: ParsedTerm[];
+  myocardialBridgeSummary: MyocardialBridgeSummary;
   parserModel: string;    // e.g. "gpt-5.4"
   parseTimeMs: number;
   totalTokensUsed: number;

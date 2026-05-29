@@ -11,7 +11,12 @@
  * The prompt is in src/lib/prompts/ctaParser.prompt.ts.
  */
 
-import type { ParsedTerm, ParseResult, Assertion } from "@/data/parseTypes";
+import type {
+  ParsedTerm,
+  ParseResult,
+  Assertion,
+  MyocardialBridgeSummary,
+} from "@/data/parseTypes";
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
 import { createReportPositionResolver } from "@/lib/positionResolver";
 
@@ -43,6 +48,74 @@ const FINDINGS_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
+    myocardialBridgeSummary: {
+      type: "object",
+      additionalProperties: false,
+      description:
+        "Per-patient myocardial bridge summary. If no myocardial bridge is asserted, bridgeCount must be 0 and bridges must be empty.",
+      properties: {
+        bridgeCount: {
+          type: "integer",
+          minimum: 0,
+          description:
+            "Number of asserted myocardial bridges in this patient. Usually 1, occasionally 2; use 0 when no bridge is present.",
+        },
+        bridges: {
+          type: "array",
+          description:
+            "One item for each asserted myocardial bridge. Do not include negated bridges.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              bridgeIndex: {
+                type: "integer",
+                minimum: 1,
+                description: "1-based bridge index within this report.",
+              },
+              vessel: {
+                type: "string",
+                description:
+                  "Coronary vessel containing the bridge, e.g. LAD, mid LAD, RCA, LCx, or unknown.",
+              },
+              segment: {
+                type: "string",
+                description:
+                  "Specific segment if available, e.g. proximal LAD, mid LAD, distal LAD, or unknown.",
+              },
+              grade: {
+                anyOf: [{ type: "integer", enum: [1, 2, 3] }, { type: "null" }],
+                description:
+                  "Myocardial bridge grade: 1=superficial/mild/type 1; 2=moderate/type 2; 3=deep/severe/type 3. Null if not stated or inferable.",
+              },
+              lengthMm: {
+                anyOf: [{ type: "number" }, { type: "null" }],
+                description: "Bridge length in millimeters, or null if not reported.",
+              },
+              depthMm: {
+                anyOf: [{ type: "number" }, { type: "null" }],
+                description: "Bridge depth in millimeters, or null if not reported.",
+              },
+              evidenceText: {
+                type: "string",
+                description:
+                  "Exact contiguous report substring supporting this bridge detail.",
+              },
+            },
+            required: [
+              "bridgeIndex",
+              "vessel",
+              "segment",
+              "grade",
+              "lengthMm",
+              "depthMm",
+              "evidenceText",
+            ],
+          },
+        },
+      },
+      required: ["bridgeCount", "bridges"],
+    },
     findings: {
       type: "array",
       description: "Every clinically relevant term in the report.",
@@ -78,7 +151,7 @@ const FINDINGS_SCHEMA = {
       },
     },
   },
-  required: ["findings"],
+  required: ["myocardialBridgeSummary", "findings"],
 } as const;
 
 const RECORD_FINDINGS_TOOL = {
@@ -103,6 +176,7 @@ interface ToolFinding {
 }
 
 interface ToolInput {
+  myocardialBridgeSummary: MyocardialBridgeSummary;
   findings: ToolFinding[];
 }
 
@@ -242,8 +316,18 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   );
 
   const findings = Array.isArray(toolInput?.findings) ? toolInput.findings : [];
+  const myocardialBridgeSummary: MyocardialBridgeSummary =
+    toolInput?.myocardialBridgeSummary &&
+    typeof toolInput.myocardialBridgeSummary.bridgeCount === "number" &&
+    Array.isArray(toolInput.myocardialBridgeSummary.bridges)
+      ? toolInput.myocardialBridgeSummary
+      : { bridgeCount: 0, bridges: [] };
 
   console.log(`GPT returned ${findings.length} findings`);
+  console.log(
+    `Myocardial bridges: ${myocardialBridgeSummary.bridgeCount}`,
+    myocardialBridgeSummary.bridges
+  );
 
   // ---------------------------------------------------------------
   // Position-resolve every finding back to source text
@@ -345,6 +429,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     reportId: crypto.randomUUID(),
     reportText,
     parsedTerms,
+    myocardialBridgeSummary,
     parserModel: MODEL_NAME,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,

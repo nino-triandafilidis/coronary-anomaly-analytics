@@ -49,25 +49,69 @@ function getAnalysisFeatureName(record: {
   return (record.normalizedName?.trim() || record.term?.trim() || "").replace(/\s+/g, " ");
 }
 
-function isCoronaryNarrowingFeature(name: string): boolean {
-  const normalized = name.toLowerCase();
-  const hasNarrowingConcept =
-    /\bnarrow(?:ing|ed)?\b/.test(normalized) ||
-    /\bstenos(?:is|ed)\b/.test(normalized) ||
-    /\bcompression\b/.test(normalized) ||
-    /\bcompressed\b/.test(normalized);
-  const hasCoronaryTarget =
-    /\bcoronary\b/.test(normalized) ||
-    /\bartery\b/.test(normalized) ||
-    /\brca\b/.test(normalized) ||
-    /\blad\b/.test(normalized) ||
-    /\blcx\b/.test(normalized) ||
-    /\bcircumflex\b/.test(normalized) ||
-    /\bleft main\b/.test(normalized) ||
-    /\bright coronary\b/.test(normalized) ||
-    /\bleft coronary\b/.test(normalized);
+function normalizeCoronaryNarrowingFeature(record: {
+  normalizedName?: string;
+  term?: string;
+  context?: string;
+}): string | null {
+  const featureName = getAnalysisFeatureName(record);
+  const haystack = `${featureName} ${record.context ?? ""}`.toLowerCase();
 
-  return hasNarrowingConcept && hasCoronaryTarget;
+  const hasNarrowingConcept =
+    /\bnarrow(?:ing|ed)?\b/.test(haystack) ||
+    /\bstenos(?:is|ed)\b/.test(haystack) ||
+    /\bcompression\b/.test(haystack) ||
+    /\bcompressed\b/.test(haystack);
+  if (!hasNarrowingConcept) return null;
+
+  const vessel = (() => {
+    if (/\bleft\s+main\b|\blmca\b|\bleft\s+main\s+coronary\s+artery\b/.test(haystack)) {
+      return "left main coronary artery";
+    }
+    if (/\bleft\s+circumflex\b|\bcircumflex\b|\blcx\b/.test(haystack)) {
+      return "left circumflex artery";
+    }
+    if (/\bright\s+coronary\b|\brca\b/.test(haystack)) {
+      return "right coronary artery";
+    }
+    if (/\bleft\s+anterior\s+descending\b|\blad\b/.test(haystack)) {
+      return "left anterior descending artery";
+    }
+    if (/\bleft\s+coronary\s+artery\b|\blca\b/.test(haystack)) {
+      return "left coronary artery";
+    }
+    if (/\bcoronary\s+arter(?:y|ies)\b/.test(haystack)) {
+      return "coronary artery";
+    }
+    return null;
+  })();
+  if (!vessel) return null;
+
+  const location = (() => {
+    if (/\bostium\b|\bostial\b/.test(haystack)) return "ostial ";
+    if (/\bproximal(?:ly)?\b/.test(haystack)) return "proximal ";
+    if (/\bmid\b/.test(haystack)) return "mid ";
+    if (/\bdistal(?:ly)?\b/.test(haystack)) return "distal ";
+    return "";
+  })();
+
+  const severity = (() => {
+    if (/\bsevere(?:ly)?\b/.test(haystack)) return "severe ";
+    if (/\bmoderate(?:ly)?\b/.test(haystack)) return "moderate ";
+    if (/\bmild(?:ly)?\b/.test(haystack)) return "mild ";
+    if (/\bsignificant(?:ly)?\b/.test(haystack)) return "significant ";
+    if (/\bslight(?:ly)?\b/.test(haystack)) return "slight ";
+    if (/\bminimal(?:ly)?\b/.test(haystack)) return "minimal ";
+    return "";
+  })();
+
+  const concept = /\bcompression\b|\bcompressed\b/.test(haystack)
+    ? "compression"
+    : /\bstenos(?:is|ed)\b/.test(haystack)
+      ? "stenosis"
+      : "narrowing";
+
+  return `${severity}${location}${concept} of ${vessel}`.replace(/\s+/g, " ").trim();
 }
 
 interface DecisionOccurrence extends ReviewDecisionRecord {
@@ -86,6 +130,11 @@ interface NormalizedFeatureRow {
   count: number;
   keep: number;
   skip: number;
+}
+
+interface CoronaryNarrowingRow {
+  name: string;
+  count: number;
 }
 
 type FeatureSortKey = keyof NormalizedFeatureRow;
@@ -244,13 +293,22 @@ export default function Analysis() {
       return a.name.localeCompare(b.name);
     });
   }, [featureSearch, featureSort, normalizedFeatureRows]);
-  const coronaryNarrowingRows = useMemo(
-    () =>
-      normalizedFeatureRows
-        .filter((row) => isCoronaryNarrowingFeature(row.name))
-        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-    [normalizedFeatureRows]
-  );
+  const coronaryNarrowingRows = useMemo<CoronaryNarrowingRow[]>(() => {
+    const rows = new Map<string, CoronaryNarrowingRow>();
+
+    allTerms.forEach((term) => {
+      const normalizedName = normalizeCoronaryNarrowingFeature(term);
+      if (!normalizedName) return;
+
+      const existing = rows.get(normalizedName) ?? { name: normalizedName, count: 0 };
+      existing.count += 1;
+      rows.set(normalizedName, existing);
+    });
+
+    return Array.from(rows.values()).sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name)
+    );
+  }, [allTerms]);
   const handleFeatureSort = (key: FeatureSortKey) => {
     setFeatureSort((prev) => ({
       key,

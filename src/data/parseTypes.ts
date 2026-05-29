@@ -35,6 +35,7 @@ export interface MyocardialBridgeDetail {
 
 export interface MyocardialBridgeSummary {
   bridgeCount: number;
+  highestGrade: 1 | 2 | 3 | null;
   bridges: MyocardialBridgeDetail[];
 }
 

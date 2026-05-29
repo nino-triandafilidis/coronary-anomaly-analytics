@@ -60,6 +60,11 @@ const FINDINGS_SCHEMA = {
           description:
             "Number of asserted myocardial bridges in this patient. Usually 1, occasionally 2; use 0 when no bridge is present.",
         },
+        highestGrade: {
+          anyOf: [{ type: "integer", enum: [1, 2, 3] }, { type: "null" }],
+          description:
+            "Patient-level bridge category. Null when no myocardial bridge is present; otherwise the highest bridge grade in the report. If multiple bridges are present, report the highest grade only for this field.",
+        },
         bridges: {
           type: "array",
           description:
@@ -114,7 +119,7 @@ const FINDINGS_SCHEMA = {
           },
         },
       },
-      required: ["bridgeCount", "bridges"],
+      required: ["bridgeCount", "highestGrade", "bridges"],
     },
     findings: {
       type: "array",
@@ -316,12 +321,32 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   );
 
   const findings = Array.isArray(toolInput?.findings) ? toolInput.findings : [];
+  const rawBridgeSummary = toolInput?.myocardialBridgeSummary;
+  const rawBridgeGrades = Array.isArray(rawBridgeSummary?.bridges)
+    ? rawBridgeSummary.bridges
+        .map((bridge) => bridge.grade)
+        .filter((grade): grade is 1 | 2 | 3 => grade === 1 || grade === 2 || grade === 3)
+    : [];
+  const bridgeCount =
+    rawBridgeSummary && typeof rawBridgeSummary.bridgeCount === "number"
+      ? rawBridgeSummary.bridgeCount
+      : 0;
+  const highestGrade =
+    rawBridgeSummary?.highestGrade === 1 ||
+    rawBridgeSummary?.highestGrade === 2 ||
+    rawBridgeSummary?.highestGrade === 3
+      ? rawBridgeSummary.highestGrade
+      : rawBridgeGrades.length > 0
+        ? Math.max(...rawBridgeGrades) as 1 | 2 | 3
+        : null;
   const myocardialBridgeSummary: MyocardialBridgeSummary =
-    toolInput?.myocardialBridgeSummary &&
-    typeof toolInput.myocardialBridgeSummary.bridgeCount === "number" &&
-    Array.isArray(toolInput.myocardialBridgeSummary.bridges)
-      ? toolInput.myocardialBridgeSummary
-      : { bridgeCount: 0, bridges: [] };
+    rawBridgeSummary && Array.isArray(rawBridgeSummary.bridges)
+      ? {
+          bridgeCount,
+          highestGrade: bridgeCount > 0 ? highestGrade : null,
+          bridges: rawBridgeSummary.bridges,
+        }
+      : { bridgeCount: 0, highestGrade: null, bridges: [] };
 
   console.log(`GPT returned ${findings.length} findings`);
   console.log(

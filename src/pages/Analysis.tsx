@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
+  Cable,
   ExternalLink,
   FileText,
   Highlighter,
@@ -135,6 +136,15 @@ interface NormalizedFeatureRow {
 interface CoronaryNarrowingRow {
   name: string;
   count: number;
+}
+
+type BridgeDashboardCategory = "notPresent" | "grade1" | "grade2" | "grade3";
+
+interface BridgeDashboardStats {
+  totalPatients: number;
+  bridgePatients: number;
+  multipleBridgePatients: number;
+  categories: Record<BridgeDashboardCategory, number>;
 }
 
 type FeatureSortKey = keyof NormalizedFeatureRow;
@@ -309,6 +319,50 @@ export default function Analysis() {
       (a, b) => b.count - a.count || a.name.localeCompare(b.name)
     );
   }, [allTerms]);
+  const bridgeDashboardStats = useMemo<BridgeDashboardStats>(() => {
+    const categories: BridgeDashboardStats["categories"] = {
+      notPresent: 0,
+      grade1: 0,
+      grade2: 0,
+      grade3: 0,
+    };
+    let bridgePatients = 0;
+    let multipleBridgePatients = 0;
+
+    reports.forEach((report) => {
+      const summary = report.parseResult.myocardialBridgeSummary;
+      const bridgeCount = summary?.bridgeCount ?? 0;
+      const bridgeGrades =
+        summary?.bridges
+          ?.map((bridge) => bridge.grade)
+          .filter((grade): grade is 1 | 2 | 3 => grade === 1 || grade === 2 || grade === 3) ??
+        [];
+      const highestGrade =
+        summary?.highestGrade === 1 ||
+        summary?.highestGrade === 2 ||
+        summary?.highestGrade === 3
+          ? summary.highestGrade
+          : bridgeGrades.length > 0
+            ? Math.max(...bridgeGrades)
+            : null;
+
+      if (bridgeCount <= 0 || !highestGrade) {
+        categories.notPresent += 1;
+        return;
+      }
+
+      bridgePatients += 1;
+      if (bridgeCount > 1) multipleBridgePatients += 1;
+      categories[`grade${highestGrade}` as BridgeDashboardCategory] += 1;
+    });
+
+    return {
+      totalPatients: reports.length,
+      bridgePatients,
+      multipleBridgePatients,
+      categories,
+    };
+  }, [reports]);
   const handleFeatureSort = (key: FeatureSortKey) => {
     setFeatureSort((prev) => ({
       key,
@@ -515,6 +569,65 @@ export default function Analysis() {
                   )}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              {
+                title: "Patients With Bridges",
+                value: bridgeDashboardStats.bridgePatients,
+                note: `${bridgeDashboardStats.totalPatients} total patients`,
+              },
+              {
+                title: "Not Present",
+                value: bridgeDashboardStats.categories.notPresent,
+                note: "No asserted myocardial bridge",
+              },
+              {
+                title: "Grade 1",
+                value: bridgeDashboardStats.categories.grade1,
+                note: "Highest bridge grade per patient",
+              },
+              {
+                title: "Grade 2",
+                value: bridgeDashboardStats.categories.grade2,
+                note: "Highest bridge grade per patient",
+              },
+              {
+                title: "Grade 3",
+                value: bridgeDashboardStats.categories.grade3,
+                note: "Highest bridge grade per patient",
+              },
+            ].map((item) => (
+              <Card key={item.title}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {item.title}
+                  </CardTitle>
+                  <Cable className="h-4 w-4 text-primary" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-semibold text-foreground">
+                    {loading ? "..." : item.value}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="text-base">Multiple Bridge Patients</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-semibold text-foreground">
+                {loading ? "..." : bridgeDashboardStats.multipleBridgePatients}
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Patients with more than one asserted myocardial bridge.
+              </p>
             </CardContent>
           </Card>
         </section>

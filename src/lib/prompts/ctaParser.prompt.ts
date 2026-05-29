@@ -94,6 +94,18 @@ bridgeCount:
 - If a partial/superficial bridge is asserted and a complete bridge is negated,
   count the asserted partial/superficial bridge.
 
+highestGrade:
+- This is the patient-level dashboard category.
+- There are four categories: not present, grade 1, grade 2, grade 3.
+- Use null for "not present" when bridgeCount is 0.
+- If bridgeCount is greater than 0, highestGrade must be 1, 2, or 3.
+- If multiple bridges are present, report the highest grade only in
+  highestGrade. For example, one grade 1 bridge and one grade 3 bridge means
+  highestGrade is 3.
+- The grading scheme exists for stratification, but it is not the primary NER
+  focus; prefer the explicit grade/type if stated and otherwise use the best
+  supported grade from report language.
+
 For each bridge in bridges, return:
 - bridgeIndex: 1-based index.
 - vessel: vessel containing the bridge, such as "LAD", "mid LAD", "RCA",
@@ -113,22 +125,32 @@ Bridge grade:
 - Grade 3: explicitly grade/type 3, deep, severe, long/deep tunneled segment,
   or severe/significant systolic compression.
 - Use the explicit grade in the report when present.
-- Use null when the report mentions a bridge but does not provide enough
-  information to assign grade 1-3.
+- For individual bridges, use null only when the report mentions a bridge but
+  does not provide enough information to assign grade 1-3. Even if an
+  individual bridge grade is null, highestGrade should still be 1, 2, or 3
+  when bridgeCount is greater than 0, using the best supported category.
 
 Examples:
   "Short mid LAD type 1 myocardial bridge measuring 8 mm in length and 2 mm
    in depth."
     -> bridgeCount: 1
+    -> highestGrade: 1
     -> bridge: vessel "LAD", segment "mid LAD", grade 1, lengthMm 8, depthMm 2
 
   "No complete myocardial bridge."
     -> bridgeCount: 0
+    -> highestGrade: null
     -> bridges: []
 
   "Superficial partial bridging of the mid LAD. No complete myocardial bridge."
     -> bridgeCount: 1
+    -> highestGrade: 1
     -> bridge: vessel "LAD", segment "mid LAD", grade 1, lengthMm null, depthMm null
+
+Dashboard intent:
+- The ideal dashboard can summarize the cohort as, for example:
+  "200 patients had myocardial bridges, 150 had grade 3, 50 had grade 2,
+  30 had more than one bridge."
 
 MEASUREMENTS
 Include a measurement when it is bound to anatomy or pathology in the same
@@ -196,5 +218,5 @@ contiguous substring that does and put the cleaned form in "normalizedName".
 OUTPUT
 Call the \`record_findings\` tool exactly once. The output must include both
 "myocardialBridgeSummary" and "findings". If no findings are present, call it
-with { "myocardialBridgeSummary": { "bridgeCount": 0, "bridges": [] },
-"findings": [] }.`;
+with { "myocardialBridgeSummary": { "bridgeCount": 0, "highestGrade": null,
+"bridges": [] }, "findings": [] }.`;

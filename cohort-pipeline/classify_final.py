@@ -57,6 +57,7 @@ NORMAL_SENT = re.compile(r'arise[s]?\s+from\s+(?:their|its)\s+expected|expected\
 def side_from_vessel(v):
     v = v.lower()
     if v.startswith('coronary arter'): return 'OTHER'
+    if v.startswith('ramus'): return 'LEFT'  # ramus is a left-system branch; guard before the 'starts with r' rule
     return 'RCA' if (v.startswith('r') or v == 'rca') else 'LEFT'
 
 def side_near(item, pos):
@@ -89,7 +90,8 @@ def analyze(text):
     for it in items(field):
         if NORMAL_SENT.search(it) and not re.search(r'anomalous|aberrant|ectopic', it, re.I):
             continue
-        if PA_RX.search(it): pa = True
+        for m in PA_RX.finditer(it):
+            if not NEG.search(it[max(0, m.start()-28):m.start()]): pa = True
         def add(kind, side, m):
             pre = it[max(0, m.start()-28):m.start()]
             if NEG.search(pre): return
@@ -105,7 +107,7 @@ def analyze(text):
         for m in LEX_COMMON.finditer(it):  add('common',  'OTHER', m)
         for m in IA.finditer(it):          add('ia',      side_near(it, m.start()) or 'UNSPEC', m)
 
-    relevant = len(hits) > 0
+    relevant = len(hits) > 0 or pa  # PA-origin (ALCAPA/ARCAPA) is relevant on its own -> origin-from-PA tricky bucket
     explicit = {s for k,s,_ in hits if k in EXPLICIT_KINDS and s in ('RCA','LEFT')}
     ia_sides = {s for k,s,_ in hits if k=='ia' and s in ('RCA','LEFT')}
     if len(explicit)==1: lat = explicit.pop()

@@ -31,3 +31,13 @@ parsed_reports/
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.pyc
+
+# Confidential STARR extract data and pipeline outputs — never commit (report text / PHI-adjacent)
+AAOCA CTA Report Copies/
+cohort-pipeline/aaoca_preprocessed/
+cohort-pipeline/*.csv
+cohort-pipeline/*.jsonl

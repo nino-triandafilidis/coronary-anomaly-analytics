@@ -1,7 +1,7 @@
 # AAOCA cohort pipeline
 
 Turns a STARR coronary-CTA export into a parse-ready, one-report-per-patient AAOCA pre-op cohort,
-split into clean (RCA / LCA) and tricky (needs medical review).
+split into confirmed_AAOCA (RCA / LCA) and needs_medical_review (flagged for clinician adjudication).
 
 ## Data handling
 
@@ -40,19 +40,24 @@ python preprocess.py radiology_report.csv -o aaoca_preprocessed
 ```
 
 End to end: classify → dedup same-date duplicates → drop post-op → one report per patient (latest
-pre-op) → split clean vs tricky. Output:
+pre-op) → split confirmed_AAOCA vs needs_medical_review. Output:
 
 ```
 aaoca_preprocessed/
-  clean/   reports.jsonl   manifest.csv     <- parse this
-  tricky/  reports.jsonl   manifest.csv     <- hold for medical review
+  confirmed_AAOCA/   reports.jsonl   manifest.csv     <- parse this
 ```
 
 Each `reports.jsonl` record is one patient: `{patient_id, date, side, age, title, text}`. To count
 feature frequencies across all / RCA / LCA, parse the records and group resulting terms by `side`,
 no separate rollup needed.
 
-### Tricky review flags
+### needs_medical_review (computed, not saved by default)
+
+The flagged bucket: AAOCA-relevant studies that aren't a clean single-sided RCA/LCA call, held for
+clinician adjudication. The pipeline computes it and prints its count but does not write it by
+default. To save it, uncomment the `write(review, out_dir + '/needs_medical_review', True)` line in
+`preprocess.py`; it writes `needs_medical_review/{reports.jsonl,manifest.csv}` with two extra
+manifest columns, `flag` and `flag_reason`. Flags:
 
 `single` (single coronary, no side), `both` (bilateral), `other` (common/generic origin),
 `unspec` (interarterial, vessel not pinned), `origin-from-PA` (ALCAPA/ARCAPA, not aortic).

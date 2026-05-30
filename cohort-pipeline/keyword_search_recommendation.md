@@ -44,3 +44,17 @@ Hit rate = fraction of the 568 confirmed-AAOCA reports whose text contains the t
 ## Complementary, not just alternative
 
 A keyword search can catch AAOCA patients whose diagnosis lives in a cardiology or operative note, or on a coronary CTA whose exam name wasn't in the type list. Those are cases the exam-type pull structurally cannot see.
+
+## Structural terms added in extract 6661
+
+The 27-term 6660 net missed AAOCA whose origin is stated structurally, with no "anomalous" / "aberrant" / "interarterial". These were added for 6661 (measured on the 6636 type-only set and the `patient_id`-linked 6660 → 6661 delta):
+
+| term | effect |
+|---|---|
+| ectopic | recovers "ectopic RCA above the sinotubular junction"; some noise from "ectopic atrial rhythm". |
+| non-coronary sinus / cusp | recovers "LMCA from the non-coronary sinus"; high noise, since normal reads say "no vessel arises from the non-coronary cusp" (`non-coronary cusp` alone pulled 117 of the 355 new patients for 2 AAOCA). |
+| shared origin | recovers "shared origin of the RCA and LAD". |
+| malignant course | specific, low-noise; covers the malignant-course phrasing. |
+| opposite sinus / cusp | added but contributed 0, consistent with the 0% note above; safe to drop. |
+
+Net: +355 patients over 6660 (2,359 → 2,714, well under the 7,500 cap), recovering 3 of the 9 AAOCA 6660 had dropped. The other 6 are not keyword-reachable (complex-congenital structural reads and a cardiology-deferred read); see `STARR_cohort_definition.md`.

@@ -14,6 +14,11 @@ venv
 dist-ssr
 *.local
 parsed_reports/
+data/raw/
+data/processed/
+data/work/
+starr_confidential_*/
+starr_confidential_*.zip
 
 # Secrets / environment
 .env

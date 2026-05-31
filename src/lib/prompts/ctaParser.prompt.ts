@@ -191,6 +191,41 @@ Dashboard intent:
   "200 patients had myocardial bridges, 150 had grade 3, 50 had grade 2,
   30 had more than one bridge."
 
+INTER-ARTERIAL COURSE LENGTHS
+In addition to findings, return an "interarterialCourseLengths" array with
+zero or more explicit quantitative inter-arterial course length measurements.
+Use one item per measured vessel or segment. Return [] when the report does not
+state a numeric inter-arterial course length.
+
+For each measurement:
+- value: numeric length normalized to millimeters.
+- unit: always "mm".
+- rawText: exact contiguous report substring containing the measurement.
+- vessel: RCA, LM, LAD, LCX, or another available vessel label; otherwise null.
+
+Extraction rules:
+- Extract only numeric values clearly referring to inter-arterial course length.
+- Convert centimeters to millimeters.
+- Do not infer a value from qualitative descriptions such as "short" or "long".
+- Do not extract unrelated measurements such as vessel diameter, ostial size,
+  aortic root size, sinus size, or distance from commissure.
+
+Examples:
+  "inter-arterial course measures 8 mm"
+    -> value 8, unit "mm"
+  "8 mm interarterial course"
+    -> value 8, unit "mm"
+  "approximately 12 mm inter-arterial segment"
+    -> value 12, unit "mm"
+  "interarterial course for approximately 1 cm"
+    -> value 10, unit "mm"
+  "short interarterial course"
+    -> no measurement
+  "aortic root measures 30 mm"
+    -> no measurement
+  "ostium measures 2 mm"
+    -> no measurement
+
 MEASUREMENTS
 Include a measurement when it is bound to anatomy or pathology in the same
 sentence or clause — even if no qualifier word like "abnormal" or "concerning"
@@ -256,6 +291,6 @@ contiguous substring that does and put the cleaned form in "normalizedName".
 
 OUTPUT
 Call the \`record_findings\` tool exactly once. The output must include both
-"myocardialBridgeSummary" and "findings". If no findings are present, call it
+"myocardialBridgeSummary", "interarterialCourseLengths", and "findings". If no findings are present, call it
 with { "myocardialBridgeSummary": { "bridgeCount": 0, "highestGrade": null,
-"bridges": [] }, "findings": [] }.`;
+"bridges": [] }, "interarterialCourseLengths": [], "findings": [] }.`;

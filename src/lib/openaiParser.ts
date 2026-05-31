@@ -19,6 +19,7 @@ import type {
 } from "@/data/parseTypes";
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
 import { enrichParsedTermWithPaperFeature } from "@/data/paperFeatures";
+import { cleanInterarterialCourseLengthMeasurements } from "@/data/interarterialCourseLengths";
 import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
@@ -122,6 +123,37 @@ const FINDINGS_SCHEMA = {
       },
       required: ["bridgeCount", "highestGrade", "bridges"],
     },
+    interarterialCourseLengths: {
+      type: "array",
+      description:
+        "Explicit quantitative inter-arterial course length measurements only. Return [] when none are stated. Normalize values to millimeters.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          value: {
+            type: "number",
+            description: "Positive numeric inter-arterial course length value.",
+          },
+          unit: {
+            type: "string",
+            enum: ["mm"],
+            description: "Normalized unit. Always return mm.",
+          },
+          rawText: {
+            type: "string",
+            description:
+              "Exact contiguous report substring containing the inter-arterial course length measurement.",
+          },
+          vessel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Optional vessel label such as RCA, LM, LAD, or LCX when available, otherwise null.",
+          },
+        },
+        required: ["value", "unit", "rawText", "vessel"],
+      },
+    },
     findings: {
       type: "array",
       description: "Every clinically relevant term in the report.",
@@ -180,7 +212,7 @@ const FINDINGS_SCHEMA = {
       },
     },
   },
-  required: ["myocardialBridgeSummary", "findings"],
+  required: ["myocardialBridgeSummary", "interarterialCourseLengths", "findings"],
 } as const;
 
 const RECORD_FINDINGS_TOOL = {
@@ -209,6 +241,7 @@ interface ToolFinding {
 
 interface ToolInput {
   myocardialBridgeSummary: MyocardialBridgeSummary;
+  interarterialCourseLengths: unknown;
   findings: ToolFinding[];
 }
 
@@ -348,6 +381,8 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   );
 
   const findings = Array.isArray(toolInput?.findings) ? toolInput.findings : [];
+  const interarterialCourseLengths =
+    cleanInterarterialCourseLengthMeasurements(toolInput?.interarterialCourseLengths);
   const rawBridgeSummary = toolInput?.myocardialBridgeSummary;
   const rawBridgeGrades = Array.isArray(rawBridgeSummary?.bridges)
     ? rawBridgeSummary.bridges
@@ -376,6 +411,10 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
       : { bridgeCount: 0, highestGrade: null, bridges: [] };
 
   console.log(`GPT returned ${findings.length} findings`);
+  console.log(
+    `Inter-arterial course lengths: ${interarterialCourseLengths.length}`,
+    interarterialCourseLengths
+  );
   console.log(
     `Myocardial bridges: ${myocardialBridgeSummary.bridgeCount}`,
     myocardialBridgeSummary.bridges
@@ -482,6 +521,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     reportText,
     parsedTerms,
     myocardialBridgeSummary,
+    interarterialCourseLengths,
     parserModel: MODEL_NAME,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,

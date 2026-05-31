@@ -43,11 +43,19 @@ export interface MyocardialBridgeSummary {
   bridges: MyocardialBridgeDetail[];
 }
 
+export interface InterarterialCourseLengthMeasurement {
+  value: number;
+  unit: "mm";
+  rawText: string;
+  vessel?: string;
+}
+
 export interface ParseResult {
   reportId: string;
   reportText: string;
   parsedTerms: ParsedTerm[];
   myocardialBridgeSummary: MyocardialBridgeSummary;
+  interarterialCourseLengths?: InterarterialCourseLengthMeasurement[];
   parserModel: string;    // e.g. "gpt-5.4"
   parseTimeMs: number;
   totalTokensUsed: number;

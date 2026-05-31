@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   Activity,
   ArrowDown,
   ArrowUp,
@@ -37,6 +46,11 @@ import {
   resolveParsedTermPaperFeature,
   shouldIncludeInNormalizedFrequency,
 } from "@/data/paperFeatures";
+import {
+  buildInterarterialCourseLengthHistogram,
+  cleanInterarterialCourseLengthMeasurements,
+  type InterarterialCourseLengthHistogramBin,
+} from "@/data/interarterialCourseLengths";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 
@@ -200,6 +214,22 @@ export default function Analysis() {
   const allReviewDecisions = useMemo<ReviewDecisionRecord[]>(
     () => reports.flatMap((report) => report.reviewDecisions ?? []),
     [reports]
+  );
+  const interarterialCourseLengthMeasurements = useMemo(
+    () =>
+      reports.flatMap((report) =>
+        cleanInterarterialCourseLengthMeasurements(
+          report.parseResult.interarterialCourseLengths
+        )
+      ),
+    [reports]
+  );
+  const interarterialCourseLengthHistogram = useMemo(
+    () =>
+      buildInterarterialCourseLengthHistogram(
+        interarterialCourseLengthMeasurements.map((measurement) => measurement.value)
+      ),
+    [interarterialCourseLengthMeasurements]
   );
 
   const reportCount = reports.length;
@@ -475,6 +505,12 @@ export default function Analysis() {
                 Coronary Narrowing
               </a>
               <a
+                href="#interarterial-course-lengths"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                IA Course Lengths
+              </a>
+              <a
                 href="#myocardial-bridges"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
@@ -643,6 +679,14 @@ export default function Analysis() {
               </Table>
             </CardContent>
           </Card>
+        </section>
+
+        <section id="interarterial-course-lengths" className="mt-10 scroll-mt-6">
+          <InterarterialCourseLengthHistogram
+            bins={interarterialCourseLengthHistogram}
+            measurementCount={interarterialCourseLengthMeasurements.length}
+            loading={loading}
+          />
         </section>
 
         <section id="myocardial-bridges" className="mt-10 scroll-mt-6">
@@ -834,6 +878,65 @@ function HorizontalBarChart({
             );
           })}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InterarterialCourseLengthHistogram({
+  bins,
+  measurementCount,
+  loading,
+}: {
+  bins: InterarterialCourseLengthHistogramBin[];
+  measurementCount: number;
+  loading: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          Inter-arterial Course Length Distribution
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {loading
+            ? "Loading measurements..."
+            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports`}
+        </p>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            Loading inter-arterial course length values...
+          </p>
+        ) : bins.length === 0 ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            No inter-arterial course length values found.
+          </p>
+        ) : (
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={bins} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: "Length bin (mm)", position: "insideBottom", offset: -4 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 12 }}
+                  label={{ value: "Count", angle: -90, position: "insideLeft" }}
+                />
+                <Tooltip
+                  labelFormatter={(label) => `Length bin: ${label}`}
+                  formatter={(value) => [value, "Count"]}
+                />
+                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

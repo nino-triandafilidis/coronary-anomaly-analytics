@@ -76,6 +76,7 @@ export interface ParseResult {
   intramuralCourseLengths?: IntramuralCourseLengthMeasurement[];
   anomalousLeftSubtypes?: AnomalousLeftSubtypeEntry[];
   parserModel: string;    // e.g. "gpt-5.4"
+  reportFamily?: string;  // template family from classifyReportFamily (e.g. "F2_remaining_chest")
   parseTimeMs: number;
   totalTokensUsed: number;
   estimatedCostUsd: number;

@@ -17,11 +17,13 @@ import type {
   Assertion,
   MyocardialBridgeSummary,
 } from "@/data/parseTypes";
-import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
+import { CTA_PARSER_PROMPT, composeInstructions } from "@/lib/prompts/ctaParser.prompt";
 import { enrichParsedTermWithPaperFeature } from "@/data/paperFeatures";
 import { cleanInterarterialCourseLengthMeasurements } from "@/data/interarterialCourseLengths";
 import { cleanIntramuralCourseLengthMeasurements } from "@/data/intramuralCourseLengths";
 import { cleanAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
+import { classifyReportFamily } from "@/lib/reportFamily";
+import { prepareForExtraction } from "@/lib/reportPreprocess";
 import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
@@ -282,7 +284,9 @@ const FINDINGS_SCHEMA = {
   ],
 } as const;
 
-const RECORD_FINDINGS_TOOL = {
+// Exported so a headless/batch runner (Node) can reuse the exact tool schema
+// the browser pipeline uses, instead of duplicating it.
+export const RECORD_FINDINGS_TOOL = {
   type: "function",
   name: "record_findings",
   description:
@@ -342,7 +346,15 @@ interface OpenAIResponse {
  * any that cannot be located (these are reported in the console but never
  * reach the UI, so we never paint highlights at incorrect offsets).
  */
-export async function parseWithOpenAI(reportText: string): Promise<ParseResult> {
+export interface ParseOptions {
+  /** Anomalous vessel side from the manifest (e.g. "RCA"), used as a focusing hint. */
+  anomalousSide?: string;
+}
+
+export async function parseWithOpenAI(
+  reportText: string,
+  options: ParseOptions = {}
+): Promise<ParseResult> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -352,9 +364,22 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
 
   const startTime = performance.now();
 
+  // Classify the template family and pre-process the text the model reads.
+  // Offsets are always resolved against the ORIGINAL reportText below, so
+  // stripping/fencing here never moves a finding's position.
+  const reportFamily = classifyReportFamily(reportText);
+  const { extractionText, strippedLines, fencedSections } = prepareForExtraction(
+    reportText,
+    reportFamily
+  );
+  const instructions = composeInstructions(reportFamily, options.anomalousSide);
+
   console.group("[OpenAIParser] Calling GPT...");
   console.log("Model:", MODEL_NAME);
   console.log("Report length:", reportText.length, "chars");
+  console.log(
+    `Family: ${reportFamily} | stripped ${strippedLines} boilerplate lines | fenced [${fencedSections.join(", ")}]`
+  );
 
   const controller = new AbortController();
   const timeoutId = window.setTimeout(
@@ -375,14 +400,14 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
       },
       body: JSON.stringify({
         model: MODEL_NAME,
-        instructions: CTA_PARSER_PROMPT,
+        instructions,
         input: [
           {
             role: "user",
             content: [
               {
                 type: "input_text",
-                text: `REPORT:\n\n${reportText}`,
+                text: `REPORT:\n\n${extractionText}`,
               },
             ],
           },
@@ -606,6 +631,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     intramuralCourseLengths,
     anomalousLeftSubtypes,
     parserModel: MODEL_NAME,
+    reportFamily,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,
     estimatedCostUsd: cost,

@@ -7,7 +7,15 @@
  * The model returns one function call per parse. The schema enforces the JSON
  * shape, so this prompt focuses on *what* to extract and *how* to decide
  * asserted vs negated, not on JSON syntax.
+ *
+ * composeInstructions() layers report-family context on top of this base
+ * prompt: a note about fenced out-of-scope blocks, a family-specific preamble,
+ * and the anomalous side from the manifest. See src/lib/reportFamily.ts and
+ * src/lib/reportPreprocess.ts.
  */
+
+import type { ReportFamily } from "@/lib/reportFamily";
+import { familyPreamble } from "@/lib/reportFamily";
 
 export const CTA_PARSER_PROMPT = `You are a clinical NER system for coronary CT angiogram (CTA) reports from
 pediatric cardiology at Stanford Children's Hospital. Your output is
@@ -373,3 +381,29 @@ Call the \`record_findings\` tool exactly once. The output must include both
 with { "myocardialBridgeSummary": { "bridgeCount": 0, "highestGrade": null,
 "bridges": [] }, "interarterialCourseLengths": [], "intramuralCourseLengths":
 [], "anomalousLeftSubtypes": [], "findings": [] }.`;
+
+/**
+ * Compose the final instructions sent to the model: the base prompt plus a note
+ * about fenced out-of-scope blocks, a one-line family-specific preamble, and
+ * (when known) the anomalous side from the manifest. The side is a focusing
+ * hint only and must not change whether a finding is asserted or negated.
+ */
+export function composeInstructions(
+  family: ReportFamily,
+  anomalousSide?: string
+): string {
+  const parts = [
+    CTA_PARSER_PROMPT,
+    `\nFENCED CONTEXT\nText fenced between <<OUT_OF_SCOPE ...>> and <<END_OUT_OF_SCOPE>> is templated extracoronary survey content, included for context only. Read it if needed to understand the report, but do not extract findings, measurements, or verbatimText from inside a fenced block.`,
+  ];
+  const preamble = familyPreamble(family);
+  if (preamble) {
+    parts.push(`\nTEMPLATE NOTE\n${preamble}`);
+  }
+  if (anomalousSide) {
+    parts.push(
+      `\nMANIFEST HINT\nThe anomalous vessel is on the ${anomalousSide} side. Use this to focus your reading; do not let it change whether a finding is asserted or negated.`
+    );
+  }
+  return parts.join("\n");
+}

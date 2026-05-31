@@ -4,6 +4,16 @@ Clinical analytics tool for pediatric cardiologists at Stanford Children's Hospi
 
 User uploads a CT angiogram report, and the system uses LLM-powered named entity recognition to extract clinical findings (pertinent positives and pertinent negatives) and track how often each finding appears across the cardiologist's saved reports.
 
+## Two pipelines
+
+This repo holds two separate report-processing pipelines. They do different jobs, run on different stacks, and share no code.
+
+1. Cohort pipeline (`cohort-pipeline/`, Python). A deterministic regex classifier that turns a bulk STARR coronary-CTA research export into a one-report-per-patient AAOCA cohort. It decides which patients have an anomalous coronary origin, reading only the IMPRESSION and CORONARY ARTERIES findings and never the referral question, so the indication line cannot create false positives. See [cohort-pipeline/README.md](./cohort-pipeline/README.md).
+
+2. Analysis-page app (`src/`, React + TypeScript + LLM). The interactive tool described in the rest of this README. A cardiologist pastes one report and GPT-5.4 extracts pertinent positives and negatives for review. It reads the whole report and, by design, keeps the clinical-history / indication line (with a narrow carve-out for a named suspected diagnosis).
+
+The two take opposite stances on the clinical-history section: the cohort classifier excludes it by construction, the analysis-page parser keeps it. An extraction rule that holds in one pipeline does not carry over to the other.
+
 ## How it works
 
 1. **Upload** a CT angiogram report (paste text or upload PDF)

@@ -20,8 +20,6 @@ export interface SavedReport {
   text: string;
   parsedTerms: ParsedTerm[];
   parserModel: string;
-  verifierModel: string;
-  verifierAgreement: number;
   parseTimeMs: number;
   totalTokensUsed: number;
   estimatedCostUsd: number;

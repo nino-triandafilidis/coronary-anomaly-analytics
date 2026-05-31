@@ -48,6 +48,16 @@ describe("paper feature resolution", () => {
       paperFeatureId: expectedId,
     });
   });
+
+  it("keeps anomalous-left subtypes as separate paper features", () => {
+    expect(resolvePaperFeature("intraseptal left")?.id).toBe(
+      "anomalous_left_intraconal"
+    );
+    expect(resolvePaperFeature("inter-arterial left")?.id).toBe(
+      "anomalous_left_intramural_interarterial"
+    );
+    expect(resolvePaperFeature("L-AAOCA")?.id).toBe("l_aaoca");
+  });
 });
 
 describe("normalized frequency filtering", () => {

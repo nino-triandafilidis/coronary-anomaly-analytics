@@ -55,6 +55,7 @@ import {
   buildIntramuralCourseLengthHistogram,
   cleanIntramuralCourseLengthMeasurements,
 } from "@/data/intramuralCourseLengths";
+import { getReportAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 
@@ -169,6 +170,11 @@ interface HorizontalBarDatum {
   value: number;
 }
 
+type PaperFeatureOverviewMode =
+  | "overall"
+  | "intraconal_left"
+  | "intramural_interarterial_left";
+
 type FeatureSortKey = keyof NormalizedFeatureRow;
 type FeatureSortDirection = "asc" | "desc";
 
@@ -181,6 +187,8 @@ export default function Analysis() {
     key: FeatureSortKey;
     direction: FeatureSortDirection;
   }>({ key: "count", direction: "desc" });
+  const [paperFeatureOverviewMode, setPaperFeatureOverviewMode] =
+    useState<PaperFeatureOverviewMode>("overall");
   useEffect(() => {
     const loadReports = async () => {
       setLoading(true);
@@ -255,6 +263,10 @@ export default function Analysis() {
   const reportCount = reports.length;
   const reviewedReportCount = reports.filter((report) => report.reviewed).length;
   const paperFeatureRows = useMemo<PaperFeatureRow[]>(() => {
+    const anomalousLeftSubtypeFeatureIds = {
+      intraconal_left: "anomalous_left_intraconal",
+      intramural_interarterial_left: "anomalous_left_intramural_interarterial",
+    } as const;
     const rows = new Map(
       PAPER_FEATURES.map((paperFeature) => [
         paperFeature.id,
@@ -267,23 +279,103 @@ export default function Analysis() {
       ])
     );
 
-    allTerms.forEach((term) => {
-      const paperFeature = resolveParsedTermPaperFeature(term);
-      if (!paperFeature) return;
+    reports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
 
-      const row = rows.get(paperFeature.id);
-      if (!row) return;
+      parsedTerms.forEach((term) => {
+        const paperFeature = resolveParsedTermPaperFeature(term);
+        if (!paperFeature || Object.values(anomalousLeftSubtypeFeatureIds).includes(
+          paperFeature.id as typeof anomalousLeftSubtypeFeatureIds[keyof typeof anomalousLeftSubtypeFeatureIds]
+        )) {
+          return;
+        }
 
-      row[term.assertion] += 1;
-      row.total += 1;
+        const row = rows.get(paperFeature.id);
+        if (!row) return;
+
+        row[term.assertion] += 1;
+        row.total += 1;
+      });
+
+      const reportSubtypeIds = new Set(
+        getReportAnomalousLeftSubtypes(
+          report.parseResult.anomalousLeftSubtypes,
+          parsedTerms
+        ).map((entry) => anomalousLeftSubtypeFeatureIds[entry.subtype])
+      );
+
+      reportSubtypeIds.forEach((featureId) => {
+        const row = rows.get(featureId);
+        if (!row) return;
+
+        row.asserted += 1;
+        row.total += 1;
+      });
     });
 
     return Array.from(rows.values());
-  }, [allTerms]);
+  }, [reports]);
   const maxPaperFeatureCount = useMemo(
     () => Math.max(1, ...paperFeatureRows.map((row) => row.total)),
     [paperFeatureRows]
   );
+  const anomalousLeftOverviewCards = useMemo(
+    () => [
+      {
+        title: "Intraconal lefts",
+        subtitle: "Intraconal / intraseptal / subpulmonic anomalous left courses",
+        count:
+          paperFeatureRows.find((row) => row.id === "anomalous_left_intraconal")
+            ?.total ?? 0,
+      },
+      {
+        title: "Intramural / inter-arterial lefts",
+        subtitle: "Intramural and/or inter-arterial anomalous left courses",
+        count:
+          paperFeatureRows.find(
+            (row) => row.id === "anomalous_left_intramural_interarterial"
+          )?.total ?? 0,
+      },
+    ],
+    [paperFeatureRows]
+  );
+  const paperFeatureCategoryChartData = useMemo<HorizontalBarDatum[]>(() => {
+    const categoryCounts = new Map(
+      Array.from(new Set(PAPER_FEATURES.map((paperFeature) => paperFeature.category))).map(
+        (category) => [category, 0]
+      )
+    );
+
+    reports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
+      const reportSubtypes = new Set(
+        getReportAnomalousLeftSubtypes(
+          report.parseResult.anomalousLeftSubtypes,
+          parsedTerms
+        ).map((entry) => entry.subtype)
+      );
+      if (
+        paperFeatureOverviewMode !== "overall" &&
+        !reportSubtypes.has(paperFeatureOverviewMode)
+      ) {
+        return;
+      }
+
+      const reportCategories = new Set(
+        parsedTerms.flatMap((term) => {
+          const paperFeature = resolveParsedTermPaperFeature(term);
+          return paperFeature ? [paperFeature.category] : [];
+        })
+      );
+      if (reportSubtypes.size > 0) reportCategories.add("Anomalous vessel");
+
+      reportCategories.forEach((category) => {
+        categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+      });
+    });
+
+    return Array.from(categoryCounts, ([label, value]) => ({ label, value }));
+  }, [paperFeatureOverviewMode, reports]);
   const normalizedFeatureRows = useMemo(() => {
     const rows = new Map<
       string,
@@ -605,6 +697,32 @@ export default function Analysis() {
             </p>
           </div>
 
+          <div className="mb-4 grid gap-4 md:grid-cols-2">
+            {anomalousLeftOverviewCards.map((card) => (
+              <Card key={card.title}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{card.title}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{card.subtitle}</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-semibold tabular-nums text-foreground">
+                    {loading ? "..." : card.count}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    reports with this subtype
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <PaperFeatureCategoryChart
+            data={paperFeatureCategoryChartData}
+            loading={loading}
+            mode={paperFeatureOverviewMode}
+            onModeChange={setPaperFeatureOverviewMode}
+          />
+
           <Card>
             <CardContent className="overflow-x-auto p-0">
               <Table>
@@ -904,6 +1022,76 @@ function HorizontalBarChart({
             const width = loading ? 0 : Math.max(3, (item.value / maxValue) * 100);
             return (
               <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3">
+                <span className="text-sm text-muted-foreground">{item.label}</span>
+                <div className="h-7 overflow-hidden rounded-md bg-muted">
+                  <div
+                    className="h-full rounded-md bg-primary transition-all"
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+                <span className="text-right text-sm font-medium tabular-nums text-foreground">
+                  {loading ? "..." : item.value}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PaperFeatureCategoryChart({
+  data,
+  loading,
+  mode,
+  onModeChange,
+}: {
+  data: HorizontalBarDatum[];
+  loading: boolean;
+  mode: PaperFeatureOverviewMode;
+  onModeChange: (mode: PaperFeatureOverviewMode) => void;
+}) {
+  const modes: { value: PaperFeatureOverviewMode; label: string }[] = [
+    { value: "overall", label: "Overall" },
+    { value: "intraconal_left", label: "Intraconal lefts" },
+    {
+      value: "intramural_interarterial_left",
+      label: "Intramural / inter-arterial lefts",
+    },
+  ];
+  const maxValue = Math.max(1, ...data.map((item) => item.value));
+
+  return (
+    <Card className="mb-4">
+      <CardHeader>
+        <CardTitle className="text-base">Paper Feature Categories</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Number of reports containing at least one tracked feature in each category.
+        </p>
+        <div className="flex flex-wrap gap-2 pt-2">
+          {modes.map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={mode === option.value ? "default" : "outline"}
+              onClick={() => onModeChange(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {data.map((item) => {
+            const width = loading ? 0 : (item.value / maxValue) * 100;
+            return (
+              <div
+                key={item.label}
+                className="grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3"
+              >
                 <span className="text-sm text-muted-foreground">{item.label}</span>
                 <div className="h-7 overflow-hidden rounded-md bg-muted">
                   <div

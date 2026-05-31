@@ -61,6 +61,41 @@ substring in verbatimText:
 - acute angle of takeoff / acute takeoff angle / takeoff angle
 - juxtacommissural / commissural origin / juxtacommissural origin
 
+ANOMALOUS-LEFT SUBTYPES
+In addition to findings, return an "anomalousLeftSubtypes" array. Classify
+left-sided anomalous coronary vessels only when the report clearly describes
+the course. Preserve the exact supporting substring in rawText and include the
+left-sided vessel label when available.
+
+Use subtype "intraconal_left" for anomalous left coronary artery, left main,
+LAD, or LCX with an intraconal, intraseptal, subpulmonic, infundibular, or
+conal-septal type course. Relevant wording includes:
+- intraconal left
+- intraseptal left
+- subpulmonic left
+- infundibular course
+- conal-septal course
+- left main, LAD, or LCX with intraseptal course
+
+Use subtype "intramural_interarterial_left" for anomalous left coronary
+artery, left main, LAD, or LCX with an intramural and/or inter-arterial course.
+Relevant wording includes:
+- intramural left
+- inter-arterial left / interarterial left
+- intramural/inter-arterial left
+- left main, LAD, or LCX with intramural or inter-arterial course
+- anomalous left coronary artery coursing between the aorta and pulmonary artery
+- anomalous left coronary artery with an intramural segment
+
+Keep these subtypes separate:
+- Do not merge intraconal/intraseptal lefts with intramural/inter-arterial lefts.
+- If the report only says anomalous left coronary artery without describing the
+  course, keep the general anomalous-left finding but return no subtype entry.
+- If both course types are explicitly described for the same anomalous left
+  vessel, return both subtype entries with their supporting rawText.
+- Do not classify retroaortic left anomalies as either subtype unless a
+  qualifying course is also explicitly described.
+
 WHAT COUNTS AS A "TERM"
 - Named conditions: pulmonary embolism, anomalous coronary artery, myocardial
   bridge, ventricular hypertrophy, pleural effusion, pericardial effusion,
@@ -334,7 +369,7 @@ contiguous substring that does and put the cleaned form in "normalizedName".
 OUTPUT
 Call the \`record_findings\` tool exactly once. The output must include both
 "myocardialBridgeSummary", "interarterialCourseLengths",
-"intramuralCourseLengths", and "findings". If no findings are present, call it
+"intramuralCourseLengths", "anomalousLeftSubtypes", and "findings". If no findings are present, call it
 with { "myocardialBridgeSummary": { "bridgeCount": 0, "highestGrade": null,
 "bridges": [] }, "interarterialCourseLengths": [], "intramuralCourseLengths":
-[], "findings": [] }.`;
+[], "anomalousLeftSubtypes": [], "findings": [] }.`;

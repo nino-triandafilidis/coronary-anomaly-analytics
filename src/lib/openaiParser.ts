@@ -21,6 +21,7 @@ import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
 import { enrichParsedTermWithPaperFeature } from "@/data/paperFeatures";
 import { cleanInterarterialCourseLengthMeasurements } from "@/data/interarterialCourseLengths";
 import { cleanIntramuralCourseLengthMeasurements } from "@/data/intramuralCourseLengths";
+import { cleanAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
 import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
@@ -186,6 +187,34 @@ const FINDINGS_SCHEMA = {
         required: ["value", "unit", "rawText", "vessel"],
       },
     },
+    anomalousLeftSubtypes: {
+      type: "array",
+      description:
+        "Separate anomalous-left course subtype entries. Return [] when no left-sided anomalous vessel has a clearly described qualifying course.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          subtype: {
+            type: "string",
+            enum: ["intraconal_left", "intramural_interarterial_left"],
+            description:
+              "intraconal_left for intraconal/intraseptal/subpulmonic/infundibular/conal-septal left courses; intramural_interarterial_left for intramural and/or inter-arterial left courses.",
+          },
+          vessel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Optional left-sided vessel label such as LM, left main, LAD, or LCX, otherwise null.",
+          },
+          rawText: {
+            type: "string",
+            description:
+              "Exact contiguous report substring supporting this anomalous-left subtype.",
+          },
+        },
+        required: ["subtype", "vessel", "rawText"],
+      },
+    },
     findings: {
       type: "array",
       description: "Every clinically relevant term in the report.",
@@ -248,6 +277,7 @@ const FINDINGS_SCHEMA = {
     "myocardialBridgeSummary",
     "interarterialCourseLengths",
     "intramuralCourseLengths",
+    "anomalousLeftSubtypes",
     "findings",
   ],
 } as const;
@@ -280,6 +310,7 @@ interface ToolInput {
   myocardialBridgeSummary: MyocardialBridgeSummary;
   interarterialCourseLengths: unknown;
   intramuralCourseLengths: unknown;
+  anomalousLeftSubtypes: unknown;
   findings: ToolFinding[];
 }
 
@@ -423,6 +454,8 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     cleanInterarterialCourseLengthMeasurements(toolInput?.interarterialCourseLengths);
   const intramuralCourseLengths =
     cleanIntramuralCourseLengthMeasurements(toolInput?.intramuralCourseLengths);
+  const anomalousLeftSubtypes =
+    cleanAnomalousLeftSubtypes(toolInput?.anomalousLeftSubtypes);
   const rawBridgeSummary = toolInput?.myocardialBridgeSummary;
   const rawBridgeGrades = Array.isArray(rawBridgeSummary?.bridges)
     ? rawBridgeSummary.bridges
@@ -458,6 +491,10 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   console.log(
     `Intramural course lengths: ${intramuralCourseLengths.length}`,
     intramuralCourseLengths
+  );
+  console.log(
+    `Anomalous-left subtypes: ${anomalousLeftSubtypes.length}`,
+    anomalousLeftSubtypes
   );
   console.log(
     `Myocardial bridges: ${myocardialBridgeSummary.bridgeCount}`,
@@ -567,6 +604,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     myocardialBridgeSummary,
     interarterialCourseLengths,
     intramuralCourseLengths,
+    anomalousLeftSubtypes,
     parserModel: MODEL_NAME,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,

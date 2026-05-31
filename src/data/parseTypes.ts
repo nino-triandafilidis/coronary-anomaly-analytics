@@ -57,6 +57,16 @@ export interface IntramuralCourseLengthMeasurement {
   vessel?: string;
 }
 
+export type AnomalousLeftSubtype =
+  | "intraconal_left"
+  | "intramural_interarterial_left";
+
+export interface AnomalousLeftSubtypeEntry {
+  subtype: AnomalousLeftSubtype;
+  vessel?: string;
+  rawText: string;
+}
+
 export interface ParseResult {
   reportId: string;
   reportText: string;
@@ -64,6 +74,7 @@ export interface ParseResult {
   myocardialBridgeSummary: MyocardialBridgeSummary;
   interarterialCourseLengths?: InterarterialCourseLengthMeasurement[];
   intramuralCourseLengths?: IntramuralCourseLengthMeasurement[];
+  anomalousLeftSubtypes?: AnomalousLeftSubtypeEntry[];
   parserModel: string;    // e.g. "gpt-5.4"
   parseTimeMs: number;
   totalTokensUsed: number;

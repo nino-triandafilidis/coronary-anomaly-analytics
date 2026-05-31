@@ -44,6 +44,43 @@ export const PAPER_FEATURES: PaperFeature[] = [
   feature("st_aaoca", "Anomalous vessel", "ST-AAOCA", [
     "single trunk",
   ]),
+  feature(
+    "anomalous_left_intraconal",
+    "Anomalous vessel",
+    "intraconal anomalous left coronary artery",
+    [
+      "intraconal left",
+      "intraconal anomalous left",
+      "intraseptal left",
+      "subpulmonic left",
+      "infundibular left",
+      "conal-septal left",
+      "left coronary artery with intraseptal course",
+      "left main with intraseptal course",
+      "LAD with intraseptal course",
+      "LCX with intraseptal course",
+    ]
+  ),
+  feature(
+    "anomalous_left_intramural_interarterial",
+    "Anomalous vessel",
+    "intramural/inter-arterial anomalous left coronary artery",
+    [
+      "intramural left",
+      "inter-arterial left",
+      "interarterial left",
+      "intramural/inter-arterial left",
+      "intramural interarterial left",
+      "left coronary artery with inter-arterial course",
+      "left coronary artery with intramural course",
+      "left main with inter-arterial course",
+      "left main with intramural course",
+      "LAD with inter-arterial course",
+      "LAD with intramural course",
+      "LCX with inter-arterial course",
+      "LCX with intramural course",
+    ]
+  ),
 
   feature("left_sinus", "Sinus of origin", "left sinus", [
     "LS",

@@ -34,6 +34,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   getStoredParsedReports,
   getStoredParsedTerms,
   type StoredParsedReport,
@@ -41,6 +50,7 @@ import {
 import type { ReviewDecision, ReviewDecisionRecord } from "@/data/parseTypes";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
+const TABLE_PAGE_SIZE = 10;
 
 function getAnalysisFeatureName(record: {
   normalizedName?: string;
@@ -170,6 +180,8 @@ export default function Analysis() {
     decision: ReviewDecision;
     occurrences: DecisionOccurrence[];
   } | null>(null);
+  const [coronaryPage, setCoronaryPage] = useState(1);
+  const [featurePage, setFeaturePage] = useState(1);
 
   useEffect(() => {
     const loadReports = async () => {
@@ -325,6 +337,32 @@ export default function Analysis() {
       (a, b) => b.count - a.count || a.name.localeCompare(b.name)
     );
   }, [allTerms]);
+
+  const coronaryPageCount = Math.max(
+    1,
+    Math.ceil(coronaryNarrowingRows.length / TABLE_PAGE_SIZE)
+  );
+  const safeCoronaryPage = Math.min(coronaryPage, coronaryPageCount);
+  const paginatedCoronaryRows = coronaryNarrowingRows.slice(
+    (safeCoronaryPage - 1) * TABLE_PAGE_SIZE,
+    safeCoronaryPage * TABLE_PAGE_SIZE
+  );
+  const featurePageCount = Math.max(
+    1,
+    Math.ceil(filteredFeatureRows.length / TABLE_PAGE_SIZE)
+  );
+  const safeFeaturePage = Math.min(featurePage, featurePageCount);
+  const paginatedFeatureRows = filteredFeatureRows.slice(
+    (safeFeaturePage - 1) * TABLE_PAGE_SIZE,
+    safeFeaturePage * TABLE_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setFeaturePage(1);
+  }, [featureSearch, featureSort]);
+  useEffect(() => {
+    setCoronaryPage(1);
+  }, [coronaryNarrowingRows]);
   const bridgeDashboardStats = useMemo<BridgeDashboardStats>(() => {
     const categories: BridgeDashboardStats["categories"] = {
       notPresent: 0,
@@ -592,7 +630,7 @@ export default function Analysis() {
                 </TableHeader>
                 <TableBody>
                   {coronaryNarrowingRows.length > 0 ? (
-                    coronaryNarrowingRows.map((row) => (
+                    paginatedCoronaryRows.map((row) => (
                       <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
@@ -610,6 +648,13 @@ export default function Analysis() {
                   )}
                 </TableBody>
               </Table>
+              {coronaryNarrowingRows.length > 0 && (
+                <TablePagination
+                  page={safeCoronaryPage}
+                  pageCount={coronaryPageCount}
+                  onPageChange={setCoronaryPage}
+                />
+              )}
             </CardContent>
           </Card>
         </section>
@@ -703,7 +748,7 @@ export default function Analysis() {
                 </TableHeader>
                 <TableBody>
                   {filteredFeatureRows.length > 0 ? (
-                    filteredFeatureRows.map((row) => (
+                    paginatedFeatureRows.map((row) => (
                       <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
@@ -723,6 +768,13 @@ export default function Analysis() {
                   )}
                 </TableBody>
               </Table>
+              {filteredFeatureRows.length > 0 && (
+                <TablePagination
+                  page={safeFeaturePage}
+                  pageCount={featurePageCount}
+                  onPageChange={setFeaturePage}
+                />
+              )}
             </CardContent>
           </Card>
         </section>
@@ -777,6 +829,91 @@ export default function Analysis() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function getPageList(page: number, pageCount: number): (number | "ellipsis")[] {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => index + 1);
+  }
+
+  const pages: (number | "ellipsis")[] = [1];
+  const start = Math.max(2, page - 1);
+  const end = Math.min(pageCount - 1, page + 1);
+
+  if (start > 2) pages.push("ellipsis");
+  for (let current = start; current <= end; current += 1) pages.push(current);
+  if (end < pageCount - 1) pages.push("ellipsis");
+  pages.push(pageCount);
+
+  return pages;
+}
+
+function TablePagination({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+
+  return (
+    <Pagination className="border-t border-border py-3">
+      <PaginationContent>
+        <PaginationItem>
+          <PaginationPrevious
+            href="#"
+            aria-disabled={page <= 1}
+            className={
+              page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"
+            }
+            onClick={(event) => {
+              event.preventDefault();
+              if (page > 1) onPageChange(page - 1);
+            }}
+          />
+        </PaginationItem>
+        {getPageList(page, pageCount).map((item, index) =>
+          item === "ellipsis" ? (
+            <PaginationItem key={`ellipsis-${index}`}>
+              <PaginationEllipsis />
+            </PaginationItem>
+          ) : (
+            <PaginationItem key={item}>
+              <PaginationLink
+                href="#"
+                isActive={item === page}
+                className="cursor-pointer"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onPageChange(item);
+                }}
+              >
+                {item}
+              </PaginationLink>
+            </PaginationItem>
+          )
+        )}
+        <PaginationItem>
+          <PaginationNext
+            href="#"
+            aria-disabled={page >= pageCount}
+            className={
+              page >= pageCount
+                ? "pointer-events-none opacity-50"
+                : "cursor-pointer"
+            }
+            onClick={(event) => {
+              event.preventDefault();
+              if (page < pageCount) onPageChange(page + 1);
+            }}
+          />
+        </PaginationItem>
+      </PaginationContent>
+    </Pagination>
   );
 }
 

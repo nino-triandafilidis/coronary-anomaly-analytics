@@ -11,6 +11,7 @@
  */
 
 import { parseWithOpenAI, estimateOpenAICost } from "@/lib/openaiParser";
+import type { ParseOptions } from "@/lib/openaiParser";
 import type { ParseResult } from "@/data/parseTypes";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,10 @@ export class CostLimitError extends Error {
 // Orchestrator entry point
 // ---------------------------------------------------------------------------
 
-export async function orchestrateParse(reportText: string): Promise<ParseResult> {
+export async function orchestrateParse(
+  reportText: string,
+  options: ParseOptions = {}
+): Promise<ParseResult> {
   console.group("[Orchestrator] OpenAI single-call");
 
   try {
@@ -46,7 +50,7 @@ export async function orchestrateParse(reportText: string): Promise<ParseResult>
       throw new CostLimitError(estimate.estimatedCostUsd);
     }
 
-    const result = await parseWithOpenAI(reportText);
+    const result = await parseWithOpenAI(reportText, options);
     console.log(
       `✅ [Orchestrator] ${result.parsedTerms.length} terms, ` +
         `$${result.estimatedCostUsd.toFixed(5)}, ${result.parseTimeMs}ms`

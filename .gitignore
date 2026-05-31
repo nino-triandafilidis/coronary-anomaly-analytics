@@ -41,8 +41,12 @@ starr_confidential_*.zip
 __pycache__/
 *.pyc
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # Confidential STARR extract data and pipeline outputs — never commit (report text / PHI-adjacent)
 AAOCA CTA Report Copies/
+Confirmed AAOCA CTA Reports/
 cohort-pipeline/aaoca_preprocessed/
 cohort-pipeline/*.csv
 cohort-pipeline/*.jsonl

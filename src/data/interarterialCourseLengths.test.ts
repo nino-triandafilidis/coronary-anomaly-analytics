@@ -29,6 +29,32 @@ describe("inter-arterial course length cleaning", () => {
     ).toEqual([]);
     expect(cleanInterarterialCourseLengthMeasurements(undefined)).toEqual([]);
   });
+
+  it("collapses the same value+vessel stated in FINDINGS and IMPRESSION", () => {
+    // mm and cm forms of the same 10 mm course, once per section.
+    expect(
+      cleanInterarterialCourseLengthMeasurements([
+        { value: 10, unit: "mm", rawText: "10 mm interarterial course", vessel: "RCA" },
+        { value: 1, unit: "cm", rawText: "approximately 1 cm interarterial course", vessel: "RCA" },
+      ])
+    ).toEqual([
+      { value: 10, unit: "mm", rawText: "10 mm interarterial course", vessel: "RCA" },
+    ]);
+  });
+
+  it("keeps genuinely distinct values or vessels", () => {
+    expect(
+      cleanInterarterialCourseLengthMeasurements([
+        { value: 10, unit: "mm", rawText: "10 mm", vessel: "RCA" },
+        { value: 11, unit: "mm", rawText: "11 mm", vessel: "RCA" },
+        { value: 10, unit: "mm", rawText: "10 mm LAD", vessel: "LAD" },
+      ])
+    ).toEqual([
+      { value: 10, unit: "mm", rawText: "10 mm", vessel: "RCA" },
+      { value: 11, unit: "mm", rawText: "11 mm", vessel: "RCA" },
+      { value: 10, unit: "mm", rawText: "10 mm LAD", vessel: "LAD" },
+    ]);
+  });
 });
 
 describe("inter-arterial course length histogram", () => {

@@ -6,11 +6,14 @@ import {
   resolveAnomalousLeftSubtypesFromTerm,
 } from "@/data/anomalousLeftSubtypes";
 
-function parsedTerm(text: string): ParsedTerm {
+function parsedTerm(
+  text: string,
+  assertion: ParsedTerm["assertion"] = "asserted"
+): ParsedTerm {
   return {
     term: text,
     normalizedName: text,
-    assertion: "asserted",
+    assertion,
     confidence: 1,
     startIndex: 0,
     endIndex: text.length,
@@ -77,6 +80,29 @@ describe("legacy anomalous-left subtype resolution", () => {
         parsedTerm("Anomalous LCX with retroaortic course")
       )
     ).toEqual([]);
+  });
+
+  it("ignores negated course findings", () => {
+    expect(
+      resolveAnomalousLeftSubtypesFromTerm(
+        parsedTerm("No intramural course of the left main coronary artery", "negated")
+      )
+    ).toEqual([]);
+    expect(
+      resolveAnomalousLeftSubtypesFromTerm(parsedTerm("inter-arterial left", "negated"))
+    ).toEqual([]);
+  });
+
+  it("excludes negated terms when deriving fallback subtypes", () => {
+    expect(
+      getReportAnomalousLeftSubtypes(
+        [],
+        [
+          parsedTerm("No intramural course of the left main coronary artery", "negated"),
+          parsedTerm("inter-arterial left", "asserted"),
+        ]
+      ).map((entry) => entry.subtype)
+    ).toEqual(["intramural_interarterial_left"]);
   });
 
   it("can return both subtype features and merges structured plus legacy entries", () => {

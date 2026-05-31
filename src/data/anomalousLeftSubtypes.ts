@@ -64,8 +64,13 @@ export function cleanAnomalousLeftSubtypes(
 }
 
 export function resolveAnomalousLeftSubtypesFromTerm(
-  term: Pick<ParsedTerm, "term" | "normalizedName" | "context">
+  term: Pick<ParsedTerm, "term" | "normalizedName" | "context" | "assertion">
 ): AnomalousLeftSubtypeEntry[] {
+  // A negated finding ("No intramural course of the left main") reports the
+  // subtype as absent. The keyword patterns below can't tell asserted from
+  // ruled-out on their own, so guard here or negated terms inflate the counts.
+  if (term.assertion === "negated") return [];
+
   const rawText = term.term.trim() || term.normalizedName.trim();
   const evidence = `${term.normalizedName} ${term.term} ${term.context}`;
   if (!LEFT_VESSEL_PATTERN.test(evidence) && !EXPLICIT_LEFT_SUBTYPE_PATTERN.test(evidence)) {

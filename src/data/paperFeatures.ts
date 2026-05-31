@@ -103,6 +103,8 @@ export const PAPER_FEATURES: PaperFeature[] = [
   feature("segment_c", "Ostial location - circumferential", "segment c"),
   feature("juxtacommissural", "Ostial location - circumferential", "juxtacommissural", [
     "JC",
+    "commissural origin",
+    "juxtacommissural origin",
   ]),
 
   feature("level_i", "Ostial location - height", "level I", ["level 1"]),
@@ -121,7 +123,10 @@ export const PAPER_FEATURES: PaperFeature[] = [
 
   feature("round_ostium", "Ostial morphology", "round ostium", ["round"]),
   feature("oval_ostium", "Ostial morphology", "oval ostium", ["oval"]),
-  feature("slit_like_ostium", "Ostial morphology", "slit-like ostium", ["slit-like"]),
+  feature("slit_like_ostium", "Ostial morphology", "slit-like ostium", [
+    "slit-like",
+    "slit-like origin",
+  ]),
   feature("hypoplastic_ostium", "Ostial morphology", "hypoplastic ostium", [
     "hypoplastic",
     "pinhole",
@@ -142,13 +147,21 @@ export const PAPER_FEATURES: PaperFeature[] = [
   feature("effective_lumen_diameter_narrowing", "Proximal course details", "effective lumen diameter narrowing", [], "measurement"),
   feature("acute_angle_of_takeoff", "Proximal course details", "acute angle of takeoff", [
     "acute takeoff angle",
+    "acute takeoff",
+    "angle of takeoff",
+    "takeoff angle",
   ], "measurement"),
 
   feature("right_dominance", "Coronary dominance", "right dominance", ["RD"]),
   feature("left_dominance", "Coronary dominance", "left dominance", ["LD"]),
   feature("codominance", "Coronary dominance", "codominance", ["CD", "co-dominance"]),
 
-  feature("myocardial_bridge", "Additional findings", "myocardial bridge", ["MB"]),
+  feature("myocardial_bridge", "Additional findings", "myocardial bridge", [
+    "MB",
+    "myocardial bridging",
+    "bridged segment",
+    "bridging",
+  ]),
   feature("coronary_fistula", "Additional findings", "coronary fistula", ["fistulae"]),
   feature("coronary_atherosclerotic_lesions", "Additional findings", "coronary atherosclerotic lesions", [
     "calcifications",

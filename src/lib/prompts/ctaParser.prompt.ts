@@ -51,6 +51,16 @@ Keep paper-relevant negatives such as:
 - no myocardial bridge
 - no anomalous coronary artery
 
+PRIORITY PAPER FEATURES
+Always extract these features when stated or explicitly negated. Treat the
+listed phrases as equivalent clinical wording and preserve the exact report
+substring in verbatimText:
+- intramural course / intramural
+- slit-like ostium / slit-like origin
+- myocardial bridge / myocardial bridging / bridged segment
+- acute angle of takeoff / acute takeoff angle / takeoff angle
+- juxtacommissural / commissural origin / juxtacommissural origin
+
 WHAT COUNTS AS A "TERM"
 - Named conditions: pulmonary embolism, anomalous coronary artery, myocardial
   bridge, ventricular hypertrophy, pleural effusion, pericardial effusion,

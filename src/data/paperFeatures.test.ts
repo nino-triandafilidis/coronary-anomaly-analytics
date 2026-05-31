@@ -36,6 +36,18 @@ describe("paper feature resolution", () => {
       paperFeatureTrackingRole: "reference",
     });
   });
+
+  it.each([
+    ["intramural course", "intramural_course"],
+    ["slit-like origin", "slit_like_ostium"],
+    ["myocardial bridging", "myocardial_bridge"],
+    ["takeoff angle", "acute_angle_of_takeoff"],
+    ["commissural origin", "juxtacommissural"],
+  ])("tracks priority paper feature wording %s", (term, expectedId) => {
+    expect(enrichParsedTermWithPaperFeature(parsedTerm(term, "negated"))).toMatchObject({
+      paperFeatureId: expectedId,
+    });
+  });
 });
 
 describe("normalized frequency filtering", () => {
@@ -50,6 +62,16 @@ describe("normalized frequency filtering", () => {
       shouldIncludeInNormalizedFrequency(parsedTerm("interarterial", "negated"))
     ).toBe(true);
     expect(shouldIncludeInNormalizedFrequency(parsedTerm("LS", "negated"))).toBe(true);
+  });
+
+  it.each([
+    "intramural course",
+    "slit-like origin",
+    "myocardial bridging",
+    "takeoff angle",
+    "commissural origin",
+  ])("includes priority paper feature negative %s", (term) => {
+    expect(shouldIncludeInNormalizedFrequency(parsedTerm(term, "negated"))).toBe(true);
   });
 
   it("excludes reference-only negatives", () => {

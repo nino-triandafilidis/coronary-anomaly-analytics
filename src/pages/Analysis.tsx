@@ -530,6 +530,17 @@ export default function Analysis() {
             <p className="mt-1 text-sm text-muted-foreground">
               Complete paper-tracked AAOCA feature dictionary with occurrence counts across parsed reports.
             </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Paper reference:{" "}
+              <a
+                href="https://www.jacc.org/doi/10.1016/j.jcmg.2026.02.005"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                https://www.jacc.org/doi/10.1016/j.jcmg.2026.02.005
+              </a>
+            </p>
           </div>
 
           <Card>

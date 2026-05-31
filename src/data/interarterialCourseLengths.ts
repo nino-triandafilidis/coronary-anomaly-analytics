@@ -35,7 +35,7 @@ export function cleanCourseLengthMeasurements(
 ): CourseLengthMeasurement[] {
   if (!Array.isArray(measurements)) return [];
 
-  return measurements.flatMap((measurement) => {
+  const cleaned = measurements.flatMap((measurement) => {
     if (!measurement || typeof measurement !== "object") return [];
 
     const raw = measurement as Record<string, unknown>;
@@ -52,7 +52,7 @@ export function cleanCourseLengthMeasurements(
     const valueMm = unit === "cm" ? numericValue * 10 : numericValue;
     if (!Number.isFinite(valueMm) || valueMm <= 0) return [];
 
-    const cleaned = {
+    const cleanedMeasurement = {
       value: valueMm,
       unit: "mm" as const,
       rawText: typeof raw.rawText === "string" ? raw.rawText : "",
@@ -62,7 +62,21 @@ export function cleanCourseLengthMeasurements(
           : undefined,
     };
 
-    return !shouldKeep || shouldKeep(cleaned) ? [cleaned] : [];
+    return !shouldKeep || shouldKeep(cleanedMeasurement) ? [cleanedMeasurement] : [];
+  });
+
+  // Collapse duplicates within a single report. The same course length is
+  // usually stated twice, once in FINDINGS and once in IMPRESSION, which
+  // otherwise double-counts the value and skews the course-length histogram.
+  // Dedupe on normalized value + vessel and keep the first occurrence (so its
+  // rawText, typically the FINDINGS sentence, is the one retained). Genuinely
+  // distinct values or vessels are preserved.
+  const seen = new Set<string>();
+  return cleaned.filter((measurement) => {
+    const key = `${measurement.value}|${measurement.vessel ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 

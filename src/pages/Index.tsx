@@ -258,8 +258,6 @@ const Index = () => {
       text: reportText,
       parsedTerms: reviewTerms,
       parserModel: parseResult.parserModel,
-      verifierModel: parseResult.verifierModel,
-      verifierAgreement: parseResult.verifierAgreement,
       parseTimeMs: parseResult.parseTimeMs,
       totalTokensUsed: parseResult.totalTokensUsed,
       estimatedCostUsd: parseResult.estimatedCostUsd,
@@ -349,7 +347,7 @@ const Index = () => {
             <p className="mt-2 text-sm text-muted-foreground">
               {batchProgress
                 ? `Report ${batchProgress.current} of ${batchProgress.total}: ${batchProgress.sourceName}`
-                : "Running AI parser and verifier - check browser console for detailed logs"}
+                : "Running AI parser (check the browser console for detailed logs)"}
             </p>
             {batchProgress && (
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">

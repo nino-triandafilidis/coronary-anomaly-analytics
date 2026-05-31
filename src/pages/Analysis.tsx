@@ -32,7 +32,11 @@ import {
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
 import type { ReviewDecisionRecord } from "@/data/parseTypes";
-import { shouldIncludeInNormalizedFrequency } from "@/data/paperFeatures";
+import {
+  PAPER_FEATURES,
+  resolveParsedTermPaperFeature,
+  shouldIncludeInNormalizedFrequency,
+} from "@/data/paperFeatures";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 
@@ -120,6 +124,17 @@ interface CoronaryNarrowingRow {
   count: number;
 }
 
+interface PaperFeatureRow {
+  id: string;
+  category: string;
+  canonical: string;
+  aliases: string[];
+  trackingRole: "feature" | "measurement" | "reference";
+  asserted: number;
+  negated: number;
+  total: number;
+}
+
 type BridgeDashboardCategory = "notPresent" | "grade1" | "grade2" | "grade3";
 type BridgeCountCategory = "notPresent" | "one" | "two" | "threePlus";
 
@@ -189,6 +204,36 @@ export default function Analysis() {
 
   const reportCount = reports.length;
   const reviewedReportCount = reports.filter((report) => report.reviewed).length;
+  const paperFeatureRows = useMemo<PaperFeatureRow[]>(() => {
+    const rows = new Map(
+      PAPER_FEATURES.map((paperFeature) => [
+        paperFeature.id,
+        {
+          ...paperFeature,
+          asserted: 0,
+          negated: 0,
+          total: 0,
+        },
+      ])
+    );
+
+    allTerms.forEach((term) => {
+      const paperFeature = resolveParsedTermPaperFeature(term);
+      if (!paperFeature) return;
+
+      const row = rows.get(paperFeature.id);
+      if (!row) return;
+
+      row[term.assertion] += 1;
+      row.total += 1;
+    });
+
+    return Array.from(rows.values());
+  }, [allTerms]);
+  const maxPaperFeatureCount = useMemo(
+    () => Math.max(1, ...paperFeatureRows.map((row) => row.total)),
+    [paperFeatureRows]
+  );
   const normalizedFeatureRows = useMemo(() => {
     const rows = new Map<
       string,
@@ -418,6 +463,12 @@ export default function Analysis() {
                 Dataset Snapshot
               </a>
               <a
+                href="#paper-features"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Paper Features
+              </a>
+              <a
                 href="#coronary-narrowing"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
@@ -472,6 +523,72 @@ export default function Analysis() {
               })}
             </div>
           </section>
+
+        <section id="paper-features" className="mt-10 scroll-mt-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-foreground">Paper Features Overview</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Complete paper-tracked AAOCA feature dictionary with occurrence counts across parsed reports.
+            </p>
+          </div>
+
+          <Card>
+            <CardContent className="overflow-x-auto p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[190px]">Category</TableHead>
+                    <TableHead className="min-w-[210px]">Canonical keyword</TableHead>
+                    <TableHead className="min-w-[260px]">Aliases</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead className="min-w-[150px]">Total occurrences</TableHead>
+                    <TableHead className="text-right">Asserted</TableHead>
+                    <TableHead className="text-right">Negated</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paperFeatureRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.category}
+                      </TableCell>
+                      <TableCell className="font-medium">{row.canonical}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.aliases.length > 0 ? row.aliases.join(" / ") : "-"}
+                      </TableCell>
+                      <TableCell className="text-sm capitalize text-muted-foreground">
+                        {row.trackingRole}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-20 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary transition-all"
+                              style={{
+                                width: loading
+                                  ? "0%"
+                                  : `${(row.total / maxPaperFeatureCount) * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="tabular-nums text-foreground">
+                            {loading ? "..." : row.total}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {loading ? "..." : row.asserted}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {loading ? "..." : row.negated}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </section>
 
         <section id="coronary-narrowing" className="mt-10 scroll-mt-6">
           <div className="mb-6">

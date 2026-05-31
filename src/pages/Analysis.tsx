@@ -5,7 +5,6 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
-  ExternalLink,
   FileText,
   Highlighter,
   PlusCircle,
@@ -20,12 +19,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Table,
   TableBody,
   TableCell,
@@ -38,7 +31,7 @@ import {
   getStoredParsedTerms,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ReviewDecision, ReviewDecisionRecord } from "@/data/parseTypes";
+import type { ReviewDecisionRecord } from "@/data/parseTypes";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 
@@ -114,17 +107,6 @@ function normalizeCoronaryNarrowingFeature(record: {
   return `${severity}${location}${concept} of ${vessel}`.replace(/\s+/g, " ").trim();
 }
 
-interface DecisionOccurrence extends ReviewDecisionRecord {
-  reportId: string;
-  reportText: string;
-}
-
-interface DecisionSummary {
-  name: string;
-  count: number;
-  occurrences: DecisionOccurrence[];
-}
-
 interface NormalizedFeatureRow {
   name: string;
   count: number;
@@ -165,12 +147,6 @@ export default function Analysis() {
     key: FeatureSortKey;
     direction: FeatureSortDirection;
   }>({ key: "count", direction: "desc" });
-  const [selectedDecision, setSelectedDecision] = useState<{
-    title: string;
-    decision: ReviewDecision;
-    occurrences: DecisionOccurrence[];
-  } | null>(null);
-
   useEffect(() => {
     const loadReports = async () => {
       setLoading(true);
@@ -205,47 +181,13 @@ export default function Analysis() {
     () => reports.flatMap((report) => getStoredParsedTerms(report)),
     [reports]
   );
-  const allReviewDecisions = useMemo<DecisionOccurrence[]>(
-    () =>
-      reports.flatMap((report) =>
-        (report.reviewDecisions ?? []).map((decision) => ({
-          ...decision,
-          reportId: report.id,
-          reportText: report.text,
-        }))
-      ),
+  const allReviewDecisions = useMemo<ReviewDecisionRecord[]>(
+    () => reports.flatMap((report) => report.reviewDecisions ?? []),
     [reports]
   );
 
   const reportCount = reports.length;
   const reviewedReportCount = reports.filter((report) => report.reviewed).length;
-  const summarizeReviewDecisions = (decision: ReviewDecision): DecisionSummary[] => {
-    const rows = new Map<string, DecisionSummary>();
-
-    allReviewDecisions
-      .filter((record) => record.decision === decision)
-      .forEach((record) => {
-        const name = getAnalysisFeatureName(record);
-        if (!name) return;
-
-        const existing = rows.get(name) ?? { name, count: 0, occurrences: [] };
-        existing.count += 1;
-        existing.occurrences.push(record);
-        rows.set(name, existing);
-      });
-
-    return Array.from(rows.values())
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-      .slice(0, 10);
-  };
-  const topKeepDecisions = useMemo(
-    () => summarizeReviewDecisions("keep"),
-    [allReviewDecisions]
-  );
-  const topSkipDecisions = useMemo(
-    () => summarizeReviewDecisions("skip"),
-    [allReviewDecisions]
-  );
   const normalizedFeatureRows = useMemo(() => {
     const rows = new Map<
       string,
@@ -471,12 +413,6 @@ export default function Analysis() {
                 Dataset Snapshot
               </a>
               <a
-                href="#overview-charts"
-                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                Review Decisions
-              </a>
-              <a
                 href="#coronary-narrowing"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
@@ -531,44 +467,6 @@ export default function Analysis() {
               })}
             </div>
           </section>
-
-        <section id="overview-charts" className="mt-10 scroll-mt-6">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-foreground">Review Decisions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Most frequently kept and skipped terms from reviewed reports.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DecisionWordList
-                title="Top 10 Keeped Words"
-                emptyLabel="No kept words recorded yet."
-                rows={topKeepDecisions}
-                onSelect={(row) =>
-                  setSelectedDecision({
-                    title: row.name,
-                    decision: "keep",
-                    occurrences: row.occurrences,
-                  })
-                }
-              />
-              <DecisionWordList
-                title="Top 10 Skipped Words"
-                emptyLabel="No skipped words recorded yet."
-                rows={topSkipDecisions}
-                onSelect={(row) =>
-                  setSelectedDecision({
-                    title: row.name,
-                    decision: "skip",
-                    occurrences: row.occurrences,
-                  })
-                }
-              />
-            </div>
-          </div>
-        </section>
 
         <section id="coronary-narrowing" className="mt-10 scroll-mt-6">
           <div className="mb-6">
@@ -729,53 +627,6 @@ export default function Analysis() {
         </div>
       </main>
 
-      <Dialog open={!!selectedDecision} onOpenChange={(open) => !open && setSelectedDecision(null)}>
-        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedDecision?.title} - {selectedDecision?.decision === "keep" ? "Keep" : "Skip"} Context
-            </DialogTitle>
-          </DialogHeader>
-
-          {selectedDecision && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {selectedDecision.occurrences.length} occurrence
-                {selectedDecision.occurrences.length !== 1 ? "s" : ""} across reviewed files.
-              </p>
-              {selectedDecision.occurrences.map((occurrence, index) => (
-                <div
-                  key={`${occurrence.reportId}-${occurrence.startIndex}-${occurrence.endIndex}-${index}`}
-                  className="rounded-lg border border-border bg-card p-4"
-                >
-                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{occurrence.reportId}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Position {occurrence.startIndex}-{occurrence.endIndex} ·{" "}
-                        {occurrence.assertion === "negated"
-                          ? "negated"
-                          : "asserted"}
-                      </p>
-                    </div>
-                    <Link
-                      to={`/dataset?reportId=${encodeURIComponent(
-                        occurrence.reportId
-                      )}&returnTo=${encodeURIComponent("/analysis#top-review-words")}`}
-                    >
-                      <Button variant="outline" size="sm">
-                        <ExternalLink className="h-4 w-4" />
-                        Preview
-                      </Button>
-                    </Link>
-                  </div>
-                  <ContextSnippet occurrence={occurrence} />
-                </div>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -852,86 +703,5 @@ function HorizontalBarChart({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function DecisionWordList({
-  title,
-  emptyLabel,
-  rows,
-  onSelect,
-}: {
-  title: string;
-  emptyLabel: string;
-  rows: DecisionSummary[];
-  onSelect: (row: DecisionSummary) => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {rows.length > 0 ? (
-          <ol className="space-y-2">
-            {rows.map((row, index) => (
-              <li key={`${title}-${row.name}`}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(row)}
-                  className="flex w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent/50"
-                >
-                  <span className="min-w-0">
-                    <span className="mr-2 text-xs tabular-nums text-muted-foreground">
-                      {index + 1}.
-                    </span>
-                    <span className="break-words text-foreground">{row.name}</span>
-                  </span>
-                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                    {row.count}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-            {emptyLabel}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ContextSnippet({ occurrence }: { occurrence: DecisionOccurrence }) {
-  const text = occurrence.reportText;
-  const start = Math.max(0, occurrence.startIndex);
-  const end = Math.min(text.length, occurrence.endIndex);
-
-  if (!text || start >= end) {
-    return (
-      <p className="rounded-md bg-muted/40 p-3 font-mono text-xs leading-relaxed text-card-foreground">
-        {occurrence.context || occurrence.term}
-      </p>
-    );
-  }
-
-  const contextStart = Math.max(0, start - 180);
-  const contextEnd = Math.min(text.length, end + 180);
-  const before = text.slice(contextStart, start);
-  const match = text.slice(start, end);
-  const after = text.slice(end, contextEnd);
-
-  return (
-    <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 font-mono text-xs leading-relaxed text-card-foreground">
-      {contextStart > 0 ? "..." : ""}
-      {before}
-      <mark className="rounded bg-amber-200 px-0.5 text-foreground dark:bg-amber-700/40">
-        {match}
-      </mark>
-      {after}
-      {contextEnd < text.length ? "..." : ""}
-    </p>
   );
 }

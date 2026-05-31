@@ -8,7 +8,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ParseResult, ReviewableTerm, TermStatus } from "@/data/mockParseResults";
+import type {
+  ParseResult,
+  ReviewableTerm,
+  ReviewDecisionRecord,
+  TermStatus,
+} from "@/data/parseTypes";
 
 // ---------------------------------------------------------------------------
 // Status → highlight colour mapping
@@ -35,18 +40,31 @@ const STATUS_BORDER: Record<TermStatus, string> = {
 interface TermReviewProps {
   parseResult: ParseResult;
   initialTerms?: ReviewableTerm[];
-  onConfirm: (accepted: ReviewableTerm[]) => void | Promise<void>;
+  onConfirm: (
+    accepted: ReviewableTerm[],
+    reviewDecisions: ReviewDecisionRecord[]
+  ) => void | Promise<void>;
   onBack: () => void;
+  readOnly?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: TermReviewProps) {
+export function TermReview({
+  parseResult,
+  initialTerms,
+  onConfirm,
+  onBack,
+  readOnly = false,
+}: TermReviewProps) {
   const [terms, setTerms] = useState<ReviewableTerm[]>(() =>
     initialTerms ??
-    parseResult.parsedTerms.map((t) => ({ ...t, status: "pending" as TermStatus }))
+    parseResult.parsedTerms.map((t) => ({
+      ...t,
+      status: (readOnly ? "accepted" : "pending") as TermStatus,
+    }))
   );
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -75,6 +93,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
   // --- Actions ---
   const toggleStatus = useCallback(
     (idx: number, target: TermStatus) => {
+      if (readOnly) return;
       setTerms((prev) =>
         prev.map((t, i) => {
           if (i !== idx) return t;
@@ -82,21 +101,28 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
         })
       );
     },
-    []
+    [readOnly]
   );
 
   const bulkAccept = () =>
+    !readOnly &&
     setTerms((prev) =>
       prev.map((t) => (t.status === "pending" ? { ...t, status: "accepted" } : t))
     );
 
   const bulkReject = () =>
+    !readOnly &&
     setTerms((prev) =>
       prev.map((t) => (t.status === "pending" ? { ...t, status: "rejected" } : t))
     );
 
   // --- Text selection handler ---
   useEffect(() => {
+    if (readOnly) {
+      setSelectionPopover(null);
+      return;
+    }
+
     const handleMouseUp = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !reportRef.current) {
@@ -137,10 +163,10 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
 
     document.addEventListener("mouseup", handleMouseUp);
     return () => document.removeEventListener("mouseup", handleMouseUp);
-  }, [parseResult.reportText]);
+  }, [parseResult.reportText, readOnly]);
 
   const addSelectedTerm = () => {
-    if (!selectionPopover) return;
+    if (readOnly || !selectionPopover) return;
     const added: ReviewableTerm = {
       term: selectionPopover.text,
       normalizedName: selectionPopover.text,
@@ -161,6 +187,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
   };
 
   const toggleAssertion = useCallback((idx: number) => {
+    if (readOnly) return;
     setTerms((prev) =>
       prev.map((t, i) => {
         if (i !== idx) return t;
@@ -189,7 +216,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
         };
       })
     );
-  }, [parseResult.parsedTerms]);
+  }, [parseResult.parsedTerms, readOnly]);
 
   const dismissPopover = () => {
     setSelectionPopover(null);
@@ -197,9 +224,25 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
   };
 
   const handleConfirm = async () => {
+    if (readOnly) return;
     setConfirming(true);
     try {
-      await onConfirm(terms.filter((t) => t.status === "accepted" || t.status === "added"));
+      const reviewedAt = new Date().toISOString();
+      const reviewDecisions: ReviewDecisionRecord[] = terms
+        .filter((t) => t.status === "accepted" || t.status === "added" || t.status === "rejected")
+        .map((term) => {
+          const { status: _status, ...parsedTerm } = term;
+          return {
+            ...parsedTerm,
+            decision: term.status === "rejected" ? "skip" : "keep",
+            reviewedAt,
+          };
+        });
+
+      await onConfirm(
+        terms.filter((t) => t.status === "accepted" || t.status === "added"),
+        reviewDecisions
+      );
     } catch (err) {
       console.error("[TermReview] Confirm failed:", err);
     } finally {
@@ -238,9 +281,13 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Review AI Findings</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {readOnly ? "Preview AI Findings" : "Review AI Findings"}
+            </h2>
             <p className="text-xs text-muted-foreground">
-              {terms.length} terms extracted · approve or reject before continuing
+              {readOnly
+                ? `${terms.length} terms extracted`
+                : `${terms.length} terms extracted · approve or reject before continuing`}
             </p>
           </div>
           <button onClick={onBack} className="text-sm font-medium text-primary hover:underline">
@@ -248,7 +295,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
           </button>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
           {/* LEFT — Report with highlights. min-w-0 (via minmax(0,1fr) above)
               lets the column shrink past its content width so the right
               column never gets pushed off-screen. */}
@@ -319,7 +366,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             </p>
 
             {/* Floating popover for text selection */}
-            {selectionPopover && (
+            {!readOnly && selectionPopover && (
               <div
                 className="fixed z-50"
                 style={{
@@ -346,7 +393,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
           </div>
 
           {/* RIGHT — Term review panel */}
-          <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:h-[75vh] lg:max-h-[75vh]">
             {/* Model metadata */}
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -374,6 +421,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             </div>
 
             {/* Bulk actions — only act on the pending pile, never on already-accepted/rejected terms */}
+            {!readOnly && (
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -394,9 +442,10 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                 <X className="h-3.5 w-3.5" /> Reject Remaining ({counts.pending})
               </Button>
             </div>
+            )}
 
             {/* Term cards */}
-            <ScrollArea className="max-h-[45vh]">
+            <ScrollArea className="min-h-0 flex-1">
               <div className="flex flex-col gap-2 pr-3">
                 {terms.map((term, idx) => {
                   const isHovered = hoveredIdx === idx;
@@ -412,10 +461,10 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                         span?.scrollIntoView({ behavior: "smooth", block: "center" });
                       }}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium text-card-foreground truncate">
+                            <span className="min-w-0 break-words text-sm font-medium text-card-foreground">
                               {term.normalizedName}
                             </span>
                             <button
@@ -424,6 +473,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                                 e.stopPropagation();
                                 toggleAssertion(idx);
                               }}
+                              disabled={readOnly}
                               title={
                                 term.assertion === "negated"
                                   ? "Marked as pertinent negative — click to flip"
@@ -451,22 +501,34 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-1 shrink-0">
+                        {!readOnly && (
+                        <div className="flex w-full flex-wrap justify-end gap-1 sm:w-auto sm:shrink-0">
                           <button
-                            onClick={() => toggleStatus(idx, "accepted")}
-                            className={`rounded p-1 transition-colors ${term.status === "accepted" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"}`}
-                            aria-label="Accept"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleStatus(idx, "accepted");
+                            }}
+                            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${term.status === "accepted" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"}`}
+                            aria-label="Keep term"
                           >
-                            <Check className="h-4 w-4" />
+                            <Check className="h-3.5 w-3.5" />
+                            Keep
                           </button>
                           <button
-                            onClick={() => toggleStatus(idx, "rejected")}
-                            className={`rounded p-1 transition-colors ${term.status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : "text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"}`}
-                            aria-label="Reject"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleStatus(idx, "rejected");
+                            }}
+                            className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs font-medium transition-colors ${term.status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : "text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"}`}
+                            aria-label="Skip term"
                           >
-                            <X className="h-4 w-4" />
+                            <X className="h-3.5 w-3.5" />
+                            Skip
                           </button>
                         </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -475,11 +537,14 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
             </ScrollArea>
 
             {/* Hint for adding terms */}
+            {!readOnly && (
             <p className="text-[11px] text-muted-foreground text-center">
               Select text in the report to add a term
             </p>
+            )}
 
             {/* Confirm CTA */}
+            {!readOnly && (
             <Button
               onClick={handleConfirm}
               disabled={reviewedCount === 0 || confirming}
@@ -489,6 +554,7 @@ export function TermReview({ parseResult, initialTerms, onConfirm, onBack }: Ter
                 ? "Saving..."
                 : `Confirm ${reviewedCount} reviewed term${reviewedCount !== 1 ? "s" : ""}`}
             </Button>
+            )}
           </div>
         </div>
       </div>

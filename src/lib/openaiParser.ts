@@ -11,9 +11,14 @@
  * The prompt is in src/lib/prompts/ctaParser.prompt.ts.
  */
 
-import type { ParsedTerm, ParseResult, Assertion } from "@/data/mockParseResults";
+import type {
+  ParsedTerm,
+  ParseResult,
+  Assertion,
+  MyocardialBridgeSummary,
+} from "@/data/parseTypes";
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
-import { findTermPosition } from "@/lib/positionResolver";
+import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -22,11 +27,18 @@ import { findTermPosition } from "@/lib/positionResolver";
 const MODEL_NAME = "gpt-5.4";
 const MAX_TOKENS = 8192;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const OPENAI_REQUEST_TIMEOUT_MS = 120_000;
 
 // Pricing placeholder per 1M tokens. Update these if your OpenAI account shows
 // different GPT-5.4 rates.
 const INPUT_COST_PER_TOKEN = 10.0 / 1_000_000;
 const OUTPUT_COST_PER_TOKEN = 30.0 / 1_000_000;
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => window.setTimeout(resolve, 0));
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Tool schema: forces structured JSON output
@@ -36,6 +48,79 @@ const FINDINGS_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
+    myocardialBridgeSummary: {
+      type: "object",
+      additionalProperties: false,
+      description:
+        "Per-patient myocardial bridge summary. If no myocardial bridge is asserted, bridgeCount must be 0 and bridges must be empty.",
+      properties: {
+        bridgeCount: {
+          type: "integer",
+          minimum: 0,
+          description:
+            "Number of asserted myocardial bridges in this patient. Usually 1, occasionally 2; use 0 when no bridge is present.",
+        },
+        highestGrade: {
+          anyOf: [{ type: "integer", enum: [1, 2, 3] }, { type: "null" }],
+          description:
+            "Patient-level bridge category. Null when no myocardial bridge is present; otherwise the highest bridge grade in the report. If multiple bridges are present, report the highest grade only for this field.",
+        },
+        bridges: {
+          type: "array",
+          description:
+            "One item for each asserted myocardial bridge. Do not include negated bridges.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              bridgeIndex: {
+                type: "integer",
+                minimum: 1,
+                description: "1-based bridge index within this report.",
+              },
+              vessel: {
+                type: "string",
+                description:
+                  "Coronary vessel containing the bridge, e.g. LAD, mid LAD, RCA, LCx, or unknown.",
+              },
+              segment: {
+                type: "string",
+                description:
+                  "Specific segment if available, e.g. proximal LAD, mid LAD, distal LAD, or unknown.",
+              },
+              grade: {
+                anyOf: [{ type: "integer", enum: [1, 2, 3] }, { type: "null" }],
+                description:
+                  "Myocardial bridge grade: 1=superficial/mild/type 1; 2=moderate/type 2; 3=deep/severe/type 3. Null if not stated or inferable.",
+              },
+              lengthMm: {
+                anyOf: [{ type: "number" }, { type: "null" }],
+                description: "Bridge length in millimeters, or null if not reported.",
+              },
+              depthMm: {
+                anyOf: [{ type: "number" }, { type: "null" }],
+                description: "Bridge depth in millimeters, or null if not reported.",
+              },
+              evidenceText: {
+                type: "string",
+                description:
+                  "Exact contiguous report substring supporting this bridge detail.",
+              },
+            },
+            required: [
+              "bridgeIndex",
+              "vessel",
+              "segment",
+              "grade",
+              "lengthMm",
+              "depthMm",
+              "evidenceText",
+            ],
+          },
+        },
+      },
+      required: ["bridgeCount", "highestGrade", "bridges"],
+    },
     findings: {
       type: "array",
       description: "Every clinically relevant term in the report.",
@@ -51,7 +136,8 @@ const FINDINGS_SCHEMA = {
           },
           normalizedName: {
             type: "string",
-            description: "Canonical name in Title Case (e.g. 'Pericardial Effusion').",
+            description:
+              "Canonical name in Title Case. For coronary modifiers, resolve the concept to the most specific vessel or segment when available, e.g. 'Significant Narrowing Of Left Circumflex Artery' rather than only 'Significant Narrowing'.",
           },
           assertion: {
             type: "string",
@@ -70,7 +156,7 @@ const FINDINGS_SCHEMA = {
       },
     },
   },
-  required: ["findings"],
+  required: ["myocardialBridgeSummary", "findings"],
 } as const;
 
 const RECORD_FINDINGS_TOOL = {
@@ -95,6 +181,7 @@ interface ToolFinding {
 }
 
 interface ToolInput {
+  myocardialBridgeSummary: MyocardialBridgeSummary;
   findings: ToolFinding[];
 }
 
@@ -140,32 +227,56 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   console.log("Model:", MODEL_NAME);
   console.log("Report length:", reportText.length, "chars");
 
-  const rawResponse = await fetch(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL_NAME,
-      instructions: CTA_PARSER_PROMPT,
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `REPORT:\n\n${reportText}`,
-            },
-          ],
-        },
-      ],
-      tools: [RECORD_FINDINGS_TOOL],
-      tool_choice: { type: "function", name: "record_findings" },
-      parallel_tool_calls: false,
-      max_output_tokens: MAX_TOKENS,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    OPENAI_REQUEST_TIMEOUT_MS
+  );
+
+  let rawResponse: Response;
+  try {
+    console.time("[OpenAIParser] fetch");
+    console.log("[OpenAIParser] Sending request to OpenAI...");
+    rawResponse = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        instructions: CTA_PARSER_PROMPT,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `REPORT:\n\n${reportText}`,
+              },
+            ],
+          },
+        ],
+        tools: [RECORD_FINDINGS_TOOL],
+        tool_choice: { type: "function", name: "record_findings" },
+        parallel_tool_calls: false,
+        max_output_tokens: MAX_TOKENS,
+      }),
+    });
+    console.timeEnd("[OpenAIParser] fetch");
+  } catch (err) {
+    console.timeEnd("[OpenAIParser] fetch");
+    console.groupEnd();
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(
+        `OpenAI parser timed out after ${OPENAI_REQUEST_TIMEOUT_MS / 1000} seconds. Please retry or use a shorter report.`
+      );
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   const response = (await rawResponse.json()) as OpenAIResponse;
   if (!rawResponse.ok) {
@@ -210,31 +321,74 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   );
 
   const findings = Array.isArray(toolInput?.findings) ? toolInput.findings : [];
+  const rawBridgeSummary = toolInput?.myocardialBridgeSummary;
+  const rawBridgeGrades = Array.isArray(rawBridgeSummary?.bridges)
+    ? rawBridgeSummary.bridges
+        .map((bridge) => bridge.grade)
+        .filter((grade): grade is 1 | 2 | 3 => grade === 1 || grade === 2 || grade === 3)
+    : [];
+  const bridgeCount =
+    rawBridgeSummary && typeof rawBridgeSummary.bridgeCount === "number"
+      ? rawBridgeSummary.bridgeCount
+      : 0;
+  const highestGrade =
+    rawBridgeSummary?.highestGrade === 1 ||
+    rawBridgeSummary?.highestGrade === 2 ||
+    rawBridgeSummary?.highestGrade === 3
+      ? rawBridgeSummary.highestGrade
+      : rawBridgeGrades.length > 0
+        ? Math.max(...rawBridgeGrades) as 1 | 2 | 3
+        : null;
+  const myocardialBridgeSummary: MyocardialBridgeSummary =
+    rawBridgeSummary && Array.isArray(rawBridgeSummary.bridges)
+      ? {
+          bridgeCount,
+          highestGrade: bridgeCount > 0 ? highestGrade : null,
+          bridges: rawBridgeSummary.bridges,
+        }
+      : { bridgeCount: 0, highestGrade: null, bridges: [] };
 
   console.log(`GPT returned ${findings.length} findings`);
+  console.log(
+    `Myocardial bridges: ${myocardialBridgeSummary.bridgeCount}`,
+    myocardialBridgeSummary.bridges
+  );
 
   // ---------------------------------------------------------------
   // Position-resolve every finding back to source text
   // ---------------------------------------------------------------
+  console.time("[OpenAIParser] position resolve");
   const usedPositions = new Set<number>();
   const parsedTerms: ParsedTerm[] = [];
   const dropped: { verbatimText: string; reason: string }[] = [];
   let whitespaceFixCount = 0;
+  const positionResolver = createReportPositionResolver(reportText);
 
-  for (const f of findings) {
+  for (const [index, f] of findings.entries()) {
+    if (index > 0 && index % 25 === 0) {
+      await yieldToBrowser();
+    }
+
     if (!f.verbatimText) {
       dropped.push({ verbatimText: "(empty)", reason: "missing verbatimText" });
       continue;
     }
 
     let searchAfter = 0;
-    let pos = findTermPosition(reportText, f.verbatimText, searchAfter);
+    let pos = positionResolver.findTermPosition(f.verbatimText, searchAfter);
 
     // Skip already-claimed start positions so duplicates can each find their own
     // occurrence (e.g. same finding appears in FINDINGS and IMPRESSION).
+    let duplicateSearchCount = 0;
     while (pos && usedPositions.has(pos.startIndex)) {
       searchAfter = pos.startIndex + 1;
-      pos = findTermPosition(reportText, f.verbatimText, searchAfter);
+      pos = positionResolver.findTermPosition(f.verbatimText, searchAfter);
+      duplicateSearchCount++;
+
+      if (duplicateSearchCount > usedPositions.size + 1) {
+        pos = null;
+        break;
+      }
     }
 
     if (!pos) {
@@ -292,14 +446,15 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
       match: t.correctionType ?? "exact",
     }))
   );
-  console.groupEnd();
-
   parsedTerms.sort((a, b) => a.startIndex - b.startIndex);
+  console.timeEnd("[OpenAIParser] position resolve");
+  console.groupEnd();
 
   return {
     reportId: crypto.randomUUID(),
     reportText,
     parsedTerms,
+    myocardialBridgeSummary,
     parserModel: MODEL_NAME,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,

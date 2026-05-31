@@ -8,6 +8,8 @@ import { componentTagger } from "lovable-tagger";
 const parsedReportsRoot = path.resolve(__dirname, "parsed_reports");
 const parsedTxtDir = path.join(parsedReportsRoot, "txt");
 const parsedJsonDir = path.join(parsedReportsRoot, "json");
+const originalParsedJsonDir = path.join(parsedReportsRoot, "original_json");
+const uploadedReportsDir = path.join(parsedReportsRoot, "uploads");
 
 function sendJson(res: { statusCode: number; setHeader: (name: string, value: string) => void; end: (body?: string) => void }, status: number, body: unknown) {
   res.statusCode = status;
@@ -31,6 +33,39 @@ function sanitizeReportId(id: unknown): string | null {
   return /^[a-zA-Z0-9._-]+$/.test(id) ? id : null;
 }
 
+function sanitizeFileName(name: unknown): string | null {
+  if (typeof name !== "string") return null;
+  const cleaned = name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^_+/, "");
+  return cleaned || null;
+}
+
+function buildStoredReportPayload(
+  reportId: string,
+  text: string,
+  parseResult: unknown,
+  storedAt: string,
+  reviewed: boolean,
+  updatedAt?: string,
+  reviewDecisions: unknown[] = []
+) {
+  const txtPath = path.join(parsedTxtDir, `${reportId}.txt`);
+  const jsonPath = path.join(parsedJsonDir, `${reportId}.json`);
+  const originalJsonPath = path.join(originalParsedJsonDir, `${reportId}.json`);
+
+  return {
+    id: reportId,
+    textFile: path.relative(__dirname, txtPath).replace(/\\/g, "/"),
+    jsonFile: path.relative(__dirname, jsonPath).replace(/\\/g, "/"),
+    originalJsonFile: path.relative(__dirname, originalJsonPath).replace(/\\/g, "/"),
+    storedAt,
+    ...(updatedAt ? { updatedAt } : {}),
+    reviewed,
+    text,
+    parseResult,
+    reviewDecisions,
+  };
+}
+
 function parsedReportsFileApi() {
   return {
     name: "parsed-reports-file-api",
@@ -39,10 +74,13 @@ function parsedReportsFileApi() {
         try {
           await fs.mkdir(parsedTxtDir, { recursive: true });
           await fs.mkdir(parsedJsonDir, { recursive: true });
+          await fs.mkdir(originalParsedJsonDir, { recursive: true });
 
           const method = req.method ?? "GET";
           const url = new URL(req.url ?? "/", "http://localhost");
-          const reportIdFromPath = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+          const pathParts = url.pathname.replace(/^\/+/, "").split("/").filter(Boolean);
+          const reportIdFromPath = pathParts[0] ? decodeURIComponent(pathParts[0]) : "";
+          const actionFromPath = pathParts[1] ? decodeURIComponent(pathParts[1]) : "";
 
           if (method === "GET" && !reportIdFromPath) {
             const files = await fs.readdir(parsedJsonDir);
@@ -54,7 +92,20 @@ function parsedReportsFileApi() {
                   const raw = await fs.readFile(fullPath, "utf8");
                   const report = JSON.parse(raw);
                   const stat = await fs.stat(fullPath);
-                  return { ...report, storedAt: report.storedAt ?? stat.mtime.toISOString() };
+                  const reportId = sanitizeReportId(report.id) ?? file.replace(/\.json$/, "");
+                  const originalJsonPath = path.join(originalParsedJsonDir, `${reportId}.json`);
+                  if (!existsSync(originalJsonPath)) {
+                    await fs.writeFile(originalJsonPath, raw, "utf8");
+                  }
+                  return {
+                    ...report,
+                    originalJsonFile:
+                      report.originalJsonFile ??
+                      path.relative(__dirname, originalJsonPath).replace(/\\/g, "/"),
+                    reviewed: report.reviewed ?? false,
+                    reviewDecisions: report.reviewDecisions ?? [],
+                    storedAt: report.storedAt ?? stat.mtime.toISOString(),
+                  };
                 })
             );
             reports.sort((a, b) => String(b.storedAt).localeCompare(String(a.storedAt)));
@@ -73,7 +124,54 @@ function parsedReportsFileApi() {
               sendJson(res, 404, { error: "Report not found." });
               return;
             }
-            sendJson(res, 200, JSON.parse(await fs.readFile(jsonPath, "utf8")));
+            const raw = await fs.readFile(jsonPath, "utf8");
+            const originalJsonPath = path.join(originalParsedJsonDir, `${reportId}.json`);
+            if (!existsSync(originalJsonPath)) {
+              await fs.writeFile(originalJsonPath, raw, "utf8");
+            }
+            const report = JSON.parse(raw);
+            sendJson(res, 200, {
+              ...report,
+              originalJsonFile:
+                report.originalJsonFile ??
+                path.relative(__dirname, originalJsonPath).replace(/\\/g, "/"),
+              reviewed: report.reviewed ?? false,
+              reviewDecisions: report.reviewDecisions ?? [],
+            });
+            return;
+          }
+
+          if (method === "POST" && reportIdFromPath && actionFromPath === "restore") {
+            const reportId = sanitizeReportId(reportIdFromPath);
+            if (!reportId) {
+              sendJson(res, 400, { error: "Invalid report id." });
+              return;
+            }
+
+            const jsonPath = path.join(parsedJsonDir, `${reportId}.json`);
+            const originalJsonPath = path.join(originalParsedJsonDir, `${reportId}.json`);
+            const txtPath = path.join(parsedTxtDir, `${reportId}.txt`);
+            if (!existsSync(jsonPath) || !existsSync(originalJsonPath) || !existsSync(txtPath)) {
+              sendJson(res, 404, { error: "Report or original parsed JSON not found." });
+              return;
+            }
+
+            const existing = JSON.parse(await fs.readFile(jsonPath, "utf8"));
+            const original = JSON.parse(await fs.readFile(originalJsonPath, "utf8"));
+            const text = await fs.readFile(txtPath, "utf8");
+            const updatedAt = new Date().toISOString();
+            const restoredPayload = buildStoredReportPayload(
+              reportId,
+              text,
+              original.parseResult,
+              existing.storedAt ?? original.storedAt ?? updatedAt,
+              false,
+              updatedAt,
+              []
+            );
+
+            await fs.writeFile(jsonPath, JSON.stringify(restoredPayload, null, 2), "utf8");
+            sendJson(res, 200, restoredPayload);
             return;
           }
 
@@ -87,23 +185,24 @@ function parsedReportsFileApi() {
 
             const txtPath = path.join(parsedTxtDir, `${reportId}.txt`);
             const jsonPath = path.join(parsedJsonDir, `${reportId}.json`);
-            if (existsSync(txtPath) || existsSync(jsonPath)) {
+            const originalJsonPath = path.join(originalParsedJsonDir, `${reportId}.json`);
+            if (existsSync(txtPath) || existsSync(jsonPath) || existsSync(originalJsonPath)) {
               sendJson(res, 409, { error: `Report ${reportId} already exists.` });
               return;
             }
 
             const storedAt = new Date().toISOString();
-            const jsonPayload = {
-              id: reportId,
-              textFile: path.relative(__dirname, txtPath).replace(/\\/g, "/"),
-              jsonFile: path.relative(__dirname, jsonPath).replace(/\\/g, "/"),
+            const jsonPayload = buildStoredReportPayload(
+              reportId,
+              body.text,
+              body.parseResult,
               storedAt,
-              text: body.text,
-              parseResult: body.parseResult,
-            };
+              false
+            );
 
             await fs.writeFile(txtPath, body.text, "utf8");
             await fs.writeFile(jsonPath, JSON.stringify(jsonPayload, null, 2), "utf8");
+            await fs.writeFile(originalJsonPath, JSON.stringify(jsonPayload, null, 2), "utf8");
             sendJson(res, 201, jsonPayload);
             return;
           }
@@ -127,16 +226,35 @@ function parsedReportsFileApi() {
               sendJson(res, 400, { error: "Expected parseResult." });
               return;
             }
+            if (
+              "reviewDecisions" in body &&
+              body.reviewDecisions !== undefined &&
+              !Array.isArray(body.reviewDecisions)
+            ) {
+              sendJson(res, 400, { error: "Expected reviewDecisions to be an array." });
+              return;
+            }
 
             const existing = JSON.parse(await fs.readFile(jsonPath, "utf8"));
             const text = await fs.readFile(txtPath, "utf8");
             const updatedAt = new Date().toISOString();
+            const originalJsonPath = path.join(originalParsedJsonDir, `${reportId}.json`);
+            if (!existsSync(originalJsonPath)) {
+              await fs.writeFile(originalJsonPath, JSON.stringify(existing, null, 2), "utf8");
+            }
             const jsonPayload = {
-              ...existing,
-              id: reportId,
-              text,
-              updatedAt,
-              parseResult: body.parseResult,
+              ...buildStoredReportPayload(
+                reportId,
+                text,
+                body.parseResult,
+                existing.storedAt ?? updatedAt,
+                existing.reviewed === true || body.reviewed === true,
+                updatedAt,
+                Array.isArray(body.reviewDecisions)
+                  ? body.reviewDecisions
+                  : existing.reviewDecisions ?? []
+              ),
+              ...("originalJsonFile" in existing ? { originalJsonFile: existing.originalJsonFile } : {}),
             };
 
             await fs.writeFile(jsonPath, JSON.stringify(jsonPayload, null, 2), "utf8");
@@ -153,6 +271,7 @@ function parsedReportsFileApi() {
             await Promise.allSettled([
               fs.unlink(path.join(parsedTxtDir, `${reportId}.txt`)),
               fs.unlink(path.join(parsedJsonDir, `${reportId}.json`)),
+              fs.unlink(path.join(originalParsedJsonDir, `${reportId}.json`)),
             ]);
             sendJson(res, 200, { ok: true });
             return;
@@ -169,23 +288,75 @@ function parsedReportsFileApi() {
   };
 }
 
+function uploadedReportsFileApi() {
+  return {
+    name: "uploaded-reports-file-api",
+    configureServer(server) {
+      server.middlewares.use("/api/uploaded-reports", async (req, res, next) => {
+        try {
+          await fs.mkdir(uploadedReportsDir, { recursive: true });
+
+          const method = req.method ?? "GET";
+          if (method !== "POST") {
+            next();
+            return;
+          }
+
+          const body = JSON.parse(await getRequestBody(req));
+          const uploadId = sanitizeReportId(body.uploadId);
+          const fileName = sanitizeFileName(body.fileName);
+          const dataBase64 = typeof body.dataBase64 === "string" ? body.dataBase64 : "";
+
+          if (!uploadId || !fileName || !dataBase64) {
+            sendJson(res, 400, {
+              error: "Expected uploadId, fileName, and dataBase64.",
+            });
+            return;
+          }
+
+          const ext = path.extname(fileName);
+          const base = path.basename(fileName, ext);
+          const storedName = `${uploadId}-${base}${ext}`;
+          const storedPath = path.join(uploadedReportsDir, storedName);
+
+          await fs.writeFile(storedPath, Buffer.from(dataBase64, "base64"));
+
+          sendJson(res, 201, {
+            uploadId,
+            fileName,
+            storedFile: path.relative(__dirname, storedPath).replace(/\\/g, "/"),
+            storedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          sendJson(res, 500, {
+            error: err instanceof Error ? err.message : "Uploaded report file API failed.",
+          });
+        }
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-    hmr: {
-      overlay: false,
+export default defineConfig(({ mode }) => {
+  return {
+    server: {
+      host: "::",
+      port: 8080,
+      hmr: {
+        overlay: false,
+      },
     },
-  },
-  plugins: [
-    react(),
-    parsedReportsFileApi(),
-    mode === "development" && componentTagger(),
-  ].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+    plugins: [
+      react(),
+      uploadedReportsFileApi(),
+      parsedReportsFileApi(),
+      mode === "development" && componentTagger(),
+    ].filter(Boolean),
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
-  },
-}));
+  };
+});

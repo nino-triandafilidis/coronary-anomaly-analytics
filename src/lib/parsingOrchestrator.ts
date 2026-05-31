@@ -11,7 +11,7 @@
  */
 
 import { parseWithOpenAI, estimateOpenAICost } from "@/lib/openaiParser";
-import type { ParseResult } from "@/data/mockParseResults";
+import type { ParseResult } from "@/data/parseTypes";
 
 // ---------------------------------------------------------------------------
 // Cost guard

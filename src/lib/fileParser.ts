@@ -4,12 +4,8 @@
  */
 
 import * as pdfjsLib from "pdfjs-dist";
+import PdfJsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 import mammoth from "mammoth";
-
-// PDF.js worker: use CDN so the worker loads in browser (Vite doesn't serve node_modules worker)
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.5.207/build/pdf.worker.mjs`;
-}
 
 const SUPPORTED_TYPES = {
   "text/plain": "txt",
@@ -51,6 +47,12 @@ export function parseTxt(content: string): string {
   return content;
 }
 
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => window.setTimeout(resolve, 0));
+  });
+}
+
 /**
  * Extract text from PDF buffer. Returns concatenated text from all pages.
  * Optional onProgress for multi-page progress (0-1).
@@ -59,8 +61,11 @@ export async function parsePdf(
   arrayBuffer: ArrayBuffer,
   onProgress?: (loaded: number, total: number) => void
 ): Promise<string> {
+  const workerPort = new PdfJsWorker();
+  const pdfWorker = pdfjsLib.PDFWorker.create({ port: workerPort });
   const loadingTask = pdfjsLib.getDocument({
-    data: arrayBuffer,
+    data: new Uint8Array(arrayBuffer),
+    worker: pdfWorker,
     useSystemFonts: true,
   });
   if (onProgress) {
@@ -68,21 +73,29 @@ export async function parsePdf(
       if (p.total > 0) onProgress(p.loaded, p.total);
     });
   }
-  const pdf = await loadingTask.promise;
-  const numPages = pdf.numPages;
-  const pageTexts: string[] = [];
-  for (let i = 1; i <= numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ");
-    pageTexts.push(text);
-    if (onProgress && numPages > 0) {
-      onProgress(i, numPages);
+  let pdf: pdfjsLib.PDFDocumentProxy | null = null;
+  try {
+    pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+    const pageTexts: string[] = [];
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      pageTexts.push(text);
+      page.cleanup();
+      if (onProgress && numPages > 0) {
+        onProgress(i, numPages);
+      }
+      await yieldToBrowser();
     }
+    return pageTexts.join("\n\n");
+  } finally {
+    await pdf?.destroy();
+    pdfWorker.destroy();
   }
-  return pageTexts.join("\n\n");
 }
 
 /**

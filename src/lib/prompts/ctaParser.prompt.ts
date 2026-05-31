@@ -39,6 +39,119 @@ WHAT COUNTS AS A "TERM"
 - Anatomic variants worth flagging even if benign: right/left/co-dominant
   circulation, left-sided aortic arch when noted as a variant.
 
+CORONARY-SPECIFIC MODIFIERS
+For coronary artery findings, generic modifiers such as "narrowing",
+"significant narrowing", "stenosis", "compression", "narrowed",
+"slit-like ostium", "acute takeoff", "intramural course", or
+"interarterial course" must be resolved to the most specific coronary artery
+or coronary segment mentioned in the same sentence or immediately preceding
+sentence.
+
+Do not return only a generic normalizedName such as "significant narrowing"
+when the report makes clear which vessel it applies to. The normalizedName
+should include the vessel or segment, such as "significant narrowing of left
+circumflex artery", "proximal narrowing of RCA", or "slit-like ostium of left
+main coronary artery".
+
+The verbatimText field must still obey the exact-text rule. If the vessel name
+and the modifier are not part of one contiguous substring, keep verbatimText as
+the longest exact contiguous substring and put the vessel-resolved concept in
+normalizedName.
+
+Examples:
+  "The left circumflex artery is patent without significant narrowing."
+    → verbatimText: "significant narrowing"
+    → normalizedName: "significant narrowing of left circumflex artery"
+    → assertion: "negated"
+
+  "The RCA has an interarterial course and is significantly narrowed proximally."
+    → verbatimText: "significantly narrowed proximally"
+    → normalizedName: "significant proximal narrowing of RCA"
+    → assertion: "asserted"
+
+  "Anomalous left circumflex artery arising from the right coronary cusp,
+   narrowed measuring approximately 1 x 4 mm in cross-section."
+    → verbatimText: "narrowed measuring approximately 1 x 4 mm in cross-section"
+    → normalizedName: "narrowing of anomalous left circumflex artery, 1 x 4 mm"
+    → assertion: "asserted"
+
+  "The right coronary artery is normal. The left main coronary artery has a
+   slit-like ostium."
+    → verbatimText: "slit-like ostium"
+    → normalizedName: "slit-like ostium of left main coronary artery"
+    → assertion: "asserted"
+
+MYOCARDIAL BRIDGE SUMMARY
+In addition to findings, return a per-patient "myocardialBridgeSummary".
+This summary is patient-level, not finding-level.
+
+bridgeCount:
+- Count only ASSERTED myocardial bridges.
+- Typical value is 1; maximum is usually about 2.
+- If the report explicitly says there is no myocardial bridge, no complete
+  bridge, or no bridged segment, set bridgeCount to 0 and bridges to [] unless
+  another bridge is asserted elsewhere in the report.
+- If a partial/superficial bridge is asserted and a complete bridge is negated,
+  count the asserted partial/superficial bridge.
+
+highestGrade:
+- This is the patient-level dashboard category.
+- There are four categories: not present, grade 1, grade 2, grade 3.
+- Use null for "not present" when bridgeCount is 0.
+- If bridgeCount is greater than 0, highestGrade must be 1, 2, or 3.
+- If multiple bridges are present, report the highest grade only in
+  highestGrade. For example, one grade 1 bridge and one grade 3 bridge means
+  highestGrade is 3.
+- The grading scheme exists for stratification, but it is not the primary NER
+  focus; prefer the explicit grade/type if stated and otherwise use the best
+  supported grade from report language.
+
+For each bridge in bridges, return:
+- bridgeIndex: 1-based index.
+- vessel: vessel containing the bridge, such as "LAD", "mid LAD", "RCA",
+  "LCx", or "unknown".
+- segment: most specific segment available, such as "proximal LAD",
+  "mid LAD", "distal LAD", or "unknown".
+- grade: numeric grade 1, 2, 3, or null.
+- lengthMm: bridge length in millimeters, or null if not reported.
+- depthMm: bridge depth in millimeters, or null if not reported.
+- evidenceText: exact contiguous substring supporting the bridge detail.
+
+Bridge grade:
+- Grade 1: explicitly grade/type 1, superficial, mild, minimal, or no
+  significant systolic compression.
+- Grade 2: explicitly grade/type 2, moderate depth, moderate tunneling, or
+  moderate systolic compression.
+- Grade 3: explicitly grade/type 3, deep, severe, long/deep tunneled segment,
+  or severe/significant systolic compression.
+- Use the explicit grade in the report when present.
+- For individual bridges, use null only when the report mentions a bridge but
+  does not provide enough information to assign grade 1-3. Even if an
+  individual bridge grade is null, highestGrade should still be 1, 2, or 3
+  when bridgeCount is greater than 0, using the best supported category.
+
+Examples:
+  "Short mid LAD type 1 myocardial bridge measuring 8 mm in length and 2 mm
+   in depth."
+    -> bridgeCount: 1
+    -> highestGrade: 1
+    -> bridge: vessel "LAD", segment "mid LAD", grade 1, lengthMm 8, depthMm 2
+
+  "No complete myocardial bridge."
+    -> bridgeCount: 0
+    -> highestGrade: null
+    -> bridges: []
+
+  "Superficial partial bridging of the mid LAD. No complete myocardial bridge."
+    -> bridgeCount: 1
+    -> highestGrade: 1
+    -> bridge: vessel "LAD", segment "mid LAD", grade 1, lengthMm null, depthMm null
+
+Dashboard intent:
+- The ideal dashboard can summarize the cohort as, for example:
+  "200 patients had myocardial bridges, 150 had grade 3, 50 had grade 2,
+  30 had more than one bridge."
+
 MEASUREMENTS
 Include a measurement when it is bound to anatomy or pathology in the same
 sentence or clause — even if no qualifier word like "abnormal" or "concerning"
@@ -103,5 +216,7 @@ find a contiguous substring that captures the finding, return the longest
 contiguous substring that does and put the cleaned form in "normalizedName".
 
 OUTPUT
-Call the \`record_findings\` tool exactly once. If no findings are present,
-call it with { "findings": [] }.`;
+Call the \`record_findings\` tool exactly once. The output must include both
+"myocardialBridgeSummary" and "findings". If no findings are present, call it
+with { "myocardialBridgeSummary": { "bridgeCount": 0, "highestGrade": null,
+"bridges": [] }, "findings": [] }.`;

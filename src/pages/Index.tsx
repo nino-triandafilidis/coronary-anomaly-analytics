@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, Heart, Loader2, BookmarkCheck } from "lucide-react";
-import { ReportInput } from "@/components/ReportInput";
+import { Activity, BarChart3, Heart, Loader2, BookmarkCheck } from "lucide-react";
+import { ReportInput, type ReportSubmission } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
 import { TermReview } from "@/components/TermReview";
@@ -10,7 +10,11 @@ import {
   type DetectedAnomaly,
 } from "@/data/anomalyDatabase";
 import { orchestrateParse, CostLimitError } from "@/lib/parsingOrchestrator";
-import type { ParseResult, ReviewableTerm } from "@/data/mockParseResults";
+import type {
+  ParseResult,
+  ReviewableTerm,
+  ReviewDecisionRecord,
+} from "@/data/parseTypes";
 import {
   saveReport,
   getReportCount,
@@ -23,7 +27,21 @@ import {
 } from "@/lib/parsedReportStorage";
 import { useToast } from "@/hooks/use-toast";
 
-type Stage = "upload" | "parsing" | "review" | "results";
+type Stage = "upload" | "parsing" | "review" | "results" | "batch-results";
+
+interface BatchParseResult {
+  sourceName: string;
+  uploadedFile?: string;
+  reportId?: string;
+  termCount?: number;
+  error?: string;
+}
+
+function waitForBrowserPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => window.setTimeout(resolve, 0));
+  });
+}
 
 const Index = () => {
   const { toast } = useToast();
@@ -36,6 +54,12 @@ const Index = () => {
   const [parseError, setParseError] = useState<string | null>(null);
   const [dbCount, setDbCount] = useState(0);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{
+    current: number;
+    total: number;
+    sourceName: string;
+  } | null>(null);
+  const [batchResults, setBatchResults] = useState<BatchParseResult[]>([]);
 
   const refreshParsedReportCount = async () => {
     try {
@@ -51,15 +75,25 @@ const Index = () => {
     refreshParsedReportCount();
   }, []);
 
-  const handleReport = async (text: string) => {
-    setReportText(text);
+  const parseSingleReport = async (report: ReportSubmission) => {
+    setReportText(report.text);
     setParseError(null);
     setSavedId(null);
+    setBatchProgress(null);
+    setBatchResults([]);
     setStage("parsing");
 
     try {
-      const result = await orchestrateParse(text);
-      await storeParsedReportFiles(text, result);
+      await waitForBrowserPaint();
+      if (report.uploadedFile) {
+        console.log(`[Index] Raw uploaded report is stored at ${report.uploadedFile}`);
+      }
+      console.time(`[Index] OpenAI parse ${report.sourceName}`);
+      const result = await orchestrateParse(report.text);
+      console.timeEnd(`[Index] OpenAI parse ${report.sourceName}`);
+      console.time(`[Index] store parsed JSON ${result.reportId}`);
+      await storeParsedReportFiles(report.text, result);
+      console.timeEnd(`[Index] store parsed JSON ${result.reportId}`);
       await refreshParsedReportCount();
       setParseResult(result);
       setReviewTerms(null);
@@ -81,12 +115,91 @@ const Index = () => {
     }
   };
 
+  const parseBatchReports = async (reports: ReportSubmission[]) => {
+    setReportText(null);
+    setDetected([]);
+    setParseResult(null);
+    setReviewTerms(null);
+    setParseError(null);
+    setSavedId(null);
+    setBatchResults([]);
+    setStage("parsing");
+
+    const results: BatchParseResult[] = [];
+
+    await waitForBrowserPaint();
+
+    for (const [index, report] of reports.entries()) {
+      setBatchProgress({
+        current: index + 1,
+        total: reports.length,
+        sourceName: report.sourceName,
+      });
+
+      try {
+        if (report.uploadedFile) {
+          console.log(`[Index] Raw uploaded report is stored at ${report.uploadedFile}`);
+        }
+        console.time(`[Index] OpenAI parse ${report.sourceName}`);
+        const result = await orchestrateParse(report.text);
+        console.timeEnd(`[Index] OpenAI parse ${report.sourceName}`);
+        console.time(`[Index] store parsed JSON ${result.reportId}`);
+        await storeParsedReportFiles(report.text, result);
+        console.timeEnd(`[Index] store parsed JSON ${result.reportId}`);
+        results.push({
+          sourceName: report.sourceName,
+          uploadedFile: report.uploadedFile,
+          reportId: result.reportId,
+          termCount: result.parsedTerms.length,
+        });
+      } catch (err) {
+        const error =
+          err instanceof CostLimitError
+            ? `Cost limit exceeded: ${err.message}`
+            : err instanceof Error
+              ? err.message
+              : "Unknown parse error";
+        console.error(`[Index] Batch parse failed for ${report.sourceName}:`, err);
+        results.push({
+          sourceName: report.sourceName,
+          uploadedFile: report.uploadedFile,
+          error,
+        });
+      }
+
+      setBatchResults([...results]);
+      await waitForBrowserPaint();
+    }
+
+    setBatchProgress(null);
+    await refreshParsedReportCount();
+
+    if (results.every((result) => result.error)) {
+      setParseError("All selected reports failed to parse. Check the details below.");
+    }
+
+    setBatchResults(results);
+    setStage("batch-results");
+  };
+
+  const handleReport = async (reports: ReportSubmission[]) => {
+    if (reports.length === 1) {
+      await parseSingleReport(reports[0]);
+      return;
+    }
+
+    await parseBatchReports(reports);
+  };
+
   const stripReviewStatus = (term: ReviewableTerm) => {
     const { status: _status, ...parsedTerm } = term;
     return parsedTerm;
   };
 
-  const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
+  const handleReviewConfirm = async (
+    accepted: ReviewableTerm[],
+    reviewDecisions: ReviewDecisionRecord[]
+  ) => {
     if (!parseResult) return;
 
     const nextParseResult: ParseResult = {
@@ -95,7 +208,12 @@ const Index = () => {
     };
 
     try {
-      await updateStoredParsedReport(nextParseResult.reportId, nextParseResult);
+      await updateStoredParsedReport(
+        nextParseResult.reportId,
+        nextParseResult,
+        true,
+        reviewDecisions
+      );
       setParseResult(nextParseResult);
       toast({
         title: "Saved",
@@ -161,6 +279,8 @@ const Index = () => {
     setReviewTerms(null);
     setParseError(null);
     setSavedId(null);
+    setBatchProgress(null);
+    setBatchResults([]);
   };
 
   return (
@@ -181,15 +301,24 @@ const Index = () => {
               </p>
             </div>
           </div>
-          <Link
-            to="/dataset"
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <Heart className="h-3.5 w-3.5 text-clinical-danger" />
-            <span>
-              {dbCount} report{dbCount !== 1 ? "s" : ""} in database
-            </span>
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/analysis"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-primary" />
+              <span>Analysis Page</span>
+            </Link>
+            <Link
+              to="/dataset"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Heart className="h-3.5 w-3.5 text-clinical-danger" />
+              <span>
+                {dbCount} report{dbCount !== 1 ? "s" : ""} in database
+              </span>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -214,10 +343,26 @@ const Index = () => {
         {stage === "parsing" && (
           <div className="mx-auto max-w-md animate-fade-in text-center py-20">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary mb-4" />
-            <h2 className="text-lg font-semibold text-foreground">Analyzing Report</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {batchProgress ? "Analyzing Reports" : "Analyzing Report"}
+            </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Running AI parser and verifier — check browser console for detailed logs
+              {batchProgress
+                ? `Report ${batchProgress.current} of ${batchProgress.total}: ${batchProgress.sourceName}`
+                : "Running AI parser and verifier - check browser console for detailed logs"}
             </p>
+            {batchProgress && (
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width: `${Math.round(
+                      (batchProgress.current / batchProgress.total) * 100
+                    )}%`,
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -288,6 +433,79 @@ const Index = () => {
               <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
                 <ReportViewer text={reportText} anomalies={detected} />
                 <FrequencyPanel detected={detected} />
+              </div>
+            </div>
+          );
+        })()}
+
+        {stage === "batch-results" && (() => {
+          const successCount = batchResults.filter((result) => !result.error).length;
+          const failedCount = batchResults.length - successCount;
+
+          return (
+            <div className="mx-auto max-w-3xl animate-fade-in">
+              <div className="mb-6 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Batch Parse Complete</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Parsed {successCount} of {batchResults.length} report
+                    {batchResults.length !== 1 ? "s" : ""}.
+                    {failedCount > 0 ? ` ${failedCount} failed.` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link
+                    to="/dataset"
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    View Dataset
+                  </Link>
+                  <button
+                    onClick={handleReset}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    New Upload
+                  </button>
+                </div>
+              </div>
+
+              {parseError && (
+                <p className="mb-4 text-sm text-red-600 dark:text-red-400">{parseError}</p>
+              )}
+
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="grid grid-cols-[1fr_120px_1.4fr] gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground">
+                  <span>File</span>
+                  <span>Status</span>
+                  <span>Details</span>
+                </div>
+                {batchResults.map((result, index) => (
+                  <div
+                    key={`${result.sourceName}-${index}`}
+                    className="grid grid-cols-[1fr_120px_1.4fr] gap-3 border-b border-border px-4 py-3 text-sm last:border-b-0"
+                  >
+                    <span className="truncate text-foreground">{result.sourceName}</span>
+                    <span
+                      className={
+                        result.error
+                          ? "font-medium text-red-600 dark:text-red-400"
+                          : "font-medium text-emerald-700 dark:text-emerald-300"
+                      }
+                    >
+                      {result.error ? "Failed" : "Saved"}
+                    </span>
+                    <span className="min-w-0 text-muted-foreground">
+                      {result.error
+                        ? result.error
+                        : `${result.termCount ?? 0} terms saved to ${result.reportId}.json`}
+                      {result.uploadedFile && (
+                        <span className="block truncate text-xs">
+                          Raw file: {result.uploadedFile}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           );

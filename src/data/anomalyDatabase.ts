@@ -7,7 +7,7 @@
  * the UI renders a "no historical data" badge instead of a 0/N count.
  */
 
-import type { Assertion } from "./mockParseResults";
+import type { Assertion } from "./parseTypes";
 import { getSavedReports } from "@/lib/reportDatabase";
 
 // ---------------------------------------------------------------------------

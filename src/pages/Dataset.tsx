@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity,
   FileText,
@@ -7,6 +7,8 @@ import {
   MinusCircle,
   Trash2,
   Database,
+  Pencil,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,10 +33,15 @@ import {
   deleteStoredParsedReport,
   getStoredParsedReports,
   getStoredParsedTerms,
+  restoreStoredParsedReport,
   updateStoredParsedReport,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ParsedTerm, ReviewableTerm } from "@/data/mockParseResults";
+import type {
+  ParsedTerm,
+  ReviewableTerm,
+  ReviewDecisionRecord,
+} from "@/data/parseTypes";
 import { useToast } from "@/hooks/use-toast";
 
 function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
@@ -42,15 +49,39 @@ function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
   return parsedTerm;
 }
 
+function getReviewDecisionKey(term: ParsedTerm): string {
+  return [
+    term.startIndex,
+    term.endIndex,
+    term.normalizedName.trim().toLowerCase(),
+    term.term.trim().toLowerCase(),
+  ].join("|");
+}
+
+function mergeReviewDecisions(
+  previous: ReviewDecisionRecord[] | undefined,
+  next: ReviewDecisionRecord[]
+): ReviewDecisionRecord[] {
+  const nextKeys = new Set(next.map(getReviewDecisionKey));
+  return [
+    ...(previous ?? []).filter((decision) => !nextKeys.has(getReviewDecisionKey(decision))),
+    ...next,
+  ];
+}
+
 export default function Dataset() {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
   const [previewReport, setPreviewReport] = useState<StoredParsedReport | null>(null);
+  const [previewReadOnly, setPreviewReadOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [savingError, setSavingError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   const refreshReports = async () => {
     setLoading(true);
@@ -68,13 +99,51 @@ export default function Dataset() {
     refreshReports();
   }, []);
 
+  useEffect(() => {
+    const reportId = searchParams.get("reportId");
+    if (!reportId || reports.length === 0 || previewReport?.id === reportId) return;
+
+    const report = reports.find((item) => item.id === reportId);
+    if (report) {
+      setSavingError(null);
+      setSavedNotice(null);
+      setPreviewReadOnly(true);
+      setPreviewReport(report);
+    }
+  }, [previewReport?.id, reports, searchParams]);
+
+  const closePreview = () => {
+    const returnTo = searchParams.get("returnTo");
+
+    setPreviewReport(null);
+    setSavedNotice(null);
+    setSavingError(null);
+    setPreviewReadOnly(true);
+
+    if (returnTo) {
+      navigate(returnTo, { replace: true });
+      return;
+    }
+
+    if (searchParams.has("reportId")) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("reportId");
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     await deleteStoredParsedReport(id);
     await refreshReports();
-    if (previewReport?.id === id) setPreviewReport(null);
+    if (previewReport?.id === id) {
+      closePreview();
+    }
   };
 
-  const handleReviewConfirm = async (accepted: ReviewableTerm[]) => {
+  const handleReviewConfirm = async (
+    accepted: ReviewableTerm[],
+    reviewDecisions: ReviewDecisionRecord[]
+  ) => {
     if (!previewReport) return;
 
     setSavingError(null);
@@ -82,9 +151,18 @@ export default function Dataset() {
       ...previewReport.parseResult,
       parsedTerms: accepted.map(stripReviewStatus),
     };
+    const mergedReviewDecisions = mergeReviewDecisions(
+      previewReport.reviewDecisions,
+      reviewDecisions
+    );
 
     try {
-      const updated = await updateStoredParsedReport(previewReport.id, nextParseResult);
+      const updated = await updateStoredParsedReport(
+        previewReport.id,
+        nextParseResult,
+        true,
+        mergedReviewDecisions
+      );
       setPreviewReport(updated);
       setReports((prev) => prev.map((report) => (report.id === updated.id ? updated : report)));
       setSavedNotice(`Saved ${updated.id}.json`);
@@ -97,6 +175,29 @@ export default function Dataset() {
       setSavingError(message);
       toast({ title: "Could not save", description: message });
       throw err;
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    setRestoring(true);
+    setSavingError(null);
+    setSavedNotice(null);
+
+    try {
+      const restored = await restoreStoredParsedReport(id);
+      setPreviewReport(restored);
+      setReports((prev) => prev.map((report) => (report.id === restored.id ? restored : report)));
+      setSavedNotice(`Restored ${restored.id}.json from original parsed JSON`);
+      toast({
+        title: "Restored",
+        description: `Current ${restored.id}.json now matches the original parsed report.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to restore parsed report.";
+      setSavingError(message);
+      toast({ title: "Could not restore", description: message });
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -115,11 +216,18 @@ export default function Dataset() {
               <p className="text-[11px] text-muted-foreground">Dataset - Parsed Reports</p>
             </div>
           </Link>
-          <Link to="/">
-            <Button variant="ghost" size="sm">
-              Back to Analyzer
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/analysis">
+              <Button variant="ghost" size="sm">
+                Analysis Page
+              </Button>
+            </Link>
+            <Link to="/">
+              <Button variant="ghost" size="sm">
+                Back to Analyzer
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -181,11 +289,29 @@ export default function Dataset() {
                   onClick={() => {
                     setSavingError(null);
                     setSavedNotice(null);
+                    setPreviewReadOnly(true);
                     setPreviewReport(report);
                   }}
                   className="group flex flex-col items-start rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
                 >
-                  <FileText className="mb-2 h-8 w-8 text-muted-foreground group-hover:text-primary" />
+                  <div className="mb-2 flex w-full items-start justify-between gap-3">
+                    <FileText className="h-8 w-8 text-muted-foreground group-hover:text-primary" />
+                    <span
+                      className={
+                        "flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium " +
+                        (report.reviewed
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "bg-muted text-muted-foreground")
+                      }
+                    >
+                      {report.reviewed ? (
+                        <CheckCircle2 className="h-3 w-3" />
+                      ) : (
+                        <MinusCircle className="h-3 w-3" />
+                      )}
+                      {report.reviewed ? "Reviewed" : "Not reviewed"}
+                    </span>
+                  </div>
                   <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
                     {report.id}
                   </span>
@@ -222,8 +348,7 @@ export default function Dataset() {
           open={!!previewReport}
           onOpenChange={(open) => {
             if (!open) {
-              setPreviewReport(null);
-              setSavedNotice(null);
+              closePreview();
             }
           }}
         >
@@ -244,45 +369,103 @@ export default function Dataset() {
                   )}
                 </div>
                 {previewReport && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {previewReadOnly && (
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => {
+                          setSavingError(null);
+                          setSavedNotice(null);
+                          setPreviewReadOnly(false);
+                        }}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
+                        Edit
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete report?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will remove "{previewReport.id}" from the local txt/json folders.
-                          This cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={() => handleDelete(previewReport.id)}
+                    )}
+                    {!previewReadOnly && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={restoring}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            {restoring ? "Restoring..." : "Restore"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Restore original parsed report?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently replace the current editable JSON for
+                              "{previewReport.id}" with the original parsed JSON snapshot.
+                              Existing edits to highlighted terms will be lost.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleRestore(previewReport.id)}>
+                              Restore
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-destructive"
                         >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete report?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will remove "{previewReport.id}" from the local txt/json folders.
+                            This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => handleDelete(previewReport.id)}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 )}
               </div>
             </DialogHeader>
 
             {previewReport && (
               <TermReview
-                key={`${previewReport.id}-${previewReport.parseResult.parsedTerms.length}`}
+                key={`${previewReport.id}-${previewReadOnly ? "preview" : "edit"}-${previewReport.updatedAt ?? previewReport.storedAt}-${previewReport.parseResult.parsedTerms.length}`}
                 parseResult={previewReport.parseResult}
+                initialTerms={
+                  previewReadOnly
+                    ? undefined
+                    : previewReport.parseResult.parsedTerms.map((term) => ({
+                        ...term,
+                        status: "accepted",
+                      }))
+                }
                 onConfirm={handleReviewConfirm}
-                onBack={() => setPreviewReport(null)}
+                onBack={() => {
+                  closePreview();
+                }}
+                readOnly={previewReadOnly}
               />
             )}
           </DialogContent>

@@ -1,4 +1,5 @@
 import * as pdfjsLib from "pdfjs-dist";
+import { joinPdfTextItems } from "./pdfText";
 
 const MAX_TEXT_ITEMS_PER_PAGE = 50_000;
 const MAX_EXTRACTED_CHARS = 200_000;
@@ -66,9 +67,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         );
       }
 
-      const text = content.items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ");
+      const text = joinPdfTextItems(content.items);
 
       totalChars += text.length;
       if (totalChars > MAX_EXTRACTED_CHARS) {

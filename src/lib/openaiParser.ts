@@ -18,6 +18,7 @@ import type {
   MyocardialBridgeSummary,
 } from "@/data/parseTypes";
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
+import { enrichParsedTermWithPaperFeature } from "@/data/paperFeatures";
 import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
@@ -151,8 +152,31 @@ const FINDINGS_SCHEMA = {
             type: "string",
             description: "The full sentence containing the term.",
           },
+          paperFeatureId: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Stable paper feature identifier when the finding maps to a tracked AAOCA feature, otherwise null.",
+          },
+          paperFeatureLabel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Canonical paper feature label when the finding maps to a tracked AAOCA feature, otherwise null.",
+          },
+          paperFeatureCategory: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Paper feature category when the finding maps to a tracked AAOCA feature, otherwise null.",
+          },
         },
-        required: ["verbatimText", "normalizedName", "assertion", "context"],
+        required: [
+          "verbatimText",
+          "normalizedName",
+          "assertion",
+          "context",
+          "paperFeatureId",
+          "paperFeatureLabel",
+          "paperFeatureCategory",
+        ],
       },
     },
   },
@@ -178,6 +202,9 @@ interface ToolFinding {
   normalizedName: string;
   assertion: Assertion;
   context: string;
+  paperFeatureId: string | null;
+  paperFeatureLabel: string | null;
+  paperFeatureCategory: string | null;
 }
 
 interface ToolInput {
@@ -402,7 +429,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     usedPositions.add(pos.startIndex);
     if (pos.correctionType === "whitespace") whitespaceFixCount++;
 
-    parsedTerms.push({
+    parsedTerms.push(enrichParsedTermWithPaperFeature({
       term: reportText.substring(pos.startIndex, pos.endIndex),
       normalizedName: f.normalizedName || f.verbatimText,
       assertion: f.assertion === "negated" ? "negated" : "asserted",
@@ -416,7 +443,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
         pos.correctionType === "whitespace"
           ? "Matched after normalizing whitespace/line breaks"
           : undefined,
-    });
+    }));
   }
 
   if (dropped.length > 0) {

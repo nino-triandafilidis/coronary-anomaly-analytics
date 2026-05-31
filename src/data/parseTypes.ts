@@ -19,6 +19,10 @@ export interface ParsedTerm {
   endIndex: number;       // Position in report text
   context: string;        // Surrounding sentence for context
   isAnomaly: boolean;     // LLM's assessment: is this a clinical finding/anomaly?
+  paperFeatureId?: string;
+  paperFeatureLabel?: string;
+  paperFeatureCategory?: string;
+  paperFeatureTrackingRole?: "feature" | "measurement" | "reference";
   correctionType?: "exact" | "whitespace" | "resolved"; // How position was matched
   resolutionNote?: string; // Human-readable description of the correction
 }

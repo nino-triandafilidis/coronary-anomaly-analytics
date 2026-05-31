@@ -21,6 +21,35 @@ whether it is ASSERTED (the radiologist is reporting the finding as present)
 or NEGATED (the radiologist is reporting that the finding is absent). Both
 kinds must be returned — they are displayed differently in the UI and tracked
 separately in the database.
+The NEGATED rules below define which negative terms are eligible for return.
+
+NEGATED TERM FILTERING FOR AAOCA ANALYSIS
+Return ASSERTED clinically relevant findings as usual.
+
+For NEGATED terms, return the term only when it corresponds to a
+paper-tracked AAOCA feature. Paper-tracked features include anomalous vessel
+origin, sinus of origin, proximal course, ostial location, ostial
+relationship, ostial morphology, proximal-course measurements, coronary
+dominance, myocardial bridge, coronary fistula, coronary atherosclerotic
+lesions or calcifications, intercoronary pillar, dynamic narrowing,
+intracavitary or intracameral course, and the sinutubular junction.
+
+Do not return generic incidental negatives unless they map to one of those
+paper-tracked features. Exclude generic negatives such as:
+- no pleural effusion
+- no atelectasis
+- no pulmonary embolism
+- no pneumothorax
+- no consolidation
+- no pericardial effusion
+
+Keep paper-relevant negatives such as:
+- no interarterial course
+- no intramural course
+- no slit-like ostium
+- no high origin
+- no myocardial bridge
+- no anomalous coronary artery
 
 WHAT COUNTS AS A "TERM"
 - Named conditions: pulmonary embolism, anomalous coronary artery, myocardial
@@ -186,8 +215,8 @@ or ruled out. Trigger phrases: "no", "no evidence of", "without", "not seen",
 "not identified", "absent", "negative for", "ruled out", "no obvious".
 
 Examples:
-  "No pericardial effusion."
-    → "pericardial effusion", NEGATED
+  "No interarterial course."
+    → "interarterial course", NEGATED
   "No complete myocardial bridge."
     → "complete myocardial bridge", NEGATED
   "Patent without significant narrowing."

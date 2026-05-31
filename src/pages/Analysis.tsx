@@ -32,6 +32,7 @@ import {
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
 import type { ReviewDecisionRecord } from "@/data/parseTypes";
+import { shouldIncludeInNormalizedFrequency } from "@/data/paperFeatures";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 
@@ -195,6 +196,8 @@ export default function Analysis() {
     >();
 
     allTerms.forEach((term) => {
+      if (!shouldIncludeInNormalizedFrequency(term)) return;
+
       const name = getAnalysisFeatureName(term);
       if (!name) return;
 
@@ -212,6 +215,8 @@ export default function Analysis() {
     });
 
     allReviewDecisions.forEach((record) => {
+      if (!shouldIncludeInNormalizedFrequency(record)) return;
+
       const name = getAnalysisFeatureName(record);
       if (!name) return;
 

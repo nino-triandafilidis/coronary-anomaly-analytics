@@ -50,12 +50,20 @@ export interface InterarterialCourseLengthMeasurement {
   vessel?: string;
 }
 
+export interface IntramuralCourseLengthMeasurement {
+  value: number;
+  unit: "mm";
+  rawText: string;
+  vessel?: string;
+}
+
 export interface ParseResult {
   reportId: string;
   reportText: string;
   parsedTerms: ParsedTerm[];
   myocardialBridgeSummary: MyocardialBridgeSummary;
   interarterialCourseLengths?: InterarterialCourseLengthMeasurement[];
+  intramuralCourseLengths?: IntramuralCourseLengthMeasurement[];
   parserModel: string;    // e.g. "gpt-5.4"
   parseTimeMs: number;
   totalTokensUsed: number;

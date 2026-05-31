@@ -1,11 +1,20 @@
 import type { InterarterialCourseLengthMeasurement } from "@/data/parseTypes";
 
-export interface InterarterialCourseLengthHistogramBin {
+export interface CourseLengthMeasurement {
+  value: number;
+  unit: "mm";
+  rawText: string;
+  vessel?: string;
+}
+
+export interface CourseLengthHistogramBin {
   label: string;
   minMm: number;
   maxMm: number;
   count: number;
 }
+
+export type InterarterialCourseLengthHistogramBin = CourseLengthHistogramBin;
 
 function normalizeUnit(unit: unknown): "mm" | "cm" | null {
   if (typeof unit !== "string") return null;
@@ -20,9 +29,10 @@ function normalizeUnit(unit: unknown): "mm" | "cm" | null {
   return null;
 }
 
-export function cleanInterarterialCourseLengthMeasurements(
-  measurements: unknown
-): InterarterialCourseLengthMeasurement[] {
+export function cleanCourseLengthMeasurements(
+  measurements: unknown,
+  shouldKeep?: (measurement: CourseLengthMeasurement) => boolean
+): CourseLengthMeasurement[] {
   if (!Array.isArray(measurements)) return [];
 
   return measurements.flatMap((measurement) => {
@@ -42,24 +52,30 @@ export function cleanInterarterialCourseLengthMeasurements(
     const valueMm = unit === "cm" ? numericValue * 10 : numericValue;
     if (!Number.isFinite(valueMm) || valueMm <= 0) return [];
 
-    return [
-      {
-        value: valueMm,
-        unit: "mm" as const,
-        rawText: typeof raw.rawText === "string" ? raw.rawText : "",
-        vessel:
-          typeof raw.vessel === "string" && raw.vessel.trim()
-            ? raw.vessel.trim()
-            : undefined,
-      },
-    ];
+    const cleaned = {
+      value: valueMm,
+      unit: "mm" as const,
+      rawText: typeof raw.rawText === "string" ? raw.rawText : "",
+      vessel:
+        typeof raw.vessel === "string" && raw.vessel.trim()
+          ? raw.vessel.trim()
+          : undefined,
+    };
+
+    return !shouldKeep || shouldKeep(cleaned) ? [cleaned] : [];
   });
 }
 
-export function buildInterarterialCourseLengthHistogram(
+export function cleanInterarterialCourseLengthMeasurements(
+  measurements: unknown
+): InterarterialCourseLengthMeasurement[] {
+  return cleanCourseLengthMeasurements(measurements);
+}
+
+export function buildCourseLengthHistogram(
   valuesMm: number[],
   binSizeMm = 5
-): InterarterialCourseLengthHistogramBin[] {
+): CourseLengthHistogramBin[] {
   const validValues = valuesMm.filter(
     (value) => Number.isFinite(value) && value > 0
   );
@@ -85,4 +101,11 @@ export function buildInterarterialCourseLengthHistogram(
   });
 
   return bins;
+}
+
+export function buildInterarterialCourseLengthHistogram(
+  valuesMm: number[],
+  binSizeMm = 5
+): InterarterialCourseLengthHistogramBin[] {
+  return buildCourseLengthHistogram(valuesMm, binSizeMm);
 }

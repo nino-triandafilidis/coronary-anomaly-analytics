@@ -226,6 +226,48 @@ Examples:
   "ostium measures 2 mm"
     -> no measurement
 
+INTRAMURAL COURSE LENGTHS
+In addition to findings, return an "intramuralCourseLengths" array with zero
+or more explicit quantitative intramural course or intramural segment length
+measurements. Use one item per measured vessel or segment. Return [] when the
+report does not state a numeric intramural length.
+
+For each measurement:
+- value: numeric length normalized to millimeters.
+- unit: always "mm".
+- rawText: exact contiguous report substring containing the measurement.
+- vessel: RCA, LM, LAD, LCX, or another available vessel label; otherwise null.
+
+Extraction rules:
+- Extract only numeric values clearly referring to intramural course length or
+  intramural segment length.
+- Convert centimeters to millimeters.
+- Do not infer a value from qualitative descriptions such as "short" or "long".
+- Do not extract unrelated measurements such as inter-arterial course length,
+  vessel diameter, ostial size, aortic root size, sinus size, or distance from
+  commissure.
+- Do not treat an inter-arterial course length as an intramural segment length
+  unless the report explicitly says the same numeric value applies to the
+  intramural segment.
+
+Examples:
+  "intramural segment measures 8 mm"
+    -> value 8, unit "mm"
+  "8 mm intramural course"
+    -> value 8, unit "mm"
+  "approximately 12 mm intramural segment"
+    -> value 12, unit "mm"
+  "intramural course length is 10 mm"
+    -> value 10, unit "mm"
+  "short intramural course"
+    -> no measurement
+  "inter-arterial course measures 8 mm"
+    -> no intramural measurement
+  "aortic root measures 30 mm"
+    -> no measurement
+  "ostium measures 2 mm"
+    -> no measurement
+
 MEASUREMENTS
 Include a measurement when it is bound to anatomy or pathology in the same
 sentence or clause — even if no qualifier word like "abnormal" or "concerning"
@@ -291,6 +333,8 @@ contiguous substring that does and put the cleaned form in "normalizedName".
 
 OUTPUT
 Call the \`record_findings\` tool exactly once. The output must include both
-"myocardialBridgeSummary", "interarterialCourseLengths", and "findings". If no findings are present, call it
+"myocardialBridgeSummary", "interarterialCourseLengths",
+"intramuralCourseLengths", and "findings". If no findings are present, call it
 with { "myocardialBridgeSummary": { "bridgeCount": 0, "highestGrade": null,
-"bridges": [] }, "interarterialCourseLengths": [], "findings": [] }.`;
+"bridges": [] }, "interarterialCourseLengths": [], "intramuralCourseLengths":
+[], "findings": [] }.`;

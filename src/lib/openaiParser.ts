@@ -20,6 +20,7 @@ import type {
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
 import { enrichParsedTermWithPaperFeature } from "@/data/paperFeatures";
 import { cleanInterarterialCourseLengthMeasurements } from "@/data/interarterialCourseLengths";
+import { cleanIntramuralCourseLengthMeasurements } from "@/data/intramuralCourseLengths";
 import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
@@ -154,6 +155,37 @@ const FINDINGS_SCHEMA = {
         required: ["value", "unit", "rawText", "vessel"],
       },
     },
+    intramuralCourseLengths: {
+      type: "array",
+      description:
+        "Explicit quantitative intramural course or intramural segment length measurements only. Return [] when none are stated. Normalize values to millimeters. Do not copy inter-arterial course length values unless the report explicitly applies the same value to the intramural segment.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          value: {
+            type: "number",
+            description: "Positive numeric intramural course length value.",
+          },
+          unit: {
+            type: "string",
+            enum: ["mm"],
+            description: "Normalized unit. Always return mm.",
+          },
+          rawText: {
+            type: "string",
+            description:
+              "Exact contiguous report substring containing the intramural course length measurement.",
+          },
+          vessel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Optional vessel label such as RCA, LM, LAD, or LCX when available, otherwise null.",
+          },
+        },
+        required: ["value", "unit", "rawText", "vessel"],
+      },
+    },
     findings: {
       type: "array",
       description: "Every clinically relevant term in the report.",
@@ -212,7 +244,12 @@ const FINDINGS_SCHEMA = {
       },
     },
   },
-  required: ["myocardialBridgeSummary", "interarterialCourseLengths", "findings"],
+  required: [
+    "myocardialBridgeSummary",
+    "interarterialCourseLengths",
+    "intramuralCourseLengths",
+    "findings",
+  ],
 } as const;
 
 const RECORD_FINDINGS_TOOL = {
@@ -242,6 +279,7 @@ interface ToolFinding {
 interface ToolInput {
   myocardialBridgeSummary: MyocardialBridgeSummary;
   interarterialCourseLengths: unknown;
+  intramuralCourseLengths: unknown;
   findings: ToolFinding[];
 }
 
@@ -383,6 +421,8 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   const findings = Array.isArray(toolInput?.findings) ? toolInput.findings : [];
   const interarterialCourseLengths =
     cleanInterarterialCourseLengthMeasurements(toolInput?.interarterialCourseLengths);
+  const intramuralCourseLengths =
+    cleanIntramuralCourseLengthMeasurements(toolInput?.intramuralCourseLengths);
   const rawBridgeSummary = toolInput?.myocardialBridgeSummary;
   const rawBridgeGrades = Array.isArray(rawBridgeSummary?.bridges)
     ? rawBridgeSummary.bridges
@@ -414,6 +454,10 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   console.log(
     `Inter-arterial course lengths: ${interarterialCourseLengths.length}`,
     interarterialCourseLengths
+  );
+  console.log(
+    `Intramural course lengths: ${intramuralCourseLengths.length}`,
+    intramuralCourseLengths
   );
   console.log(
     `Myocardial bridges: ${myocardialBridgeSummary.bridgeCount}`,
@@ -522,6 +566,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     parsedTerms,
     myocardialBridgeSummary,
     interarterialCourseLengths,
+    intramuralCourseLengths,
     parserModel: MODEL_NAME,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,

@@ -49,8 +49,12 @@ import {
 import {
   buildInterarterialCourseLengthHistogram,
   cleanInterarterialCourseLengthMeasurements,
-  type InterarterialCourseLengthHistogramBin,
+  type CourseLengthHistogramBin,
 } from "@/data/interarterialCourseLengths";
+import {
+  buildIntramuralCourseLengthHistogram,
+  cleanIntramuralCourseLengthMeasurements,
+} from "@/data/intramuralCourseLengths";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 
@@ -230,6 +234,22 @@ export default function Analysis() {
         interarterialCourseLengthMeasurements.map((measurement) => measurement.value)
       ),
     [interarterialCourseLengthMeasurements]
+  );
+  const intramuralCourseLengthMeasurements = useMemo(
+    () =>
+      reports.flatMap((report) =>
+        cleanIntramuralCourseLengthMeasurements(
+          report.parseResult.intramuralCourseLengths
+        )
+      ),
+    [reports]
+  );
+  const intramuralCourseLengthHistogram = useMemo(
+    () =>
+      buildIntramuralCourseLengthHistogram(
+        intramuralCourseLengthMeasurements.map((measurement) => measurement.value)
+      ),
+    [intramuralCourseLengthMeasurements]
   );
 
   const reportCount = reports.length;
@@ -511,6 +531,12 @@ export default function Analysis() {
                 IA Course Lengths
               </a>
               <a
+                href="#intramural-course-lengths"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Intramural Lengths
+              </a>
+              <a
                 href="#myocardial-bridges"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
@@ -682,10 +708,24 @@ export default function Analysis() {
         </section>
 
         <section id="interarterial-course-lengths" className="mt-10 scroll-mt-6">
-          <InterarterialCourseLengthHistogram
+          <CourseLengthHistogram
             bins={interarterialCourseLengthHistogram}
             measurementCount={interarterialCourseLengthMeasurements.length}
             loading={loading}
+            title="Inter-arterial Course Length Distribution"
+            loadingLabel="Loading inter-arterial course length values..."
+            emptyLabel="No inter-arterial course length values found."
+          />
+        </section>
+
+        <section id="intramural-course-lengths" className="mt-10 scroll-mt-6">
+          <CourseLengthHistogram
+            bins={intramuralCourseLengthHistogram}
+            measurementCount={intramuralCourseLengthMeasurements.length}
+            loading={loading}
+            title="Intramural Course Length Distribution"
+            loadingLabel="Loading intramural course length values..."
+            emptyLabel="No intramural course length values found."
           />
         </section>
 
@@ -883,21 +923,25 @@ function HorizontalBarChart({
   );
 }
 
-function InterarterialCourseLengthHistogram({
+function CourseLengthHistogram({
   bins,
   measurementCount,
   loading,
+  title,
+  loadingLabel,
+  emptyLabel,
 }: {
-  bins: InterarterialCourseLengthHistogramBin[];
+  bins: CourseLengthHistogramBin[];
   measurementCount: number;
   loading: boolean;
+  title: string;
+  loadingLabel: string;
+  emptyLabel: string;
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          Inter-arterial Course Length Distribution
-        </CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
         <p className="text-xs text-muted-foreground">
           {loading
             ? "Loading measurements..."
@@ -907,11 +951,11 @@ function InterarterialCourseLengthHistogram({
       <CardContent>
         {loading ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            Loading inter-arterial course length values...
+            {loadingLabel}
           </p>
         ) : bins.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            No inter-arterial course length values found.
+            {emptyLabel}
           </p>
         ) : (
           <div className="h-[300px] w-full">

@@ -39,7 +39,16 @@ flowchart TD
     S -->|Reject| X[Excluded]
 ```
 
-The legacy 3-call Gemini pipeline (parser → resolver → verifier) and the rule-based dictionary detector were removed — they were either silently masking real LLM failures or duplicating work the single GPT call now does in one pass.
+### Analysis page
+
+`src/pages/Analysis.tsx` is a cross-report view over the saved reports. It aggregates parsed terms into a normalized feature-frequency table, coronary narrowing by vessel, a myocardial-bridge distribution, and an anomalous-vessel overview keyed to the AAOCA paper taxonomy.
+
+Two helpers feed it, both operating on already-parsed terms rather than raw report text:
+
+- `src/data/paperFeatures.ts`: a dictionary that maps each term onto the paper taxonomy (anomalous vessel, sinus of origin, proximal course, ostial location, dominance, additional findings) by alias lookup. Terms get this tag during the parse; the Analysis page counts the tags.
+- `src/data/anomalousLeftSubtypes.ts`: resolves anomalous-left course subtypes (intraconal vs intramural/inter-arterial). It merges the structured `anomalousLeftSubtypes` the parser returns with subtypes re-derived from term text by keyword patterns.
+
+These are post-hoc labelers. They categorize and count; they do not add findings or move highlights.
 
 ## Tech stack
 
@@ -83,10 +92,13 @@ src/
   pages/
     Index.tsx               # Upload → parsing → review → results flow
     Dataset.tsx             # Saved-report browser
+    Analysis.tsx            # Cross-report rollups: feature counts, narrowing, bridges, anomalous-vessel overview
   data/
     parseTypes.ts           # ParseResult / ParsedTerm / ReviewableTerm types
     anomalyDatabase.ts      # getHistoryForTerm: counts from saved reports + DetectedAnomaly type
     sampleReports.ts        # Sample CTA reports for demos (sourced from real_cta/*.pdf)
+    paperFeatures.ts        # AAOCA paper-feature taxonomy + alias lookup (post-hoc term tagging)
+    anomalousLeftSubtypes.ts # Anomalous-left subtype resolution (structured + keyword fallback)
 scripts/
   generate_sample_pdf.py    # Creates a test PDF from a report
 parsed_reports/

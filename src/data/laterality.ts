@@ -10,6 +10,23 @@ export type LeftSubtypeFilter = "all" | AnomalousLeftSubtype;
 const RIGHT_AAOCA_FEATURE_IDS = new Set(["r_aaoca"]);
 const LEFT_AAOCA_FEATURE_IDS = new Set(["l_aaoca", "lad_aaoca", "lcx_aaoca"]);
 
+// A finding only votes on a side when it describes the anomaly itself: an
+// explicitly anomalous term, an origin descriptor, or an AAOCA-pathognomonic
+// proximal course. This keeps the non-anomalous system (dominance, incidental
+// atherosclerosis, bridges) that nearly every report also mentions from voting.
+const ANOMALY_CONTEXT =
+  /anomalous|aaoca|origin of|inter[\s-]?arterial course|intramural course|intraseptal course|retroaortic course|prepulmonic course|subpulmonic/i;
+// A "normal origin of ..." finding describes a normally-arising vessel, so it
+// must not vote even though it matches the origin descriptor above.
+const NORMAL_FINDING = /\bnormal\b/i;
+// Vessel cues require "artery" on the bare left/right form so the sinus of
+// origin ("right coronary cusp", "left coronary sinus", etc.) is not mistaken
+// for the anomalous vessel — that distinction is what separates an R-AAOCA
+// arising from the left cusp from a genuine left anomaly.
+const RIGHT_VESSEL = /\brca\b|\bright coronary artery\b/i;
+const LEFT_VESSEL =
+  /\blmca\b|\bleft main\b|\blad\b|\bleft anterior descending\b|\blcx\b|\bleft circumflex\b|\bleft coronary artery\b/i;
+
 export interface ReportLaterality {
   right: boolean;
   left: boolean;
@@ -17,9 +34,10 @@ export interface ReportLaterality {
 }
 
 /**
- * Classifies a report by AAOCA form. A report can be both right and left (e.g.
- * bilateral anomalies); single-trunk and reports with no AAOCA-form evidence are
- * neither and surface only under the "overall" filter.
+ * Classifies a report by the side of its anomalous coronary, tallying a vote per
+ * anomaly-describing finding and taking the majority. A report can be both right
+ * and left when the evidence ties (rare, genuinely bilateral). Reports with no
+ * vessel-resolved anomaly evidence are neither and surface only under "overall".
  */
 export function deriveReportLaterality(report: StoredParsedReport): ReportLaterality {
   const parsedTerms = getStoredParsedTerms(report);
@@ -30,18 +48,36 @@ export function deriveReportLaterality(report: StoredParsedReport): ReportLatera
     ).map((entry) => entry.subtype)
   );
 
-  let right = false;
-  let left = leftSubtypes.size > 0;
+  let rightVotes = 0;
+  let leftVotes = leftSubtypes.size > 0 ? 1 : 0;
 
   for (const term of parsedTerms) {
     if (term.assertion !== "asserted") continue;
+
     const feature = resolveParsedTermPaperFeature(term);
-    if (!feature) continue;
-    if (RIGHT_AAOCA_FEATURE_IDS.has(feature.id)) right = true;
-    if (LEFT_AAOCA_FEATURE_IDS.has(feature.id)) left = true;
+    if (feature && RIGHT_AAOCA_FEATURE_IDS.has(feature.id)) {
+      rightVotes += 1;
+      continue;
+    }
+    if (feature && LEFT_AAOCA_FEATURE_IDS.has(feature.id)) {
+      leftVotes += 1;
+      continue;
+    }
+
+    const haystack = `${term.normalizedName ?? ""} ${term.term ?? ""}`;
+    if (NORMAL_FINDING.test(haystack) || !ANOMALY_CONTEXT.test(haystack)) continue;
+
+    const right = RIGHT_VESSEL.test(haystack);
+    const left = LEFT_VESSEL.test(haystack);
+    if (right && !left) rightVotes += 1;
+    else if (left && !right) leftVotes += 1;
   }
 
-  return { right, left, leftSubtypes };
+  return {
+    right: rightVotes > 0 && rightVotes >= leftVotes,
+    left: leftVotes > 0 && leftVotes >= rightVotes,
+    leftSubtypes,
+  };
 }
 
 export function reportMatchesFilter(

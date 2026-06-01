@@ -86,6 +86,43 @@ describe("deriveReportLaterality", () => {
     const laterality = deriveReportLaterality(makeReport([makeTerm("R-AAOCA", "negated")]));
     expect(laterality.right).toBe(false);
   });
+
+  it("reads a free-text RCA anomaly as right, not the left cusp it arises from", () => {
+    const laterality = deriveReportLaterality(
+      makeReport([makeTerm("Anomalous Origin of RCA from Left Coronary Cusp")])
+    );
+    expect(laterality.right).toBe(true);
+    expect(laterality.left).toBe(false);
+  });
+
+  it("reads a free-text left-circumflex anomaly as left", () => {
+    const laterality = deriveReportLaterality(
+      makeReport([makeTerm("Anomalous Origin of Left Circumflex Artery")])
+    );
+    expect(laterality.left).toBe(true);
+    expect(laterality.right).toBe(false);
+  });
+
+  it("takes the majority side when a report names both systems", () => {
+    const laterality = deriveReportLaterality(
+      makeReport([
+        makeTerm("Anomalous Origin of RCA from Left Coronary Sinus"),
+        makeTerm("Interarterial Course of RCA"),
+        makeTerm("Intramural Course of RCA"),
+        makeTerm("Anomalous Origin of Left Anterior Descending Artery"),
+      ])
+    );
+    expect(laterality.right).toBe(true);
+    expect(laterality.left).toBe(false);
+  });
+
+  it("does not vote on a normally-arising vessel", () => {
+    const laterality = deriveReportLaterality(
+      makeReport([makeTerm("normal origin of left main artery")])
+    );
+    expect(laterality.right).toBe(false);
+    expect(laterality.left).toBe(false);
+  });
 });
 
 describe("reportMatchesFilter", () => {

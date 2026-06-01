@@ -123,6 +123,22 @@ describe("deriveReportLaterality", () => {
     expect(laterality.right).toBe(false);
     expect(laterality.left).toBe(false);
   });
+
+  it("prefers the curated cohort side over text cues", () => {
+    const report = makeReport([makeTerm("Anomalous Origin of Left Circumflex Artery")]);
+    report.side = "RCA";
+    const laterality = deriveReportLaterality(report);
+    expect(laterality.right).toBe(true);
+    expect(laterality.left).toBe(false);
+  });
+
+  it("maps a curated LCA side to left even with no anomaly terms", () => {
+    const report = makeReport([]);
+    report.side = "LCA";
+    const laterality = deriveReportLaterality(report);
+    expect(laterality.left).toBe(true);
+    expect(laterality.right).toBe(false);
+  });
 });
 
 describe("reportMatchesFilter", () => {

@@ -10,6 +10,13 @@
 /** Whether the radiologist asserted the finding as present or ruled it out. */
 export type Assertion = "asserted" | "negated";
 
+/**
+ * Curated cohort laterality of the anomalous coronary, assigned upstream in the
+ * cohort pipeline (RCA = right-sided AAOCA, LCA = left-sided). Present on
+ * pipeline-sourced reports; absent on reports parsed live in the app.
+ */
+export type ReportCohortSide = "RCA" | "LCA";
+
 export interface ParsedTerm {
   term: string;           // The exact text span found in the report
   normalizedName: string; // Canonical name; coronary modifiers should include the resolved vessel/segment

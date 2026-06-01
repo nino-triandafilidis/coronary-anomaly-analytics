@@ -34,10 +34,12 @@ export interface ReportLaterality {
 }
 
 /**
- * Classifies a report by the side of its anomalous coronary, tallying a vote per
- * anomaly-describing finding and taking the majority. A report can be both right
- * and left when the evidence ties (rare, genuinely bilateral). Reports with no
- * vessel-resolved anomaly evidence are neither and surface only under "overall".
+ * Classifies a report by the side of its anomalous coronary. When the curated
+ * cohort side is present it is authoritative (RCA = right, LCA = left). Otherwise
+ * the side is inferred for live-parsed reports by tallying a vote per
+ * anomaly-describing finding and taking the majority; a tie marks both sides
+ * (rare, genuinely bilateral) and no vessel-resolved evidence is neither (shown
+ * only under "overall").
  */
 export function deriveReportLaterality(report: StoredParsedReport): ReportLaterality {
   const parsedTerms = getStoredParsedTerms(report);
@@ -47,6 +49,9 @@ export function deriveReportLaterality(report: StoredParsedReport): ReportLatera
       parsedTerms
     ).map((entry) => entry.subtype)
   );
+
+  if (report.side === "RCA") return { right: true, left: false, leftSubtypes };
+  if (report.side === "LCA") return { right: false, left: true, leftSubtypes };
 
   let rightVotes = 0;
   let leftVotes = leftSubtypes.size > 0 ? 1 : 0;

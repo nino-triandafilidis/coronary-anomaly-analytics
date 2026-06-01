@@ -49,7 +49,7 @@ import {
   getStoredParsedTerms,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ReviewDecisionRecord } from "@/data/parseTypes";
+import type { ReviewDecisionRecord, ParsedTerm } from "@/data/parseTypes";
 import {
   PAPER_FEATURES,
   resolveParsedTermPaperFeature,
@@ -71,80 +71,13 @@ import {
   type LateralityFilter,
   type LeftSubtypeFilter,
 } from "@/data/laterality";
+import {
+  canonicalFeature,
+  normalizeCoronaryNarrowingFeature,
+  reportIncidence,
+} from "@/data/featureCanonical";
 
 const TABLE_PAGE_SIZE = 10;
-
-function getAnalysisFeatureName(record: {
-  normalizedName?: string;
-  term?: string;
-}): string {
-  return (record.normalizedName?.trim() || record.term?.trim() || "").replace(/\s+/g, " ");
-}
-
-function normalizeCoronaryNarrowingFeature(record: {
-  normalizedName?: string;
-  term?: string;
-  context?: string;
-}): string | null {
-  const featureName = getAnalysisFeatureName(record);
-  const haystack = `${featureName} ${record.context ?? ""}`.toLowerCase();
-
-  const hasNarrowingConcept =
-    /\bnarrow(?:ing|ed)?\b/.test(haystack) ||
-    /\bstenos(?:is|ed)\b/.test(haystack) ||
-    /\bcompression\b/.test(haystack) ||
-    /\bcompressed\b/.test(haystack);
-  if (!hasNarrowingConcept) return null;
-
-  const vessel = (() => {
-    if (/\bleft\s+main\b|\blmca\b|\bleft\s+main\s+coronary\s+artery\b/.test(haystack)) {
-      return "left main coronary artery";
-    }
-    if (/\bleft\s+circumflex\b|\bcircumflex\b|\blcx\b/.test(haystack)) {
-      return "left circumflex artery";
-    }
-    if (/\bright\s+coronary\b|\brca\b/.test(haystack)) {
-      return "right coronary artery";
-    }
-    if (/\bleft\s+anterior\s+descending\b|\blad\b/.test(haystack)) {
-      return "left anterior descending artery";
-    }
-    if (/\bleft\s+coronary\s+artery\b|\blca\b/.test(haystack)) {
-      return "left coronary artery";
-    }
-    if (/\bcoronary\s+arter(?:y|ies)\b/.test(haystack)) {
-      return "coronary artery";
-    }
-    return null;
-  })();
-  if (!vessel) return null;
-
-  const location = (() => {
-    if (/\bostium\b|\bostial\b/.test(haystack)) return "ostial ";
-    if (/\bproximal(?:ly)?\b/.test(haystack)) return "proximal ";
-    if (/\bmid\b/.test(haystack)) return "mid ";
-    if (/\bdistal(?:ly)?\b/.test(haystack)) return "distal ";
-    return "";
-  })();
-
-  const severity = (() => {
-    if (/\bsevere(?:ly)?\b/.test(haystack)) return "severe ";
-    if (/\bmoderate(?:ly)?\b/.test(haystack)) return "moderate ";
-    if (/\bmild(?:ly)?\b/.test(haystack)) return "mild ";
-    if (/\bsignificant(?:ly)?\b/.test(haystack)) return "significant ";
-    if (/\bslight(?:ly)?\b/.test(haystack)) return "slight ";
-    if (/\bminimal(?:ly)?\b/.test(haystack)) return "minimal ";
-    return "";
-  })();
-
-  const concept = /\bcompression\b|\bcompressed\b/.test(haystack)
-    ? "compression"
-    : /\bstenos(?:is|ed)\b/.test(haystack)
-      ? "stenosis"
-      : "narrowing";
-
-  return `${severity}${location}${concept} of ${vessel}`.replace(/\s+/g, " ").trim();
-}
 
 interface NormalizedFeatureRow {
   name: string;
@@ -238,10 +171,6 @@ export default function Analysis() {
     [reportsWithSide, lateralityFilter, leftSubtype]
   );
 
-  const allTerms = useMemo(
-    () => filteredReports.flatMap((report) => getStoredParsedTerms(report)),
-    [filteredReports]
-  );
   const allReviewDecisions = useMemo<ReviewDecisionRecord[]>(
     () => filteredReports.flatMap((report) => report.reviewDecisions ?? []),
     [filteredReports]
@@ -300,6 +229,9 @@ export default function Analysis() {
     filteredReports.forEach((report) => {
       const parsedTerms = getStoredParsedTerms(report);
 
+      // Per-report incidence: a feature counts once per report, not per mention.
+      const assertedIds = new Set<string>();
+      const negatedIds = new Set<string>();
       parsedTerms.forEach((term) => {
         const paperFeature = resolveParsedTermPaperFeature(term);
         if (!paperFeature || Object.values(anomalousLeftSubtypeFeatureIds).includes(
@@ -307,12 +239,20 @@ export default function Analysis() {
         )) {
           return;
         }
+        (term.assertion === "negated" ? negatedIds : assertedIds).add(paperFeature.id);
+      });
 
-        const row = rows.get(paperFeature.id);
-        if (!row) return;
-
-        row[term.assertion] += 1;
-        row.total += 1;
+      new Set([...assertedIds, ...negatedIds]).forEach((id) => {
+        const row = rows.get(id);
+        if (row) row.total += 1;
+      });
+      assertedIds.forEach((id) => {
+        const row = rows.get(id);
+        if (row) row.asserted += 1;
+      });
+      negatedIds.forEach((id) => {
+        const row = rows.get(id);
+        if (row) row.negated += 1;
       });
 
       const reportSubtypeIds = new Set(
@@ -369,52 +309,31 @@ export default function Analysis() {
     return Array.from(categoryCounts, ([label, value]) => ({ label, value }));
   }, [filteredReports]);
   const normalizedFeatureRows = useMemo(() => {
-    const rows = new Map<
-      string,
-      NormalizedFeatureRow
-    >();
+    // Per-report incidence, keyed by canonical feature so synonyms collapse into
+    // one row instead of fragmenting the count across wording variants.
+    const tallies = reportIncidence(filteredReports, getStoredParsedTerms, (term) =>
+      shouldIncludeInNormalizedFrequency(term) ? canonicalFeature(term) : null
+    );
 
-    allTerms.forEach((term) => {
-      if (!shouldIncludeInNormalizedFrequency(term)) return;
-
-      const name = getAnalysisFeatureName(term);
-      if (!name) return;
-
-      const existing =
-        rows.get(name) ??
-        {
-          name,
-          count: 0,
-          keep: 0,
-          skip: 0,
-        };
-
-      existing.count += 1;
-      rows.set(name, existing);
+    const byKey = new Map<string, NormalizedFeatureRow>();
+    tallies.forEach((tally) => {
+      byKey.set(tally.key, { name: tally.label, count: tally.reports, keep: 0, skip: 0 });
     });
 
     allReviewDecisions.forEach((record) => {
       if (!shouldIncludeInNormalizedFrequency(record)) return;
-
-      const name = getAnalysisFeatureName(record);
-      if (!name) return;
+      const feature = canonicalFeature(record as ParsedTerm);
+      if (!feature) return;
 
       const existing =
-        rows.get(name) ??
-        {
-          name,
-          count: 0,
-          keep: 0,
-          skip: 0,
-        };
-
+        byKey.get(feature.key) ?? { name: feature.label, count: 0, keep: 0, skip: 0 };
       if (record.decision === "keep") existing.keep += 1;
       if (record.decision === "skip") existing.skip += 1;
-      rows.set(name, existing);
+      byKey.set(feature.key, existing);
     });
 
-    return Array.from(rows.values());
-  }, [allReviewDecisions, allTerms]);
+    return Array.from(byKey.values());
+  }, [allReviewDecisions, filteredReports]);
   const filteredFeatureRows = useMemo(() => {
     const query = featureSearch.trim().toLowerCase();
     const rows = query
@@ -436,21 +355,18 @@ export default function Analysis() {
     });
   }, [featureSearch, featureSort, normalizedFeatureRows]);
   const coronaryNarrowingRows = useMemo<CoronaryNarrowingRow[]>(() => {
-    const rows = new Map<string, CoronaryNarrowingRow>();
-
-    allTerms.forEach((term) => {
-      const normalizedName = normalizeCoronaryNarrowingFeature(term);
-      if (!normalizedName) return;
-
-      const existing = rows.get(normalizedName) ?? { name: normalizedName, count: 0 };
-      existing.count += 1;
-      rows.set(normalizedName, existing);
+    // Per-report incidence of each canonical narrowing concept.
+    const tallies = reportIncidence(filteredReports, getStoredParsedTerms, (term) => {
+      const narrowing = normalizeCoronaryNarrowingFeature(term);
+      return narrowing
+        ? { key: `narrowing:${narrowing.toLowerCase()}`, label: narrowing, category: "Coronary narrowing" }
+        : null;
     });
 
-    return Array.from(rows.values()).sort(
-      (a, b) => b.count - a.count || a.name.localeCompare(b.name)
-    );
-  }, [allTerms]);
+    return tallies
+      .map((tally) => ({ name: tally.label, count: tally.reports }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [filteredReports]);
 
   const coronaryPageCount = Math.max(
     1,
@@ -749,7 +665,7 @@ export default function Analysis() {
           <div className="mb-6">
             <h2 className="text-2xl font-semibold text-foreground">Paper Features Overview</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Complete paper-tracked AAOCA feature dictionary with occurrence counts across parsed reports.
+              Complete paper-tracked AAOCA feature dictionary with per-report incidence (reports containing the feature) across parsed reports.
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               Paper reference:{" "}
@@ -778,7 +694,7 @@ export default function Analysis() {
                     <TableHead className="min-w-[210px]">Canonical keyword</TableHead>
                     <TableHead className="min-w-[260px]">Aliases</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead className="min-w-[150px]">Total occurrences</TableHead>
+                    <TableHead className="min-w-[150px]">Reports</TableHead>
                     <TableHead className="text-right">Asserted</TableHead>
                     <TableHead className="text-right">Negated</TableHead>
                   </TableRow>

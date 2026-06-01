@@ -12,11 +12,10 @@ import {
 import {
   Activity,
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
-  CheckCircle2,
   FileText,
-  Highlighter,
-  PlusCircle,
   Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +43,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   getStoredParsedReports,
   getStoredParsedTerms,
@@ -65,8 +65,13 @@ import {
   cleanIntramuralCourseLengthMeasurements,
 } from "@/data/intramuralCourseLengths";
 import { getReportAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
+import {
+  deriveReportLaterality,
+  reportMatchesFilter,
+  type LateralityFilter,
+  type LeftSubtypeFilter,
+} from "@/data/laterality";
 
-const ADDED_TERMS_PLACEHOLDER = 0;
 const TABLE_PAGE_SIZE = 10;
 
 function getAnalysisFeatureName(record: {
@@ -180,11 +185,6 @@ interface HorizontalBarDatum {
   value: number;
 }
 
-type PaperFeatureOverviewMode =
-  | "overall"
-  | "intraconal_left"
-  | "intramural_interarterial_left";
-
 type FeatureSortKey = keyof NormalizedFeatureRow;
 type FeatureSortDirection = "asc" | "desc";
 
@@ -197,8 +197,8 @@ export default function Analysis() {
     key: FeatureSortKey;
     direction: FeatureSortDirection;
   }>({ key: "count", direction: "desc" });
-  const [paperFeatureOverviewMode, setPaperFeatureOverviewMode] =
-    useState<PaperFeatureOverviewMode>("overall");
+  const [lateralityFilter, setLateralityFilter] = useState<LateralityFilter>("overall");
+  const [leftSubtype, setLeftSubtype] = useState<LeftSubtypeFilter>("all");
   const [coronaryPage, setCoronaryPage] = useState(1);
   const [featurePage, setFeaturePage] = useState(1);
   useEffect(() => {
@@ -218,35 +218,42 @@ export default function Analysis() {
     loadReports();
   }, []);
 
-  const highlightedTermCount = useMemo(() => {
-    const uniqueNames = new Set<string>();
-
-    reports.forEach((report) => {
-      getStoredParsedTerms(report).forEach((term) => {
-        const name = getAnalysisFeatureName(term);
-        if (name) uniqueNames.add(name);
-      });
-    });
-
-    return uniqueNames.size;
-  }, [reports]);
-
-  const allTerms = useMemo(
-    () => reports.flatMap((report) => getStoredParsedTerms(report)),
+  const reportsWithSide = useMemo(
+    () => reports.map((report) => ({ report, side: deriveReportLaterality(report) })),
     [reports]
   );
+  const rightReportCount = useMemo(
+    () => reportsWithSide.filter(({ side }) => side.right).length,
+    [reportsWithSide]
+  );
+  const leftReportCount = useMemo(
+    () => reportsWithSide.filter(({ side }) => side.left).length,
+    [reportsWithSide]
+  );
+  const filteredReports = useMemo(
+    () =>
+      reportsWithSide
+        .filter(({ side }) => reportMatchesFilter(side, lateralityFilter, leftSubtype))
+        .map(({ report }) => report),
+    [reportsWithSide, lateralityFilter, leftSubtype]
+  );
+
+  const allTerms = useMemo(
+    () => filteredReports.flatMap((report) => getStoredParsedTerms(report)),
+    [filteredReports]
+  );
   const allReviewDecisions = useMemo<ReviewDecisionRecord[]>(
-    () => reports.flatMap((report) => report.reviewDecisions ?? []),
-    [reports]
+    () => filteredReports.flatMap((report) => report.reviewDecisions ?? []),
+    [filteredReports]
   );
   const interarterialCourseLengthMeasurements = useMemo(
     () =>
-      reports.flatMap((report) =>
+      filteredReports.flatMap((report) =>
         cleanInterarterialCourseLengthMeasurements(
           report.parseResult.interarterialCourseLengths
         )
       ),
-    [reports]
+    [filteredReports]
   );
   const interarterialCourseLengthHistogram = useMemo(
     () =>
@@ -257,12 +264,12 @@ export default function Analysis() {
   );
   const intramuralCourseLengthMeasurements = useMemo(
     () =>
-      reports.flatMap((report) =>
+      filteredReports.flatMap((report) =>
         cleanIntramuralCourseLengthMeasurements(
           report.parseResult.intramuralCourseLengths
         )
       ),
-    [reports]
+    [filteredReports]
   );
   const intramuralCourseLengthHistogram = useMemo(
     () =>
@@ -273,7 +280,6 @@ export default function Analysis() {
   );
 
   const reportCount = reports.length;
-  const reviewedReportCount = reports.filter((report) => report.reviewed).length;
   const paperFeatureRows = useMemo<PaperFeatureRow[]>(() => {
     const anomalousLeftSubtypeFeatureIds = {
       intraconal_left: "anomalous_left_intraconal",
@@ -291,7 +297,7 @@ export default function Analysis() {
       ])
     );
 
-    reports.forEach((report) => {
+    filteredReports.forEach((report) => {
       const parsedTerms = getStoredParsedTerms(report);
 
       parsedTerms.forEach((term) => {
@@ -326,29 +332,9 @@ export default function Analysis() {
     });
 
     return Array.from(rows.values());
-  }, [reports]);
+  }, [filteredReports]);
   const maxPaperFeatureCount = useMemo(
     () => Math.max(1, ...paperFeatureRows.map((row) => row.total)),
-    [paperFeatureRows]
-  );
-  const anomalousLeftOverviewCards = useMemo(
-    () => [
-      {
-        title: "Intraconal lefts",
-        subtitle: "Intraconal / intraseptal / subpulmonic anomalous left courses",
-        count:
-          paperFeatureRows.find((row) => row.id === "anomalous_left_intraconal")
-            ?.total ?? 0,
-      },
-      {
-        title: "Intramural / inter-arterial lefts",
-        subtitle: "Intramural and/or inter-arterial anomalous left courses",
-        count:
-          paperFeatureRows.find(
-            (row) => row.id === "anomalous_left_intramural_interarterial"
-          )?.total ?? 0,
-      },
-    ],
     [paperFeatureRows]
   );
   const paperFeatureCategoryChartData = useMemo<HorizontalBarDatum[]>(() => {
@@ -358,7 +344,7 @@ export default function Analysis() {
       )
     );
 
-    reports.forEach((report) => {
+    filteredReports.forEach((report) => {
       const parsedTerms = getStoredParsedTerms(report);
       const reportSubtypes = new Set(
         getReportAnomalousLeftSubtypes(
@@ -366,12 +352,6 @@ export default function Analysis() {
           parsedTerms
         ).map((entry) => entry.subtype)
       );
-      if (
-        paperFeatureOverviewMode !== "overall" &&
-        !reportSubtypes.has(paperFeatureOverviewMode)
-      ) {
-        return;
-      }
 
       const reportCategories = new Set(
         parsedTerms.flatMap((term) => {
@@ -387,7 +367,7 @@ export default function Analysis() {
     });
 
     return Array.from(categoryCounts, ([label, value]) => ({ label, value }));
-  }, [paperFeatureOverviewMode, reports]);
+  }, [filteredReports]);
   const normalizedFeatureRows = useMemo(() => {
     const rows = new Map<
       string,
@@ -493,7 +473,7 @@ export default function Analysis() {
 
   useEffect(() => {
     setFeaturePage(1);
-  }, [featureSearch, featureSort]);
+  }, [featureSearch, featureSort, lateralityFilter, leftSubtype]);
   useEffect(() => {
     setCoronaryPage(1);
   }, [coronaryNarrowingRows]);
@@ -513,7 +493,7 @@ export default function Analysis() {
     let bridgePatients = 0;
     let multipleBridgePatients = 0;
 
-    reports.forEach((report) => {
+    filteredReports.forEach((report) => {
       const summary = report.parseResult.myocardialBridgeSummary;
       const bridgeCount = summary?.bridgeCount ?? 0;
       const bridgeGrades =
@@ -545,13 +525,13 @@ export default function Analysis() {
     });
 
     return {
-      totalPatients: reports.length,
+      totalPatients: filteredReports.length,
       bridgePatients,
       multipleBridgePatients,
       categories,
       bridgeCounts,
     };
-  }, [reports]);
+  }, [filteredReports]);
   const bridgeCountChartData = useMemo<HorizontalBarDatum[]>(
     () => [
       { label: "Not Present", value: bridgeDashboardStats.bridgeCounts.notPresent },
@@ -576,6 +556,21 @@ export default function Analysis() {
       direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
     }));
   };
+  const handleLateralityChange = (value: string) => {
+    if (value !== "overall" && value !== "right" && value !== "left") return;
+    setLateralityFilter(value);
+    if (value !== "left") setLeftSubtype("all");
+  };
+  const handleLeftSubtypeChange = (value: string) => {
+    if (
+      value !== "all" &&
+      value !== "intraconal_left" &&
+      value !== "intramural_interarterial_left"
+    ) {
+      return;
+    }
+    setLeftSubtype(value);
+  };
   const summaryCards = [
     {
       title: "Number of Parsed Reports",
@@ -583,19 +578,14 @@ export default function Analysis() {
       icon: FileText,
     },
     {
-      title: "Number of Reviewed Reports",
-      value: reviewedReportCount,
-      icon: CheckCircle2,
+      title: "Number of Right (R-AAOCA) Reports",
+      value: rightReportCount,
+      icon: ArrowRight,
     },
     {
-      title: "Number of Unique Highlighted Terms",
-      value: highlightedTermCount,
-      icon: Highlighter,
-    },
-    {
-      title: "Number of Added Terms",
-      value: ADDED_TERMS_PLACEHOLDER,
-      icon: PlusCircle,
+      title: "Number of Left (L-AAOCA) Reports",
+      value: leftReportCount,
+      icon: ArrowLeft,
     },
   ];
 
@@ -683,18 +673,57 @@ export default function Analysis() {
         </aside>
 
         <div className="min-w-0">
+          <div className="mb-6 flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Laterality</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Filters every number and chart below by AAOCA form.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <ToggleGroup
+                type="single"
+                value={lateralityFilter}
+                onValueChange={handleLateralityChange}
+                variant="outline"
+                size="sm"
+                className="flex-wrap justify-start"
+              >
+                <ToggleGroupItem value="overall">Overall</ToggleGroupItem>
+                <ToggleGroupItem value="right">Right (R-AAOCA)</ToggleGroupItem>
+                <ToggleGroupItem value="left">Left (L-AAOCA)</ToggleGroupItem>
+              </ToggleGroup>
+              {lateralityFilter === "left" && (
+                <ToggleGroup
+                  type="single"
+                  value={leftSubtype}
+                  onValueChange={handleLeftSubtypeChange}
+                  variant="outline"
+                  size="sm"
+                  className="flex-wrap justify-start"
+                >
+                  <ToggleGroupItem value="all">All lefts</ToggleGroupItem>
+                  <ToggleGroupItem value="intraconal_left">Intraconal</ToggleGroupItem>
+                  <ToggleGroupItem value="intramural_interarterial_left">
+                    Intramural / inter-arterial
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              )}
+            </div>
+          </div>
+
           <section id="summary-cards" className="scroll-mt-6">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-foreground">Summary Cards</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Overview of parsed reports and highlighted terminology.
+                Cohort size and laterality breakdown across all parsed reports.
               </p>
               {loadError && (
                 <p className="mt-3 text-sm text-destructive">{loadError}</p>
               )}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-3">
               {summaryCards.map((card) => {
                 const Icon = card.icon;
                 return (
@@ -735,30 +764,9 @@ export default function Analysis() {
             </p>
           </div>
 
-          <div className="mb-4 grid gap-4 md:grid-cols-2">
-            {anomalousLeftOverviewCards.map((card) => (
-              <Card key={card.title}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{card.title}</CardTitle>
-                  <p className="text-xs text-muted-foreground">{card.subtitle}</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-semibold tabular-nums text-foreground">
-                    {loading ? "..." : card.count}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    reports with this subtype
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
           <PaperFeatureCategoryChart
             data={paperFeatureCategoryChartData}
             loading={loading}
-            mode={paperFeatureOverviewMode}
-            onModeChange={setPaperFeatureOverviewMode}
           />
 
           <Card>
@@ -1181,22 +1189,10 @@ function HorizontalBarChart({
 function PaperFeatureCategoryChart({
   data,
   loading,
-  mode,
-  onModeChange,
 }: {
   data: HorizontalBarDatum[];
   loading: boolean;
-  mode: PaperFeatureOverviewMode;
-  onModeChange: (mode: PaperFeatureOverviewMode) => void;
 }) {
-  const modes: { value: PaperFeatureOverviewMode; label: string }[] = [
-    { value: "overall", label: "Overall" },
-    { value: "intraconal_left", label: "Intraconal lefts" },
-    {
-      value: "intramural_interarterial_left",
-      label: "Intramural / inter-arterial lefts",
-    },
-  ];
   const maxValue = Math.max(1, ...data.map((item) => item.value));
 
   return (
@@ -1206,19 +1202,6 @@ function PaperFeatureCategoryChart({
         <p className="text-xs text-muted-foreground">
           Number of reports containing at least one tracked feature in each category.
         </p>
-        <div className="flex flex-wrap gap-2 pt-2">
-          {modes.map((option) => (
-            <Button
-              key={option.value}
-              type="button"
-              size="sm"
-              variant={mode === option.value ? "default" : "outline"}
-              onClick={() => onModeChange(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">

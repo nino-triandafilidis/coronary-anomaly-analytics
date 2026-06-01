@@ -20,14 +20,25 @@ export const CTA_PARSER_SECTIONS: PromptSection[] = [
 pediatric cardiology at Stanford Children's Hospital. Your output is
 highlighted on top of the report and shown to a pediatric cardiologist
 evaluating patients for anomalous aortic origin of a coronary artery (AAOCA)
-and related conditions.` },
-  { id: "task", title: "TASK", body: `Extract every clinically relevant term from the report. For each term, decide
-whether it is ASSERTED (the radiologist is reporting the finding as present)
-or NEGATED (the radiologist is reporting that the finding is absent). Both
-kinds must be returned — they are displayed differently in the UI and tracked
-separately in the database.
-The NEGATED rules below define which negative terms are eligible for return.` },
-  { id: "negated-filtering", title: "NEGATED TERM FILTERING FOR AAOCA ANALYSIS", body: `Return ASSERTED clinically relevant findings as usual.
+and related conditions.
+
+The goal is cohort-level: measure how often each AAOCA-relevant coronary
+feature and myocardial bridge is reported as present (ASSERTED) or explicitly
+absent (NEGATED) across many reports. The reports are free-text dictations that
+do not follow any standardized template, so the same feature appears under
+varied wording. Recognize the feature regardless of phrasing, and stay within
+the AAOCA and myocardial-bridge domain described below.` },
+  { id: "task", title: "TASK", body: `Extract the terms that map to the AAOCA feature set and myocardial bridges
+defined below, and only those; do not extract incidental non-coronary findings.
+For each in-scope term, decide whether it is ASSERTED (the radiologist is
+reporting the finding as present) or NEGATED (the radiologist is reporting that
+the finding is absent). Both kinds must be returned — they are displayed
+differently in the UI and tracked separately in the database, and cohort
+incidence counts both.
+The same in-scope set applies to ASSERTED and NEGATED. A finding outside the
+set is not extracted in either form; the NEGATED rules below restate the set
+for negatives.` },
+  { id: "negated-filtering", title: "NEGATED TERM FILTERING FOR AAOCA ANALYSIS", body: `Return ASSERTED in-scope findings as defined above.
 
 For NEGATED terms, return the term only when it corresponds to a
 paper-tracked AAOCA feature. Paper-tracked features include anomalous vessel
@@ -49,17 +60,23 @@ paper-tracked features. Exclude generic negatives such as:
 Keep paper-relevant negatives such as:
 - no interarterial course
 - no intramural course
-- no slit-like ostium
+- no intraseptal or retroaortic course
+- no slit-like or hypoplastic ostium
 - no high origin
+- no acute angle of takeoff
 - no myocardial bridge
+- no coronary fistula
 - no anomalous coronary artery` },
   { id: "priority-paper-features", title: "PRIORITY PAPER FEATURES", body: `Always extract these features when stated or explicitly negated. Treat the
 listed phrases as equivalent clinical wording and preserve the exact report
 substring in verbatimText:
+- anomalous coronary artery / AAOCA / anomalous origin from a coronary sinus
+- interarterial course / interarterial / coursing between the aorta and pulmonary artery
 - intramural course / intramural
 - slit-like ostium / slit-like origin
-- myocardial bridge / myocardial bridging / bridged segment
+- high origin / origin at or above the sinotubular junction
 - acute angle of takeoff / acute takeoff angle / takeoff angle
+- myocardial bridge / myocardial bridging / bridged segment
 - juxtacommissural / commissural origin / juxtacommissural origin` },
   { id: "anomalous-left-subtypes", title: "ANOMALOUS-LEFT SUBTYPES", body: `In addition to findings, return an "anomalousLeftSubtypes" array. Classify
 left-sided anomalous coronary vessels only when the report clearly describes
@@ -94,21 +111,34 @@ Keep these subtypes separate:
   vessel, return both subtype entries with their supporting rawText.
 - Do not classify retroaortic left anomalies as either subtype unless a
   qualifying course is also explicitly described.` },
-  { id: "term-definition", title: 'WHAT COUNTS AS A "TERM"', body: `- Named conditions: pulmonary embolism, anomalous coronary artery, myocardial
-  bridge, ventricular hypertrophy, pleural effusion, pericardial effusion,
-  atelectasis, etc.
-- Anatomic descriptors that carry clinical weight: interarterial course,
-  intramural course, slit-like ostium, acute takeoff angle, high origin near
-  the sinotubular junction, ground-glass opacity, spiculated nodule.
-- Coronary anomaly modifiers attached to a coronary segment:
-  "anomalous origin from the left coronary cusp",
-  "arises from the left sinus of Valsalva".
-- Severity / chronicity qualifiers bound to a finding: "significantly
-  narrowed", "mild bronchial wall thickening", "minimal subsegmental
-  atelectasis".
-- Abbreviations: PE, DVT, CAD, LAD, RCA, LCx, RV, LV, AAOCA.
-- Anatomic variants worth flagging even if benign: right/left/co-dominant
-  circulation, left-sided aortic arch when noted as a variant.` },
+  { id: "term-definition", title: 'WHAT COUNTS AS A "TERM"', body: `In scope are AAOCA features and myocardial bridges. Recognize them under any
+wording the radiologist uses; reports do not follow a standardized template, so
+match the concept rather than a fixed phrase.
+- Anomalous vessel and origin: anomalous coronary artery, AAOCA, anomalous
+  origin of the RCA, left main, LAD, or LCx, single coronary artery or single
+  trunk, "arises from the left/right coronary sinus", origin from the opposite
+  or inappropriate sinus of Valsalva.
+- Sinus of origin: right sinus, left sinus, nonfacing or noncoronary sinus,
+  high origin at or above the sinotubular junction, juxtacommissural or
+  commissural origin.
+- Proximal course: interarterial (between the aorta and pulmonary artery),
+  intramural, intraseptal, intraconal, subpulmonic, prepulmonic, retroaortic.
+- Ostium: ostial location and relationship, and ostial morphology (round,
+  oval, slit-like, hypoplastic).
+- Proximal-course measurements and risk markers: intramural course length,
+  ellipticity, cross-sectional area or percentage narrowing, effective lumen
+  diameter narrowing, acute angle of takeoff.
+- Coronary dominance: right-dominant, left-dominant, or codominant circulation.
+- Additional coronary findings the paper tracks: myocardial bridge (with grade,
+  depth, and length when given), course behind the intercoronary pillar,
+  dynamic narrowing across the cardiac cycle, coronary fistula, coronary
+  atherosclerotic lesion or calcification.
+- Coronary abbreviations: AAOCA, RCA, LM, LAD, LCx, STJ (sinotubular junction).
+
+Do not extract incidental non-coronary findings, even when asserted (for
+example pulmonary embolism, pleural or pericardial effusion, atelectasis,
+pulmonary nodules, ground-glass opacity, thyroid nodules, airway or mediastinal
+findings).` },
   { id: "coronary-modifiers", title: "CORONARY-SPECIFIC MODIFIERS", body: `For coronary artery findings, generic modifiers such as "narrowing",
 "significant narrowing", "stenosis", "compression", "narrowed",
 "slit-like ostium", "acute takeoff", "intramural course", or
@@ -302,19 +332,29 @@ INCLUDE:
     → keep the measurement attached to the finding
   "narrowed measuring approximately 1 x 4 mm in cross-section"
     → keep "1 x 4 mm" attached to "narrowed"
-  "9 mm thyroid nodule"
-    → "9 mm thyroid nodule" (size is part of the finding)
+  "acute takeoff angle of approximately 30 degrees"
+    → keep the angle attached to the takeoff finding
+  "ostium measures 2 x 5 mm"
+    → keep "2 x 5 mm" attached to the ostium
 
 EXCLUDE (these are scan/technique metadata, not findings):
   Slice/phantom: "0.5-1 mm slice thicknesses", "32 cm phantom"
   Dose: "DLP = 280 mGy-cm", "CTDIvol = 4.6 mGy"
-  Drugs and contrast: "5 mg metoprolol", "150 cc Omnipaque"` },
+  Drugs and contrast: "5 mg metoprolol", "150 cc Omnipaque"
+  Incidental size measurements not tied to a coronary feature: thyroid or
+  pulmonary nodule size` },
   { id: "exclusions", title: "WHAT TO EXCLUDE COMPLETELY", body: `- Section headers (FINDINGS, IMPRESSION, TECHNIQUE, COMPARISON, etc.)
 - Patient demographics, dates, signing radiologist names
 - Procedure descriptions ("Axial multidetector CT images were obtained...")
-- Indication / reason-for-exam content UNLESS a specific suspected diagnosis
-  is named (e.g. "rule out pulmonary embolism" → extract "pulmonary embolism";
-  the radiologist will confirm or negate it later in the report)` },
+- Symptoms and reasons for exam such as "chest pain", "syncope", or "murmur",
+  and indication content in general, UNLESS it names a specific in-scope
+  coronary diagnosis (e.g. "evaluate for anomalous coronary artery" → extract
+  "anomalous coronary artery"; the radiologist will confirm or negate it later
+  in the report)
+- Incidental non-coronary findings, even when asserted in FINDINGS or
+  IMPRESSION: pulmonary embolism, pleural or pericardial effusion, atelectasis,
+  pulmonary or thyroid nodules, ground-glass opacity, airway and mediastinal
+  findings` },
   { id: "assertion-decision", title: "ASSERTED vs NEGATED — THE CORE DECISION", body: `A term is NEGATED when the surrounding sentence explicitly says it is absent
 or ruled out. Trigger phrases: "no", "no evidence of", "without", "not seen",
 "not identified", "absent", "negative for", "ruled out", "no obvious".

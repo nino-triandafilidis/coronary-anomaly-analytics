@@ -1,6 +1,7 @@
 import type {
   ParseResult,
   ParsedTerm,
+  ReportCohortSide,
   ReviewDecisionRecord,
 } from "@/data/parseTypes";
 
@@ -15,6 +16,8 @@ export interface StoredParsedReport {
   text: string;
   parseResult: ParseResult;
   reviewDecisions?: ReviewDecisionRecord[];
+  /** Curated cohort laterality; absent for reports parsed live in the app. */
+  side?: ReportCohortSide;
 }
 
 export interface StoredUploadedReportFile {

@@ -107,13 +107,6 @@ parsed_reports/
   txt/                      # Plain-text versions of uploaded reports extracted from original PDF
 ```
 
-## Design principles
-
-The UI follows CS147 HCI design principles documented in [design-guidelines.md](./design-guidelines.md):
-- Gestalt principles for visual grouping of related findings
-- Norman's conceptual model for the upload → review → confirm flow
-- Nielsen's 10 usability heuristics throughout the interface
-
 ## Environment variables
 
 | Variable | Required | Description |

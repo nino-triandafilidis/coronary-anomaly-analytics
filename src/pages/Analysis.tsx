@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   Activity,
   ArrowDown,
   ArrowUp,
   CheckCircle2,
-  ExternalLink,
   FileText,
   Highlighter,
   PlusCircle,
@@ -20,12 +28,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Table,
   TableBody,
   TableCell,
@@ -34,13 +36,38 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   getStoredParsedReports,
   getStoredParsedTerms,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ReviewDecision, ReviewDecisionRecord } from "@/data/parseTypes";
+import type { ReviewDecisionRecord } from "@/data/parseTypes";
+import {
+  PAPER_FEATURES,
+  resolveParsedTermPaperFeature,
+  shouldIncludeInNormalizedFrequency,
+} from "@/data/paperFeatures";
+import {
+  buildInterarterialCourseLengthHistogram,
+  cleanInterarterialCourseLengthMeasurements,
+  type CourseLengthHistogramBin,
+} from "@/data/interarterialCourseLengths";
+import {
+  buildIntramuralCourseLengthHistogram,
+  cleanIntramuralCourseLengthMeasurements,
+} from "@/data/intramuralCourseLengths";
+import { getReportAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
+const TABLE_PAGE_SIZE = 10;
 
 function getAnalysisFeatureName(record: {
   normalizedName?: string;
@@ -114,17 +141,6 @@ function normalizeCoronaryNarrowingFeature(record: {
   return `${severity}${location}${concept} of ${vessel}`.replace(/\s+/g, " ").trim();
 }
 
-interface DecisionOccurrence extends ReviewDecisionRecord {
-  reportId: string;
-  reportText: string;
-}
-
-interface DecisionSummary {
-  name: string;
-  count: number;
-  occurrences: DecisionOccurrence[];
-}
-
 interface NormalizedFeatureRow {
   name: string;
   count: number;
@@ -135,6 +151,17 @@ interface NormalizedFeatureRow {
 interface CoronaryNarrowingRow {
   name: string;
   count: number;
+}
+
+interface PaperFeatureRow {
+  id: string;
+  category: string;
+  canonical: string;
+  aliases: string[];
+  trackingRole: "feature" | "measurement" | "reference";
+  asserted: number;
+  negated: number;
+  total: number;
 }
 
 type BridgeDashboardCategory = "notPresent" | "grade1" | "grade2" | "grade3";
@@ -153,6 +180,11 @@ interface HorizontalBarDatum {
   value: number;
 }
 
+type PaperFeatureOverviewMode =
+  | "overall"
+  | "intraconal_left"
+  | "intramural_interarterial_left";
+
 type FeatureSortKey = keyof NormalizedFeatureRow;
 type FeatureSortDirection = "asc" | "desc";
 
@@ -165,12 +197,10 @@ export default function Analysis() {
     key: FeatureSortKey;
     direction: FeatureSortDirection;
   }>({ key: "count", direction: "desc" });
-  const [selectedDecision, setSelectedDecision] = useState<{
-    title: string;
-    decision: ReviewDecision;
-    occurrences: DecisionOccurrence[];
-  } | null>(null);
-
+  const [paperFeatureOverviewMode, setPaperFeatureOverviewMode] =
+    useState<PaperFeatureOverviewMode>("overall");
+  const [coronaryPage, setCoronaryPage] = useState(1);
+  const [featurePage, setFeaturePage] = useState(1);
   useEffect(() => {
     const loadReports = async () => {
       setLoading(true);
@@ -205,47 +235,159 @@ export default function Analysis() {
     () => reports.flatMap((report) => getStoredParsedTerms(report)),
     [reports]
   );
-  const allReviewDecisions = useMemo<DecisionOccurrence[]>(
+  const allReviewDecisions = useMemo<ReviewDecisionRecord[]>(
+    () => reports.flatMap((report) => report.reviewDecisions ?? []),
+    [reports]
+  );
+  const interarterialCourseLengthMeasurements = useMemo(
     () =>
       reports.flatMap((report) =>
-        (report.reviewDecisions ?? []).map((decision) => ({
-          ...decision,
-          reportId: report.id,
-          reportText: report.text,
-        }))
+        cleanInterarterialCourseLengthMeasurements(
+          report.parseResult.interarterialCourseLengths
+        )
       ),
     [reports]
+  );
+  const interarterialCourseLengthHistogram = useMemo(
+    () =>
+      buildInterarterialCourseLengthHistogram(
+        interarterialCourseLengthMeasurements.map((measurement) => measurement.value)
+      ),
+    [interarterialCourseLengthMeasurements]
+  );
+  const intramuralCourseLengthMeasurements = useMemo(
+    () =>
+      reports.flatMap((report) =>
+        cleanIntramuralCourseLengthMeasurements(
+          report.parseResult.intramuralCourseLengths
+        )
+      ),
+    [reports]
+  );
+  const intramuralCourseLengthHistogram = useMemo(
+    () =>
+      buildIntramuralCourseLengthHistogram(
+        intramuralCourseLengthMeasurements.map((measurement) => measurement.value)
+      ),
+    [intramuralCourseLengthMeasurements]
   );
 
   const reportCount = reports.length;
   const reviewedReportCount = reports.filter((report) => report.reviewed).length;
-  const summarizeReviewDecisions = (decision: ReviewDecision): DecisionSummary[] => {
-    const rows = new Map<string, DecisionSummary>();
+  const paperFeatureRows = useMemo<PaperFeatureRow[]>(() => {
+    const anomalousLeftSubtypeFeatureIds = {
+      intraconal_left: "anomalous_left_intraconal",
+      intramural_interarterial_left: "anomalous_left_intramural_interarterial",
+    } as const;
+    const rows = new Map(
+      PAPER_FEATURES.map((paperFeature) => [
+        paperFeature.id,
+        {
+          ...paperFeature,
+          asserted: 0,
+          negated: 0,
+          total: 0,
+        },
+      ])
+    );
 
-    allReviewDecisions
-      .filter((record) => record.decision === decision)
-      .forEach((record) => {
-        const name = getAnalysisFeatureName(record);
-        if (!name) return;
+    reports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
 
-        const existing = rows.get(name) ?? { name, count: 0, occurrences: [] };
-        existing.count += 1;
-        existing.occurrences.push(record);
-        rows.set(name, existing);
+      parsedTerms.forEach((term) => {
+        const paperFeature = resolveParsedTermPaperFeature(term);
+        if (!paperFeature || Object.values(anomalousLeftSubtypeFeatureIds).includes(
+          paperFeature.id as typeof anomalousLeftSubtypeFeatureIds[keyof typeof anomalousLeftSubtypeFeatureIds]
+        )) {
+          return;
+        }
+
+        const row = rows.get(paperFeature.id);
+        if (!row) return;
+
+        row[term.assertion] += 1;
+        row.total += 1;
       });
 
-    return Array.from(rows.values())
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-      .slice(0, 10);
-  };
-  const topKeepDecisions = useMemo(
-    () => summarizeReviewDecisions("keep"),
-    [allReviewDecisions]
+      const reportSubtypeIds = new Set(
+        getReportAnomalousLeftSubtypes(
+          report.parseResult.anomalousLeftSubtypes,
+          parsedTerms
+        ).map((entry) => anomalousLeftSubtypeFeatureIds[entry.subtype])
+      );
+
+      reportSubtypeIds.forEach((featureId) => {
+        const row = rows.get(featureId);
+        if (!row) return;
+
+        row.asserted += 1;
+        row.total += 1;
+      });
+    });
+
+    return Array.from(rows.values());
+  }, [reports]);
+  const maxPaperFeatureCount = useMemo(
+    () => Math.max(1, ...paperFeatureRows.map((row) => row.total)),
+    [paperFeatureRows]
   );
-  const topSkipDecisions = useMemo(
-    () => summarizeReviewDecisions("skip"),
-    [allReviewDecisions]
+  const anomalousLeftOverviewCards = useMemo(
+    () => [
+      {
+        title: "Intraconal lefts",
+        subtitle: "Intraconal / intraseptal / subpulmonic anomalous left courses",
+        count:
+          paperFeatureRows.find((row) => row.id === "anomalous_left_intraconal")
+            ?.total ?? 0,
+      },
+      {
+        title: "Intramural / inter-arterial lefts",
+        subtitle: "Intramural and/or inter-arterial anomalous left courses",
+        count:
+          paperFeatureRows.find(
+            (row) => row.id === "anomalous_left_intramural_interarterial"
+          )?.total ?? 0,
+      },
+    ],
+    [paperFeatureRows]
   );
+  const paperFeatureCategoryChartData = useMemo<HorizontalBarDatum[]>(() => {
+    const categoryCounts = new Map(
+      Array.from(new Set(PAPER_FEATURES.map((paperFeature) => paperFeature.category))).map(
+        (category) => [category, 0]
+      )
+    );
+
+    reports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
+      const reportSubtypes = new Set(
+        getReportAnomalousLeftSubtypes(
+          report.parseResult.anomalousLeftSubtypes,
+          parsedTerms
+        ).map((entry) => entry.subtype)
+      );
+      if (
+        paperFeatureOverviewMode !== "overall" &&
+        !reportSubtypes.has(paperFeatureOverviewMode)
+      ) {
+        return;
+      }
+
+      const reportCategories = new Set(
+        parsedTerms.flatMap((term) => {
+          const paperFeature = resolveParsedTermPaperFeature(term);
+          return paperFeature ? [paperFeature.category] : [];
+        })
+      );
+      if (reportSubtypes.size > 0) reportCategories.add("Anomalous vessel");
+
+      reportCategories.forEach((category) => {
+        categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+      });
+    });
+
+    return Array.from(categoryCounts, ([label, value]) => ({ label, value }));
+  }, [paperFeatureOverviewMode, reports]);
   const normalizedFeatureRows = useMemo(() => {
     const rows = new Map<
       string,
@@ -253,6 +395,8 @@ export default function Analysis() {
     >();
 
     allTerms.forEach((term) => {
+      if (!shouldIncludeInNormalizedFrequency(term)) return;
+
       const name = getAnalysisFeatureName(term);
       if (!name) return;
 
@@ -270,6 +414,8 @@ export default function Analysis() {
     });
 
     allReviewDecisions.forEach((record) => {
+      if (!shouldIncludeInNormalizedFrequency(record)) return;
+
       const name = getAnalysisFeatureName(record);
       if (!name) return;
 
@@ -325,6 +471,32 @@ export default function Analysis() {
       (a, b) => b.count - a.count || a.name.localeCompare(b.name)
     );
   }, [allTerms]);
+
+  const coronaryPageCount = Math.max(
+    1,
+    Math.ceil(coronaryNarrowingRows.length / TABLE_PAGE_SIZE)
+  );
+  const safeCoronaryPage = Math.min(coronaryPage, coronaryPageCount);
+  const paginatedCoronaryRows = coronaryNarrowingRows.slice(
+    (safeCoronaryPage - 1) * TABLE_PAGE_SIZE,
+    safeCoronaryPage * TABLE_PAGE_SIZE
+  );
+  const featurePageCount = Math.max(
+    1,
+    Math.ceil(filteredFeatureRows.length / TABLE_PAGE_SIZE)
+  );
+  const safeFeaturePage = Math.min(featurePage, featurePageCount);
+  const paginatedFeatureRows = filteredFeatureRows.slice(
+    (safeFeaturePage - 1) * TABLE_PAGE_SIZE,
+    safeFeaturePage * TABLE_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setFeaturePage(1);
+  }, [featureSearch, featureSort]);
+  useEffect(() => {
+    setCoronaryPage(1);
+  }, [coronaryNarrowingRows]);
   const bridgeDashboardStats = useMemo<BridgeDashboardStats>(() => {
     const categories: BridgeDashboardStats["categories"] = {
       notPresent: 0,
@@ -471,16 +643,28 @@ export default function Analysis() {
                 Dataset Snapshot
               </a>
               <a
-                href="#overview-charts"
+                href="#paper-features"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                Review Decisions
+                Paper Features
               </a>
               <a
                 href="#coronary-narrowing"
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 Coronary Narrowing
+              </a>
+              <a
+                href="#interarterial-course-lengths"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                IA Course Lengths
+              </a>
+              <a
+                href="#intramural-course-lengths"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Intramural Lengths
               </a>
               <a
                 href="#myocardial-bridges"
@@ -532,42 +716,107 @@ export default function Analysis() {
             </div>
           </section>
 
-        <section id="overview-charts" className="mt-10 scroll-mt-6">
+        <section id="paper-features" className="mt-10 scroll-mt-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-foreground">Review Decisions</h2>
+            <h2 className="text-2xl font-semibold text-foreground">Paper Features Overview</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Most frequently kept and skipped terms from reviewed reports.
+              Complete paper-tracked AAOCA feature dictionary with occurrence counts across parsed reports.
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Paper reference:{" "}
+              <a
+                href="https://www.jacc.org/doi/10.1016/j.jcmg.2026.02.005"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                https://www.jacc.org/doi/10.1016/j.jcmg.2026.02.005
+              </a>
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DecisionWordList
-                title="Top 10 Keeped Words"
-                emptyLabel="No kept words recorded yet."
-                rows={topKeepDecisions}
-                onSelect={(row) =>
-                  setSelectedDecision({
-                    title: row.name,
-                    decision: "keep",
-                    occurrences: row.occurrences,
-                  })
-                }
-              />
-              <DecisionWordList
-                title="Top 10 Skipped Words"
-                emptyLabel="No skipped words recorded yet."
-                rows={topSkipDecisions}
-                onSelect={(row) =>
-                  setSelectedDecision({
-                    title: row.name,
-                    decision: "skip",
-                    occurrences: row.occurrences,
-                  })
-                }
-              />
-            </div>
+          <div className="mb-4 grid gap-4 md:grid-cols-2">
+            {anomalousLeftOverviewCards.map((card) => (
+              <Card key={card.title}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{card.title}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{card.subtitle}</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-semibold tabular-nums text-foreground">
+                    {loading ? "..." : card.count}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    reports with this subtype
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
+
+          <PaperFeatureCategoryChart
+            data={paperFeatureCategoryChartData}
+            loading={loading}
+            mode={paperFeatureOverviewMode}
+            onModeChange={setPaperFeatureOverviewMode}
+          />
+
+          <Card>
+            <CardContent className="overflow-x-auto p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[190px]">Category</TableHead>
+                    <TableHead className="min-w-[210px]">Canonical keyword</TableHead>
+                    <TableHead className="min-w-[260px]">Aliases</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead className="min-w-[150px]">Total occurrences</TableHead>
+                    <TableHead className="text-right">Asserted</TableHead>
+                    <TableHead className="text-right">Negated</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paperFeatureRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.category}
+                      </TableCell>
+                      <TableCell className="font-medium">{row.canonical}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {row.aliases.length > 0 ? row.aliases.join(" / ") : "-"}
+                      </TableCell>
+                      <TableCell className="text-sm capitalize text-muted-foreground">
+                        {row.trackingRole}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-20 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary transition-all"
+                              style={{
+                                width: loading
+                                  ? "0%"
+                                  : `${(row.total / maxPaperFeatureCount) * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="tabular-nums text-foreground">
+                            {loading ? "..." : row.total}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {loading ? "..." : row.asserted}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {loading ? "..." : row.negated}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </section>
 
         <section id="coronary-narrowing" className="mt-10 scroll-mt-6">
@@ -592,7 +841,7 @@ export default function Analysis() {
                 </TableHeader>
                 <TableBody>
                   {coronaryNarrowingRows.length > 0 ? (
-                    coronaryNarrowingRows.map((row) => (
+                    paginatedCoronaryRows.map((row) => (
                       <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
@@ -610,8 +859,37 @@ export default function Analysis() {
                   )}
                 </TableBody>
               </Table>
+              {coronaryNarrowingRows.length > 0 && (
+                <TablePagination
+                  page={safeCoronaryPage}
+                  pageCount={coronaryPageCount}
+                  onPageChange={setCoronaryPage}
+                />
+              )}
             </CardContent>
           </Card>
+        </section>
+
+        <section id="interarterial-course-lengths" className="mt-10 scroll-mt-6">
+          <CourseLengthHistogram
+            bins={interarterialCourseLengthHistogram}
+            measurementCount={interarterialCourseLengthMeasurements.length}
+            loading={loading}
+            title="Inter-arterial Course Length Distribution"
+            loadingLabel="Loading inter-arterial course length values..."
+            emptyLabel="No inter-arterial course length values found."
+          />
+        </section>
+
+        <section id="intramural-course-lengths" className="mt-10 scroll-mt-6">
+          <CourseLengthHistogram
+            bins={intramuralCourseLengthHistogram}
+            measurementCount={intramuralCourseLengthMeasurements.length}
+            loading={loading}
+            title="Intramural Course Length Distribution"
+            loadingLabel="Loading intramural course length values..."
+            emptyLabel="No intramural course length values found."
+          />
         </section>
 
         <section id="myocardial-bridges" className="mt-10 scroll-mt-6">
@@ -703,7 +981,7 @@ export default function Analysis() {
                 </TableHeader>
                 <TableBody>
                   {filteredFeatureRows.length > 0 ? (
-                    filteredFeatureRows.map((row) => (
+                    paginatedFeatureRows.map((row) => (
                       <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
@@ -723,60 +1001,105 @@ export default function Analysis() {
                   )}
                 </TableBody>
               </Table>
+              {filteredFeatureRows.length > 0 && (
+                <TablePagination
+                  page={safeFeaturePage}
+                  pageCount={featurePageCount}
+                  onPageChange={setFeaturePage}
+                />
+              )}
             </CardContent>
           </Card>
         </section>
         </div>
       </main>
 
-      <Dialog open={!!selectedDecision} onOpenChange={(open) => !open && setSelectedDecision(null)}>
-        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedDecision?.title} - {selectedDecision?.decision === "keep" ? "Keep" : "Skip"} Context
-            </DialogTitle>
-          </DialogHeader>
-
-          {selectedDecision && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {selectedDecision.occurrences.length} occurrence
-                {selectedDecision.occurrences.length !== 1 ? "s" : ""} across reviewed files.
-              </p>
-              {selectedDecision.occurrences.map((occurrence, index) => (
-                <div
-                  key={`${occurrence.reportId}-${occurrence.startIndex}-${occurrence.endIndex}-${index}`}
-                  className="rounded-lg border border-border bg-card p-4"
-                >
-                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{occurrence.reportId}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Position {occurrence.startIndex}-{occurrence.endIndex} ·{" "}
-                        {occurrence.assertion === "negated"
-                          ? "negated"
-                          : "asserted"}
-                      </p>
-                    </div>
-                    <Link
-                      to={`/dataset?reportId=${encodeURIComponent(
-                        occurrence.reportId
-                      )}&returnTo=${encodeURIComponent("/analysis#top-review-words")}`}
-                    >
-                      <Button variant="outline" size="sm">
-                        <ExternalLink className="h-4 w-4" />
-                        Preview
-                      </Button>
-                    </Link>
-                  </div>
-                  <ContextSnippet occurrence={occurrence} />
-                </div>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
+  );
+}
+
+function getPageList(page: number, pageCount: number): (number | "ellipsis")[] {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => index + 1);
+  }
+
+  const pages: (number | "ellipsis")[] = [1];
+  const start = Math.max(2, page - 1);
+  const end = Math.min(pageCount - 1, page + 1);
+
+  if (start > 2) pages.push("ellipsis");
+  for (let current = start; current <= end; current += 1) pages.push(current);
+  if (end < pageCount - 1) pages.push("ellipsis");
+  pages.push(pageCount);
+
+  return pages;
+}
+
+function TablePagination({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+
+  return (
+    <Pagination className="border-t border-border py-3">
+      <PaginationContent>
+        <PaginationItem>
+          <PaginationPrevious
+            href="#"
+            aria-disabled={page <= 1}
+            className={
+              page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"
+            }
+            onClick={(event) => {
+              event.preventDefault();
+              if (page > 1) onPageChange(page - 1);
+            }}
+          />
+        </PaginationItem>
+        {getPageList(page, pageCount).map((item, index) =>
+          item === "ellipsis" ? (
+            <PaginationItem key={`ellipsis-${index}`}>
+              <PaginationEllipsis />
+            </PaginationItem>
+          ) : (
+            <PaginationItem key={item}>
+              <PaginationLink
+                href="#"
+                isActive={item === page}
+                className="cursor-pointer"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onPageChange(item);
+                }}
+              >
+                {item}
+              </PaginationLink>
+            </PaginationItem>
+          )
+        )}
+        <PaginationItem>
+          <PaginationNext
+            href="#"
+            aria-disabled={page >= pageCount}
+            className={
+              page >= pageCount
+                ? "pointer-events-none opacity-50"
+                : "cursor-pointer"
+            }
+            onClick={(event) => {
+              event.preventDefault();
+              if (page < pageCount) onPageChange(page + 1);
+            }}
+          />
+        </PaginationItem>
+      </PaginationContent>
+    </Pagination>
   );
 }
 
@@ -855,83 +1178,135 @@ function HorizontalBarChart({
   );
 }
 
-function DecisionWordList({
-  title,
-  emptyLabel,
-  rows,
-  onSelect,
+function PaperFeatureCategoryChart({
+  data,
+  loading,
+  mode,
+  onModeChange,
 }: {
-  title: string;
-  emptyLabel: string;
-  rows: DecisionSummary[];
-  onSelect: (row: DecisionSummary) => void;
+  data: HorizontalBarDatum[];
+  loading: boolean;
+  mode: PaperFeatureOverviewMode;
+  onModeChange: (mode: PaperFeatureOverviewMode) => void;
 }) {
+  const modes: { value: PaperFeatureOverviewMode; label: string }[] = [
+    { value: "overall", label: "Overall" },
+    { value: "intraconal_left", label: "Intraconal lefts" },
+    {
+      value: "intramural_interarterial_left",
+      label: "Intramural / inter-arterial lefts",
+    },
+  ];
+  const maxValue = Math.max(1, ...data.map((item) => item.value));
+
   return (
-    <Card>
+    <Card className="mb-4">
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="text-base">Paper Feature Categories</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Number of reports containing at least one tracked feature in each category.
+        </p>
+        <div className="flex flex-wrap gap-2 pt-2">
+          {modes.map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={mode === option.value ? "default" : "outline"}
+              onClick={() => onModeChange(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
       </CardHeader>
       <CardContent>
-        {rows.length > 0 ? (
-          <ol className="space-y-2">
-            {rows.map((row, index) => (
-              <li key={`${title}-${row.name}`}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(row)}
-                  className="flex w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent/50"
-                >
-                  <span className="min-w-0">
-                    <span className="mr-2 text-xs tabular-nums text-muted-foreground">
-                      {index + 1}.
-                    </span>
-                    <span className="break-words text-foreground">{row.name}</span>
-                  </span>
-                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                    {row.count}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-            {emptyLabel}
-          </p>
-        )}
+        <div className="space-y-3">
+          {data.map((item) => {
+            const width = loading ? 0 : (item.value / maxValue) * 100;
+            return (
+              <div
+                key={item.label}
+                className="grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3"
+              >
+                <span className="text-sm text-muted-foreground">{item.label}</span>
+                <div className="h-7 overflow-hidden rounded-md bg-muted">
+                  <div
+                    className="h-full rounded-md bg-primary transition-all"
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+                <span className="text-right text-sm font-medium tabular-nums text-foreground">
+                  {loading ? "..." : item.value}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function ContextSnippet({ occurrence }: { occurrence: DecisionOccurrence }) {
-  const text = occurrence.reportText;
-  const start = Math.max(0, occurrence.startIndex);
-  const end = Math.min(text.length, occurrence.endIndex);
-
-  if (!text || start >= end) {
-    return (
-      <p className="rounded-md bg-muted/40 p-3 font-mono text-xs leading-relaxed text-card-foreground">
-        {occurrence.context || occurrence.term}
-      </p>
-    );
-  }
-
-  const contextStart = Math.max(0, start - 180);
-  const contextEnd = Math.min(text.length, end + 180);
-  const before = text.slice(contextStart, start);
-  const match = text.slice(start, end);
-  const after = text.slice(end, contextEnd);
-
+function CourseLengthHistogram({
+  bins,
+  measurementCount,
+  loading,
+  title,
+  loadingLabel,
+  emptyLabel,
+}: {
+  bins: CourseLengthHistogramBin[];
+  measurementCount: number;
+  loading: boolean;
+  title: string;
+  loadingLabel: string;
+  emptyLabel: string;
+}) {
   return (
-    <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 font-mono text-xs leading-relaxed text-card-foreground">
-      {contextStart > 0 ? "..." : ""}
-      {before}
-      <mark className="rounded bg-amber-200 px-0.5 text-foreground dark:bg-amber-700/40">
-        {match}
-      </mark>
-      {after}
-      {contextEnd < text.length ? "..." : ""}
-    </p>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {loading
+            ? "Loading measurements..."
+            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports`}
+        </p>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {loadingLabel}
+          </p>
+        ) : bins.length === 0 ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {emptyLabel}
+          </p>
+        ) : (
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={bins} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 12 }}
+                  label={{ value: "Length bin (mm)", position: "insideBottom", offset: -4 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 12 }}
+                  label={{ value: "Count", angle: -90, position: "insideLeft" }}
+                />
+                <Tooltip
+                  labelFormatter={(label) => `Length bin: ${label}`}
+                  formatter={(value) => [value, "Count"]}
+                />
+                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

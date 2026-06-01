@@ -6,6 +6,7 @@
 import * as pdfjsLib from "pdfjs-dist";
 import PdfJsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 import mammoth from "mammoth";
+import { joinPdfTextItems } from "./pdfText";
 
 const SUPPORTED_TYPES = {
   "text/plain": "txt",
@@ -81,9 +82,7 @@ export async function parsePdf(
     for (let i = 1; i <= numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const text = content.items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ");
+      const text = joinPdfTextItems(content.items);
       pageTexts.push(text);
       page.cleanup();
       if (onProgress && numPages > 0) {

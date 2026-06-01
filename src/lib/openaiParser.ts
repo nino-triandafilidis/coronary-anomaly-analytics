@@ -18,6 +18,10 @@ import type {
   MyocardialBridgeSummary,
 } from "@/data/parseTypes";
 import { CTA_PARSER_PROMPT } from "@/lib/prompts/ctaParser.prompt";
+import { enrichParsedTermWithPaperFeature } from "@/data/paperFeatures";
+import { cleanInterarterialCourseLengthMeasurements } from "@/data/interarterialCourseLengths";
+import { cleanIntramuralCourseLengthMeasurements } from "@/data/intramuralCourseLengths";
+import { cleanAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
 import { createReportPositionResolver } from "@/lib/positionResolver";
 
 // ---------------------------------------------------------------------------
@@ -121,6 +125,96 @@ const FINDINGS_SCHEMA = {
       },
       required: ["bridgeCount", "highestGrade", "bridges"],
     },
+    interarterialCourseLengths: {
+      type: "array",
+      description:
+        "Explicit quantitative inter-arterial course length measurements only. Return [] when none are stated. Normalize values to millimeters.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          value: {
+            type: "number",
+            description: "Positive numeric inter-arterial course length value.",
+          },
+          unit: {
+            type: "string",
+            enum: ["mm"],
+            description: "Normalized unit. Always return mm.",
+          },
+          rawText: {
+            type: "string",
+            description:
+              "Exact contiguous report substring containing the inter-arterial course length measurement.",
+          },
+          vessel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Optional vessel label such as RCA, LM, LAD, or LCX when available, otherwise null.",
+          },
+        },
+        required: ["value", "unit", "rawText", "vessel"],
+      },
+    },
+    intramuralCourseLengths: {
+      type: "array",
+      description:
+        "Explicit quantitative intramural course or intramural segment length measurements only. Return [] when none are stated. Normalize values to millimeters. Do not copy inter-arterial course length values unless the report explicitly applies the same value to the intramural segment.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          value: {
+            type: "number",
+            description: "Positive numeric intramural course length value.",
+          },
+          unit: {
+            type: "string",
+            enum: ["mm"],
+            description: "Normalized unit. Always return mm.",
+          },
+          rawText: {
+            type: "string",
+            description:
+              "Exact contiguous report substring containing the intramural course length measurement.",
+          },
+          vessel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Optional vessel label such as RCA, LM, LAD, or LCX when available, otherwise null.",
+          },
+        },
+        required: ["value", "unit", "rawText", "vessel"],
+      },
+    },
+    anomalousLeftSubtypes: {
+      type: "array",
+      description:
+        "Separate anomalous-left course subtype entries. Return [] when no left-sided anomalous vessel has a clearly described qualifying course.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          subtype: {
+            type: "string",
+            enum: ["intraconal_left", "intramural_interarterial_left"],
+            description:
+              "intraconal_left for intraconal/intraseptal/subpulmonic/infundibular/conal-septal left courses; intramural_interarterial_left for intramural and/or inter-arterial left courses.",
+          },
+          vessel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Optional left-sided vessel label such as LM, left main, LAD, or LCX, otherwise null.",
+          },
+          rawText: {
+            type: "string",
+            description:
+              "Exact contiguous report substring supporting this anomalous-left subtype.",
+          },
+        },
+        required: ["subtype", "vessel", "rawText"],
+      },
+    },
     findings: {
       type: "array",
       description: "Every clinically relevant term in the report.",
@@ -151,12 +245,41 @@ const FINDINGS_SCHEMA = {
             type: "string",
             description: "The full sentence containing the term.",
           },
+          paperFeatureId: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Stable paper feature identifier when the finding maps to a tracked AAOCA feature, otherwise null.",
+          },
+          paperFeatureLabel: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Canonical paper feature label when the finding maps to a tracked AAOCA feature, otherwise null.",
+          },
+          paperFeatureCategory: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description:
+              "Paper feature category when the finding maps to a tracked AAOCA feature, otherwise null.",
+          },
         },
-        required: ["verbatimText", "normalizedName", "assertion", "context"],
+        required: [
+          "verbatimText",
+          "normalizedName",
+          "assertion",
+          "context",
+          "paperFeatureId",
+          "paperFeatureLabel",
+          "paperFeatureCategory",
+        ],
       },
     },
   },
-  required: ["myocardialBridgeSummary", "findings"],
+  required: [
+    "myocardialBridgeSummary",
+    "interarterialCourseLengths",
+    "intramuralCourseLengths",
+    "anomalousLeftSubtypes",
+    "findings",
+  ],
 } as const;
 
 const RECORD_FINDINGS_TOOL = {
@@ -178,10 +301,16 @@ interface ToolFinding {
   normalizedName: string;
   assertion: Assertion;
   context: string;
+  paperFeatureId: string | null;
+  paperFeatureLabel: string | null;
+  paperFeatureCategory: string | null;
 }
 
 interface ToolInput {
   myocardialBridgeSummary: MyocardialBridgeSummary;
+  interarterialCourseLengths: unknown;
+  intramuralCourseLengths: unknown;
+  anomalousLeftSubtypes: unknown;
   findings: ToolFinding[];
 }
 
@@ -321,6 +450,12 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
   );
 
   const findings = Array.isArray(toolInput?.findings) ? toolInput.findings : [];
+  const interarterialCourseLengths =
+    cleanInterarterialCourseLengthMeasurements(toolInput?.interarterialCourseLengths);
+  const intramuralCourseLengths =
+    cleanIntramuralCourseLengthMeasurements(toolInput?.intramuralCourseLengths);
+  const anomalousLeftSubtypes =
+    cleanAnomalousLeftSubtypes(toolInput?.anomalousLeftSubtypes);
   const rawBridgeSummary = toolInput?.myocardialBridgeSummary;
   const rawBridgeGrades = Array.isArray(rawBridgeSummary?.bridges)
     ? rawBridgeSummary.bridges
@@ -349,6 +484,18 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
       : { bridgeCount: 0, highestGrade: null, bridges: [] };
 
   console.log(`GPT returned ${findings.length} findings`);
+  console.log(
+    `Inter-arterial course lengths: ${interarterialCourseLengths.length}`,
+    interarterialCourseLengths
+  );
+  console.log(
+    `Intramural course lengths: ${intramuralCourseLengths.length}`,
+    intramuralCourseLengths
+  );
+  console.log(
+    `Anomalous-left subtypes: ${anomalousLeftSubtypes.length}`,
+    anomalousLeftSubtypes
+  );
   console.log(
     `Myocardial bridges: ${myocardialBridgeSummary.bridgeCount}`,
     myocardialBridgeSummary.bridges
@@ -402,7 +549,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     usedPositions.add(pos.startIndex);
     if (pos.correctionType === "whitespace") whitespaceFixCount++;
 
-    parsedTerms.push({
+    parsedTerms.push(enrichParsedTermWithPaperFeature({
       term: reportText.substring(pos.startIndex, pos.endIndex),
       normalizedName: f.normalizedName || f.verbatimText,
       assertion: f.assertion === "negated" ? "negated" : "asserted",
@@ -416,7 +563,7 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
         pos.correctionType === "whitespace"
           ? "Matched after normalizing whitespace/line breaks"
           : undefined,
-    });
+    }));
   }
 
   if (dropped.length > 0) {
@@ -455,6 +602,9 @@ export async function parseWithOpenAI(reportText: string): Promise<ParseResult> 
     reportText,
     parsedTerms,
     myocardialBridgeSummary,
+    interarterialCourseLengths,
+    intramuralCourseLengths,
+    anomalousLeftSubtypes,
     parserModel: MODEL_NAME,
     parseTimeMs: elapsed,
     totalTokensUsed: totalTokens,

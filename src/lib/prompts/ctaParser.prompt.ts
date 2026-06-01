@@ -21,6 +21,80 @@ whether it is ASSERTED (the radiologist is reporting the finding as present)
 or NEGATED (the radiologist is reporting that the finding is absent). Both
 kinds must be returned — they are displayed differently in the UI and tracked
 separately in the database.
+The NEGATED rules below define which negative terms are eligible for return.
+
+NEGATED TERM FILTERING FOR AAOCA ANALYSIS
+Return ASSERTED clinically relevant findings as usual.
+
+For NEGATED terms, return the term only when it corresponds to a
+paper-tracked AAOCA feature. Paper-tracked features include anomalous vessel
+origin, sinus of origin, proximal course, ostial location, ostial
+relationship, ostial morphology, proximal-course measurements, coronary
+dominance, myocardial bridge, coronary fistula, coronary atherosclerotic
+lesions or calcifications, intercoronary pillar, dynamic narrowing,
+intracavitary or intracameral course, and the sinutubular junction.
+
+Do not return generic incidental negatives unless they map to one of those
+paper-tracked features. Exclude generic negatives such as:
+- no pleural effusion
+- no atelectasis
+- no pulmonary embolism
+- no pneumothorax
+- no consolidation
+- no pericardial effusion
+
+Keep paper-relevant negatives such as:
+- no interarterial course
+- no intramural course
+- no slit-like ostium
+- no high origin
+- no myocardial bridge
+- no anomalous coronary artery
+
+PRIORITY PAPER FEATURES
+Always extract these features when stated or explicitly negated. Treat the
+listed phrases as equivalent clinical wording and preserve the exact report
+substring in verbatimText:
+- intramural course / intramural
+- slit-like ostium / slit-like origin
+- myocardial bridge / myocardial bridging / bridged segment
+- acute angle of takeoff / acute takeoff angle / takeoff angle
+- juxtacommissural / commissural origin / juxtacommissural origin
+
+ANOMALOUS-LEFT SUBTYPES
+In addition to findings, return an "anomalousLeftSubtypes" array. Classify
+left-sided anomalous coronary vessels only when the report clearly describes
+the course. Preserve the exact supporting substring in rawText and include the
+left-sided vessel label when available.
+
+Use subtype "intraconal_left" for anomalous left coronary artery, left main,
+LAD, or LCX with an intraconal, intraseptal, subpulmonic, infundibular, or
+conal-septal type course. Relevant wording includes:
+- intraconal left
+- intraseptal left
+- subpulmonic left
+- infundibular course
+- conal-septal course
+- left main, LAD, or LCX with intraseptal course
+
+Use subtype "intramural_interarterial_left" for anomalous left coronary
+artery, left main, LAD, or LCX with an intramural and/or inter-arterial course.
+Relevant wording includes:
+- intramural left
+- inter-arterial left / interarterial left
+- intramural/inter-arterial left
+- left main, LAD, or LCX with intramural or inter-arterial course
+- anomalous left coronary artery coursing between the aorta and pulmonary artery
+- anomalous left coronary artery with an intramural segment
+
+Keep these subtypes separate:
+- Do not merge intraconal/intraseptal lefts with intramural/inter-arterial lefts.
+- If the report only says anomalous left coronary artery without describing the
+  course, keep the general anomalous-left finding but return no subtype entry.
+- If both course types are explicitly described for the same anomalous left
+  vessel, return both subtype entries with their supporting rawText.
+- Do not classify retroaortic left anomalies as either subtype unless a
+  qualifying course is also explicitly described.
 
 WHAT COUNTS AS A "TERM"
 - Named conditions: pulmonary embolism, anomalous coronary artery, myocardial
@@ -152,6 +226,83 @@ Dashboard intent:
   "200 patients had myocardial bridges, 150 had grade 3, 50 had grade 2,
   30 had more than one bridge."
 
+INTER-ARTERIAL COURSE LENGTHS
+In addition to findings, return an "interarterialCourseLengths" array with
+zero or more explicit quantitative inter-arterial course length measurements.
+Use one item per measured vessel or segment. Return [] when the report does not
+state a numeric inter-arterial course length.
+
+For each measurement:
+- value: numeric length normalized to millimeters.
+- unit: always "mm".
+- rawText: exact contiguous report substring containing the measurement.
+- vessel: RCA, LM, LAD, LCX, or another available vessel label; otherwise null.
+
+Extraction rules:
+- Extract only numeric values clearly referring to inter-arterial course length.
+- Convert centimeters to millimeters.
+- Do not infer a value from qualitative descriptions such as "short" or "long".
+- Do not extract unrelated measurements such as vessel diameter, ostial size,
+  aortic root size, sinus size, or distance from commissure.
+
+Examples:
+  "inter-arterial course measures 8 mm"
+    -> value 8, unit "mm"
+  "8 mm interarterial course"
+    -> value 8, unit "mm"
+  "approximately 12 mm inter-arterial segment"
+    -> value 12, unit "mm"
+  "interarterial course for approximately 1 cm"
+    -> value 10, unit "mm"
+  "short interarterial course"
+    -> no measurement
+  "aortic root measures 30 mm"
+    -> no measurement
+  "ostium measures 2 mm"
+    -> no measurement
+
+INTRAMURAL COURSE LENGTHS
+In addition to findings, return an "intramuralCourseLengths" array with zero
+or more explicit quantitative intramural course or intramural segment length
+measurements. Use one item per measured vessel or segment. Return [] when the
+report does not state a numeric intramural length.
+
+For each measurement:
+- value: numeric length normalized to millimeters.
+- unit: always "mm".
+- rawText: exact contiguous report substring containing the measurement.
+- vessel: RCA, LM, LAD, LCX, or another available vessel label; otherwise null.
+
+Extraction rules:
+- Extract only numeric values clearly referring to intramural course length or
+  intramural segment length.
+- Convert centimeters to millimeters.
+- Do not infer a value from qualitative descriptions such as "short" or "long".
+- Do not extract unrelated measurements such as inter-arterial course length,
+  vessel diameter, ostial size, aortic root size, sinus size, or distance from
+  commissure.
+- Do not treat an inter-arterial course length as an intramural segment length
+  unless the report explicitly says the same numeric value applies to the
+  intramural segment.
+
+Examples:
+  "intramural segment measures 8 mm"
+    -> value 8, unit "mm"
+  "8 mm intramural course"
+    -> value 8, unit "mm"
+  "approximately 12 mm intramural segment"
+    -> value 12, unit "mm"
+  "intramural course length is 10 mm"
+    -> value 10, unit "mm"
+  "short intramural course"
+    -> no measurement
+  "inter-arterial course measures 8 mm"
+    -> no intramural measurement
+  "aortic root measures 30 mm"
+    -> no measurement
+  "ostium measures 2 mm"
+    -> no measurement
+
 MEASUREMENTS
 Include a measurement when it is bound to anatomy or pathology in the same
 sentence or clause — even if no qualifier word like "abnormal" or "concerning"
@@ -186,8 +337,8 @@ or ruled out. Trigger phrases: "no", "no evidence of", "without", "not seen",
 "not identified", "absent", "negative for", "ruled out", "no obvious".
 
 Examples:
-  "No pericardial effusion."
-    → "pericardial effusion", NEGATED
+  "No interarterial course."
+    → "interarterial course", NEGATED
   "No complete myocardial bridge."
     → "complete myocardial bridge", NEGATED
   "Patent without significant narrowing."
@@ -217,6 +368,8 @@ contiguous substring that does and put the cleaned form in "normalizedName".
 
 OUTPUT
 Call the \`record_findings\` tool exactly once. The output must include both
-"myocardialBridgeSummary" and "findings". If no findings are present, call it
+"myocardialBridgeSummary", "interarterialCourseLengths",
+"intramuralCourseLengths", "anomalousLeftSubtypes", and "findings". If no findings are present, call it
 with { "myocardialBridgeSummary": { "bridgeCount": 0, "highestGrade": null,
-"bridges": [] }, "findings": [] }.`;
+"bridges": [] }, "interarterialCourseLengths": [], "intramuralCourseLengths":
+[], "anomalousLeftSubtypes": [], "findings": [] }.`;

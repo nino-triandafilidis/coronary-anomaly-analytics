@@ -19,6 +19,10 @@ export interface ParsedTerm {
   endIndex: number;       // Position in report text
   context: string;        // Surrounding sentence for context
   isAnomaly: boolean;     // LLM's assessment: is this a clinical finding/anomaly?
+  paperFeatureId?: string;
+  paperFeatureLabel?: string;
+  paperFeatureCategory?: string;
+  paperFeatureTrackingRole?: "feature" | "measurement" | "reference";
   correctionType?: "exact" | "whitespace" | "resolved"; // How position was matched
   resolutionNote?: string; // Human-readable description of the correction
 }
@@ -39,11 +43,38 @@ export interface MyocardialBridgeSummary {
   bridges: MyocardialBridgeDetail[];
 }
 
+export interface InterarterialCourseLengthMeasurement {
+  value: number;
+  unit: "mm";
+  rawText: string;
+  vessel?: string;
+}
+
+export interface IntramuralCourseLengthMeasurement {
+  value: number;
+  unit: "mm";
+  rawText: string;
+  vessel?: string;
+}
+
+export type AnomalousLeftSubtype =
+  | "intraconal_left"
+  | "intramural_interarterial_left";
+
+export interface AnomalousLeftSubtypeEntry {
+  subtype: AnomalousLeftSubtype;
+  vessel?: string;
+  rawText: string;
+}
+
 export interface ParseResult {
   reportId: string;
   reportText: string;
   parsedTerms: ParsedTerm[];
   myocardialBridgeSummary: MyocardialBridgeSummary;
+  interarterialCourseLengths?: InterarterialCourseLengthMeasurement[];
+  intramuralCourseLengths?: IntramuralCourseLengthMeasurement[];
+  anomalousLeftSubtypes?: AnomalousLeftSubtypeEntry[];
   parserModel: string;    // e.g. "gpt-5.4"
   parseTimeMs: number;
   totalTokensUsed: number;

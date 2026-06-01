@@ -183,13 +183,18 @@ Examples:
 This summary is patient-level, not finding-level.
 
 bridgeCount:
-- Count only ASSERTED myocardial bridges.
+- Count every ASSERTED myocardial bridge, including ones described as shallow,
+  superficial, partial, mild, focal, or short. A bridge does not need to be
+  "complete" to count.
+- Also count a bridge that is stated but qualified as equivocal or limited,
+  such as "myocardial bridging, limited evaluation due to motion" or "possible
+  myocardial bridge". Record it and grade it as best supported (default grade 1
+  when depth or severity is not given).
 - Typical value is 1; maximum is usually about 2.
-- If the report explicitly says there is no myocardial bridge, no complete
-  bridge, or no bridged segment, set bridgeCount to 0 and bridges to [] unless
-  another bridge is asserted elsewhere in the report.
-- If a partial/superficial bridge is asserted and a complete bridge is negated,
-  count the asserted partial/superficial bridge.
+- Set bridgeCount to 0 only when no bridge of any depth is described, or when
+  every bridge mention is explicitly negated. "No complete myocardial bridge"
+  on its own does NOT zero the count when a partial, shallow, or superficial
+  bridge is asserted in the same report; count that bridge.
 
 highestGrade:
 - This is the patient-level dashboard category.

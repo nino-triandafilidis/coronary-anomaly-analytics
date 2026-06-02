@@ -232,6 +232,12 @@ interface PaperFeatureRow {
 
 type BridgeDashboardCategory = "notPresent" | "grade1" | "grade2" | "grade3";
 type BridgeCountCategory = "notPresent" | "one" | "two" | "threePlus";
+type BridgeGradeKey = "grade1" | "grade2" | "grade3";
+type BridgePresentCountKey = "one" | "two" | "threePlus";
+type BridgeCellMatrix = Record<
+  BridgePresentCountKey,
+  Record<BridgeGradeKey, ProvenanceContributor[]>
+>;
 
 interface BridgeDashboardStats {
   totalPatients: number;
@@ -706,6 +712,11 @@ export default function Analysis() {
       two: [],
       threePlus: [],
     };
+    const matrix: BridgeCellMatrix = {
+      one: { grade1: [], grade2: [], grade3: [] },
+      two: { grade1: [], grade2: [], grade3: [] },
+      threePlus: { grade1: [], grade2: [], grade3: [] },
+    };
     filteredReports.forEach((report) => {
       const summary = report.parseResult.myocardialBridgeSummary;
       const bridgeCount = summary?.bridgeCount ?? 0;
@@ -740,15 +751,20 @@ export default function Analysis() {
         matchedText: evidenceFor(topBridge),
         context: topBridge?.evidenceText,
       });
-      const countKey: BridgeCountCategory =
+      const countKey: BridgePresentCountKey =
         bridgeCount === 1 ? "one" : bridgeCount === 2 ? "two" : "threePlus";
       count[countKey].push({
         reportId: report.id,
         matchedText: evidenceFor(bridges[0]),
         context: bridges[0]?.evidenceText,
       });
+      matrix[countKey][`grade${highestGrade}` as BridgeGradeKey].push({
+        reportId: report.id,
+        matchedText: evidenceFor(topBridge),
+        context: topBridge?.evidenceText,
+      });
     });
-    return { grade, count };
+    return { grade, count, matrix };
   }, [filteredReports]);
   const interarterialBinContributors = useMemo(
     () =>
@@ -830,6 +846,19 @@ export default function Analysis() {
     const contributors = bridgeContributors.count[key as BridgeCountCategory] ?? [];
     openProvenance({
       title: `Bridge count — ${label}`,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openBridgeCell = (
+    countKey: BridgePresentCountKey,
+    gradeKey: BridgeGradeKey,
+    label: string
+  ) => {
+    const contributors = bridgeContributors.matrix[countKey][gradeKey] ?? [];
+    openProvenance({
+      title: `Bridge count × grade — ${label}`,
       subtitle: reportCountSubtitle(distinctReportCount(contributors)),
       splitByAssertion: false,
       contributors,
@@ -1232,7 +1261,7 @@ export default function Analysis() {
               Myocardial Bridge Distribution
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Patient-level bridge count and highest grade distributions.
+              Patient-level bridge count and highest grade distributions, and how the two relate.
             </p>
           </div>
 
@@ -1250,6 +1279,12 @@ export default function Analysis() {
               data={bridgeGradeChartData}
               loading={loading}
               onSelect={openBridgeGrade}
+            />
+            <BridgeCountGradeMatrix
+              matrix={bridgeContributors.matrix}
+              bridgePatients={bridgeDashboardStats.bridgePatients}
+              loading={loading}
+              onSelectCell={openBridgeCell}
             />
           </div>
         </section>
@@ -1566,6 +1601,130 @@ function HorizontalBarChart({
               </button>
             );
           })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BridgeCountGradeMatrix({
+  matrix,
+  bridgePatients,
+  loading,
+  onSelectCell,
+}: {
+  matrix: BridgeCellMatrix;
+  bridgePatients: number;
+  loading: boolean;
+  onSelectCell?: (
+    countKey: BridgePresentCountKey,
+    gradeKey: BridgeGradeKey,
+    label: string
+  ) => void;
+}) {
+  const rows: { key: BridgePresentCountKey; label: string }[] = [
+    { key: "one", label: "1 bridge" },
+    { key: "two", label: "2 bridges" },
+    { key: "threePlus", label: "3+ bridges" },
+  ];
+  const gradeKeys: BridgeGradeKey[] = ["grade1", "grade2", "grade3"];
+  const gradeLabels: Record<BridgeGradeKey, string> = {
+    grade1: "Grade 1",
+    grade2: "Grade 2",
+    grade3: "Grade 3",
+  };
+
+  const cellCount = (row: BridgePresentCountKey, grade: BridgeGradeKey) =>
+    matrix[row][grade].length;
+  const rowTotal = (row: BridgePresentCountKey) =>
+    gradeKeys.reduce((sum, grade) => sum + cellCount(row, grade), 0);
+  const colTotal = (grade: BridgeGradeKey) =>
+    rows.reduce((sum, row) => sum + cellCount(row.key, grade), 0);
+  const maxCell = Math.max(
+    1,
+    ...rows.flatMap((row) => gradeKeys.map((grade) => cellCount(row.key, grade)))
+  );
+
+  const gridCols = "grid grid-cols-[96px_repeat(3,minmax(0,1fr))_56px] gap-1.5";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Bridge Count × Highest Grade</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          How the two facets relate across the {bridgePatients} patients with a bridge. Shading
+          scales with patient count; click a cell for source reports.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-1.5">
+          <div className={gridCols}>
+            <span />
+            {gradeKeys.map((grade) => (
+              <span
+                key={grade}
+                className="pb-1 text-center text-xs font-medium text-muted-foreground"
+              >
+                {gradeLabels[grade]}
+              </span>
+            ))}
+            <span className="pb-1 text-right text-xs font-medium text-muted-foreground">Total</span>
+          </div>
+
+          {rows.map((row) => (
+            <div key={row.key} className={`${gridCols} items-center`}>
+              <span className="text-sm text-muted-foreground">{row.label}</span>
+              {gradeKeys.map((grade) => {
+                const value = cellCount(row.key, grade);
+                const alpha = value === 0 ? 0 : Math.max(0.12, value / maxCell);
+                const onPrimary = alpha >= 0.5;
+                const disabled = loading || !onSelectCell || value === 0;
+                return (
+                  <button
+                    key={grade}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      onSelectCell?.(row.key, grade, `${row.label} · ${gradeLabels[grade]}`)
+                    }
+                    title={disabled ? undefined : "Show source reports"}
+                    className={`flex h-12 items-center justify-center rounded-md text-sm font-medium tabular-nums transition enabled:hover:ring-2 enabled:hover:ring-ring/60 disabled:cursor-default ${
+                      value === 0
+                        ? "bg-muted/50 text-muted-foreground"
+                        : onPrimary
+                          ? "text-primary-foreground"
+                          : "text-foreground"
+                    }`}
+                    style={
+                      value === 0
+                        ? undefined
+                        : { backgroundColor: `hsl(var(--primary) / ${alpha.toFixed(3)})` }
+                    }
+                  >
+                    {loading ? "…" : value}
+                  </button>
+                );
+              })}
+              <span className="text-right text-sm font-semibold tabular-nums text-foreground">
+                {loading ? "…" : rowTotal(row.key)}
+              </span>
+            </div>
+          ))}
+
+          <div className={`${gridCols} items-center pt-1`}>
+            <span className="text-xs font-medium text-muted-foreground">Total</span>
+            {gradeKeys.map((grade) => (
+              <span
+                key={grade}
+                className="text-center text-sm font-semibold tabular-nums text-foreground"
+              >
+                {loading ? "…" : colTotal(grade)}
+              </span>
+            ))}
+            <span className="text-right text-sm font-semibold tabular-nums text-foreground">
+              {loading ? "…" : bridgePatients}
+            </span>
+          </div>
         </div>
       </CardContent>
     </Card>

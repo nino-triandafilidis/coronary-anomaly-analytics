@@ -351,11 +351,34 @@ EXCLUDE (these are scan/technique metadata, not findings):
   { id: "exclusions", title: "WHAT TO EXCLUDE COMPLETELY", body: `- Section headers (FINDINGS, IMPRESSION, TECHNIQUE, COMPARISON, etc.)
 - Patient demographics, dates, signing radiologist names
 - Procedure descriptions ("Axial multidetector CT images were obtained...")
-- Symptoms and reasons for exam such as "chest pain", "syncope", or "murmur",
-  and indication content in general, UNLESS it names a specific in-scope
-  coronary diagnosis (e.g. "evaluate for anomalous coronary artery" → extract
-  "anomalous coronary artery"; the radiologist will confirm or negate it later
-  in the report)
+- The clinical history / indication / reason-for-exam line, in full. This
+  covers symptoms ("chest pain", "syncope", "murmur") AND any specific coronary
+  diagnosis the referral names. A query, suspicion, or referral question
+  ("rule out anomalous coronary artery", "evaluate for intramural course",
+  "query slit-like orifice", "AAORCA eval", "possible anomalous origin of the
+  RCA") states why the scan was ordered, not what the radiologist found. Do NOT
+  emit a finding from the indication line in either form. Extract the anomaly
+  only from the radiologist's own read in the body (FINDINGS / CORONARY ARTERIES
+  / IMPRESSION), where it is confirmed or negated.
+- Normal or expected-anatomy statements, as ASSERTED findings. A coronary that
+  arises from its expected sinus (the RCA from the right sinus; the left main,
+  LAD, or LCx from the left sinus), or is described as normal caliber, normal
+  course, or normally arising, describes the ABSENCE of an anomaly and is not
+  itself an AAOCA feature — do not emit it as an asserted finding. A "patent" or
+  "widely patent" ostium, origin, or vessel is a normal patency statement, not a
+  tracked ostial morphology (only round, oval, slit-like, and hypoplastic are
+  tracked) — do not emit it either. Two things this does NOT change: (1) the
+  ANOMALOUS origin — a vessel from the opposite or inappropriate sinus (RCA from
+  the left sinus, left main from the right sinus) — is still ASSERTED; (2) an
+  explicit negation of a named in-scope feature ("no interarterial course", "no
+  significant narrowing", "no myocardial bridge", "no anomalous coronary
+  artery") is still returned as NEGATED per the rules above.
+- Bare anatomical landmarks that carry no finding on their own — sinotubular
+  junction, sinus of Valsalva, coronary cusp, ostium. Extract these only inside
+  an anomaly or feature ("high origin above the sinotubular junction"), never as
+  a standalone term.
+- Numeric scores that are not an AAOCA feature, including a coronary calcium /
+  Agatston score (e.g. "Agatston score 0").
 - Incidental non-coronary findings, even when asserted in FINDINGS or
   IMPRESSION: pulmonary embolism, pleural or pericardial effusion, atelectasis,
   pulmonary or thyroid nodules, ground-glass opacity, airway and mediastinal

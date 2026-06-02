@@ -971,10 +971,28 @@ function TablePagination({
   pageCount: number;
   onPageChange: (page: number) => void;
 }) {
+  const [pageInput, setPageInput] = useState(String(page));
+
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
+
   if (pageCount <= 1) return null;
 
+  const jumpToPage = () => {
+    const parsedPage = Number(pageInput);
+    if (!Number.isFinite(parsedPage)) {
+      setPageInput(String(page));
+      return;
+    }
+
+    const nextPage = Math.min(pageCount, Math.max(1, Math.trunc(parsedPage)));
+    setPageInput(String(nextPage));
+    onPageChange(nextPage);
+  };
+
   return (
-    <Pagination className="border-t border-border py-3">
+    <Pagination className="flex-wrap gap-3 border-t border-border px-3 py-3">
       <PaginationContent>
         <PaginationItem>
           <PaginationPrevious
@@ -1026,6 +1044,24 @@ function TablePagination({
           />
         </PaginationItem>
       </PaginationContent>
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>Go to page</span>
+        <Input
+          type="number"
+          min={1}
+          max={pageCount}
+          step={1}
+          value={pageInput}
+          onChange={(event) => setPageInput(event.target.value)}
+          onBlur={jumpToPage}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") jumpToPage();
+          }}
+          aria-label={`Go to page, valid range 1 to ${pageCount}`}
+          className="h-8 w-16 px-2 text-center text-xs"
+        />
+        <span>of {pageCount}</span>
+      </label>
     </Pagination>
   );
 }

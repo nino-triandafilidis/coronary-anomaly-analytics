@@ -73,6 +73,19 @@ describe("paper feature resolution", () => {
       "intramural_course"
     );
   });
+
+  it("honors a stored none sentinel as authoritative out-of-scope (no rule fallthrough)", () => {
+    // "left sinus" rule-matches left_sinus, but the resolver judged this mention none.
+    const outOfScope: ParsedTerm = {
+      ...parsedTerm("left sinus", "asserted"),
+      paperFeatureId: "none",
+    };
+    expect(resolveParsedTermPaperFeature(outOfScope)).toBeUndefined();
+    // sanity: the same wording rule-matches when not backfilled
+    expect(resolveParsedTermPaperFeature(parsedTerm("left sinus", "asserted"))?.id).toBe(
+      "left_sinus"
+    );
+  });
 });
 
 describe("normalized frequency filtering", () => {

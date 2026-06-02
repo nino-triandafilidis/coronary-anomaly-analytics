@@ -62,7 +62,11 @@ const NULL_FEATURE: ResolvedFeatureFields = {
 /** The paperFeature* fields for an entity id (all nulled for none / unknown). */
 export function resolvedFeatureFields(entityId: string): ResolvedFeatureFields {
   const paperFeature = entityId === NONE_LABEL ? undefined : PAPER_FEATURE_BY_ID.get(entityId);
-  if (!paperFeature) return { ...NULL_FEATURE };
+  if (!paperFeature) {
+    // Explicit resolver "none" (or an unknown id): store the NONE sentinel, not
+    // null, so the Analysis page can tell "resolved to none" from "not backfilled".
+    return { ...NULL_FEATURE, paperFeatureId: NONE_LABEL };
+  }
   return {
     paperFeatureId: paperFeature.id,
     paperFeatureLabel: paperFeature.canonical,

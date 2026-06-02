@@ -15,13 +15,13 @@ describe("applyResolvedId", () => {
     });
   });
 
-  it("nulls the fields for none or an unknown id", () => {
+  it("stores the none sentinel (not null) for none or an unknown id, with null labels", () => {
     expect(applyResolvedId({ normalizedName: "x" }, "none")).toMatchObject({
-      paperFeatureId: null,
+      paperFeatureId: "none",
       paperFeatureLabel: null,
       paperFeatureCategory: null,
     });
-    expect(applyResolvedId({ normalizedName: "x" }, "not_an_entity").paperFeatureId).toBeNull();
+    expect(applyResolvedId({ normalizedName: "x" }, "not_an_entity").paperFeatureId).toBe("none");
   });
 });
 
@@ -60,7 +60,7 @@ describe("backfillReports", () => {
     expect(summary).toEqual({ reports: 2, findings: 3, distinct: 2, resolved: 2, none: 1 });
     // top-level findings shape populated
     expect(out[0].findings?.[0].paperFeatureId).toBe("right_dominance");
-    expect(out[0].findings?.[1].paperFeatureId).toBeNull();
+    expect(out[0].findings?.[1].paperFeatureId).toBe("none");
     // app stored shape (parseResult.parsedTerms) populated, not a new top-level array
     expect(out[1].parseResult?.parsedTerms?.[0].paperFeatureId).toBe("right_dominance");
     expect(out[1].findings).toBeUndefined();

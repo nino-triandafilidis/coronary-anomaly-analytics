@@ -128,6 +128,7 @@ export default function Analysis() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [featureSearch, setFeatureSearch] = useState("");
+  const [coronarySearch, setCoronarySearch] = useState("");
   const [featureSort, setFeatureSort] = useState<{
     key: FeatureSortKey;
     direction: FeatureSortDirection;
@@ -369,13 +370,23 @@ export default function Analysis() {
       .map((tally) => ({ name: tally.label, count: tally.reports }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [filteredReports]);
+  const filteredCoronaryNarrowingRows = useMemo(() => {
+    const query = coronarySearch.trim().toLowerCase();
+    return query
+      ? coronaryNarrowingRows.filter((row) =>
+          [row.name, String(row.count)].some((value) =>
+            value.toLowerCase().includes(query)
+          )
+        )
+      : coronaryNarrowingRows;
+  }, [coronaryNarrowingRows, coronarySearch]);
 
   const coronaryPageCount = Math.max(
     1,
-    Math.ceil(coronaryNarrowingRows.length / TABLE_PAGE_SIZE)
+    Math.ceil(filteredCoronaryNarrowingRows.length / TABLE_PAGE_SIZE)
   );
   const safeCoronaryPage = Math.min(coronaryPage, coronaryPageCount);
-  const paginatedCoronaryRows = coronaryNarrowingRows.slice(
+  const paginatedCoronaryRows = filteredCoronaryNarrowingRows.slice(
     (safeCoronaryPage - 1) * TABLE_PAGE_SIZE,
     safeCoronaryPage * TABLE_PAGE_SIZE
   );
@@ -394,7 +405,7 @@ export default function Analysis() {
   }, [featureSearch, featureSort, lateralityFilter, leftSubtype]);
   useEffect(() => {
     setCoronaryPage(1);
-  }, [coronaryNarrowingRows]);
+  }, [coronaryNarrowingRows, coronarySearch]);
   const bridgeDashboardStats = useMemo<BridgeDashboardStats>(() => {
     const categories: BridgeDashboardStats["categories"] = {
       notPresent: 0,
@@ -755,8 +766,17 @@ export default function Analysis() {
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-col gap-4 space-y-0 md:flex-row md:items-center md:justify-between">
               <CardTitle className="text-base">Narrowing By Coronary Artery</CardTitle>
+              <div className="relative w-full md:max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={coronarySearch}
+                  onChange={(event) => setCoronarySearch(event.target.value)}
+                  placeholder="Search narrowing details"
+                  className="pl-9"
+                />
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -767,7 +787,7 @@ export default function Analysis() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {coronaryNarrowingRows.length > 0 ? (
+                  {filteredCoronaryNarrowingRows.length > 0 ? (
                     paginatedCoronaryRows.map((row) => (
                       <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
@@ -780,13 +800,15 @@ export default function Analysis() {
                         colSpan={2}
                         className="h-24 text-center text-sm text-muted-foreground"
                       >
-                        No vessel-specific coronary narrowing features found.
+                        {coronarySearch
+                          ? "No coronary narrowing details match your search."
+                          : "No vessel-specific coronary narrowing features found."}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
-              {coronaryNarrowingRows.length > 0 && (
+              {filteredCoronaryNarrowingRows.length > 0 && (
                 <TablePagination
                   page={safeCoronaryPage}
                   pageCount={coronaryPageCount}

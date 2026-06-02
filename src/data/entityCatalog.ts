@@ -38,7 +38,7 @@ export const ENTITY_DEFINITIONS: Record<string, string> = {
   left_sinus: "left coronary sinus of Valsalva (LS) as the site of origin",
   right_sinus: "right coronary sinus of Valsalva (RS) as the site of origin",
   nonfacing_sinus: "nonfacing / noncoronary sinus (NS) as the site of origin",
-  high_origin: "high origin (HO): ostium >=5 mm or >20% of sinus depth above the sinotubular junction",
+  high_origin: "high origin / high takeoff (HO): ostium positioned high, at or above the sinotubular junction; formally >=5 mm or >20% of sinus depth above the STJ",
   left_right_juxtacommissural: "origin at the left-right commissure (LR)",
   left_nonfacing_juxtacommissural: "origin at the left-nonfacing commissure (LN)",
   right_nonfacing_juxtacommissural: "origin at the right-nonfacing commissure (RN)",

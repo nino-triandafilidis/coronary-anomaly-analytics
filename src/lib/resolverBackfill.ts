@@ -7,9 +7,10 @@
  * goes through resolveDistinctEntities, so a wording is resolved once and reused
  * across the whole corpus.
  *
- * This module is pure orchestration with an injected resolver. The runnable
- * entry (resolverBackfill.test.ts, opt-in) wires the real OpenAI client and
- * does the file I/O.
+ * This module is orchestration with an injected resolver; it mutates each
+ * finding object in place (so a nested parseResult.parsedTerms array is updated,
+ * not replaced). The runnable entry (resolverBackfill.test.ts, opt-in) wires the
+ * real OpenAI client and does the file I/O.
  */
 
 import { NONE_LABEL } from "@/data/entityCatalog";
@@ -58,15 +59,11 @@ const NULL_FEATURE: ResolvedFeatureFields = {
   paperFeatureTrackingRole: null,
 };
 
-/** Return a copy of the finding with its paperFeature* fields set from an entity id. */
-export function applyResolvedId<T extends BackfillFinding>(
-  finding: T,
-  entityId: string
-): T & ResolvedFeatureFields {
+/** The paperFeature* fields for an entity id (all nulled for none / unknown). */
+export function resolvedFeatureFields(entityId: string): ResolvedFeatureFields {
   const paperFeature = entityId === NONE_LABEL ? undefined : PAPER_FEATURE_BY_ID.get(entityId);
-  if (!paperFeature) return { ...finding, ...NULL_FEATURE };
+  if (!paperFeature) return { ...NULL_FEATURE };
   return {
-    ...finding,
     paperFeatureId: paperFeature.id,
     paperFeatureLabel: paperFeature.canonical,
     paperFeatureCategory: paperFeature.category,
@@ -74,43 +71,73 @@ export function applyResolvedId<T extends BackfillFinding>(
   };
 }
 
-type ReportLike<F extends BackfillFinding> = { findings?: F[] } & Record<string, unknown>;
+/** Return a copy of the finding with its paperFeature* fields set from an entity id. */
+export function applyResolvedId<T extends BackfillFinding>(
+  finding: T,
+  entityId: string
+): T & ResolvedFeatureFields {
+  return { ...finding, ...resolvedFeatureFields(entityId) };
+}
+
+type ReportLike<F extends BackfillFinding> = {
+  findings?: F[];
+  parseResult?: { parsedTerms?: F[] };
+} & Record<string, unknown>;
 
 /**
- * Resolve every finding across `reports` and write the entity onto each. Returns
- * new report objects (input is not mutated) and a summary of what resolved.
+ * Read the findings array from a report. Handles both the raw parse-output shape
+ * (top-level `findings`, e.g. results_*.jsonl) and the app's stored shape
+ * (`parseResult.parsedTerms`, what getStoredParsedTerms and the Analysis page
+ * read). The returned objects are mutated in place by the backfill.
+ */
+const defaultGetFindings = <F extends BackfillFinding>(report: ReportLike<F>): F[] =>
+  report.findings ?? report.parseResult?.parsedTerms ?? [];
+
+export interface BackfillOptions<F extends BackfillFinding> {
+  batchSize?: number;
+  cache?: Map<string, string>;
+  /** Override how findings are read from a report (default handles both shapes). */
+  getFindings?: (report: ReportLike<F>) => F[];
+}
+
+/**
+ * Resolve every finding across `reports` and write the entity onto each finding
+ * in place. Returns the same report objects plus a summary of what resolved.
  */
 export async function backfillReports<F extends BackfillFinding>(
   reports: Array<ReportLike<F>>,
   resolveBatch: ResolveBatch,
-  opts: { batchSize?: number; cache?: Map<string, string> } = {}
+  opts: BackfillOptions<F> = {}
 ): Promise<{ reports: Array<ReportLike<F>>; summary: BackfillSummary }> {
+  const getFindings = opts.getFindings ?? defaultGetFindings;
+
   const inputs: ResolverInput[] = [];
   for (const report of reports) {
-    for (const finding of report.findings ?? []) {
+    for (const finding of getFindings(report)) {
       inputs.push({ normalizedName: finding.normalizedName, context: finding.context });
     }
   }
 
-  const resolved = await resolveDistinctEntities(inputs, resolveBatch, opts);
+  const resolved = await resolveDistinctEntities(inputs, resolveBatch, {
+    batchSize: opts.batchSize,
+    cache: opts.cache,
+  });
 
   let findings = 0;
   let resolvedCount = 0;
   let none = 0;
-  const outReports = reports.map((report) => ({
-    ...report,
-    findings: (report.findings ?? []).map((finding) => {
+  for (const report of reports) {
+    for (const finding of getFindings(report)) {
       findings += 1;
       const entityId = resolved.get(resolverKey(finding.normalizedName)) ?? NONE_LABEL;
-      const isResolved = entityId !== NONE_LABEL && PAPER_FEATURE_BY_ID.has(entityId);
-      if (isResolved) resolvedCount += 1;
+      Object.assign(finding, resolvedFeatureFields(entityId));
+      if (entityId !== NONE_LABEL && PAPER_FEATURE_BY_ID.has(entityId)) resolvedCount += 1;
       else none += 1;
-      return applyResolvedId(finding, entityId);
-    }),
-  }));
+    }
+  }
 
   return {
-    reports: outReports,
+    reports,
     summary: { reports: reports.length, findings, distinct: resolved.size, resolved: resolvedCount, none },
   };
 }

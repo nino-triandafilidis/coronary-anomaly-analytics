@@ -33,31 +33,40 @@ describe("backfillReports", () => {
     })),
   });
 
-  it("writes paperFeatureId across reports, dedups wordings, preserves extra fields", async () => {
-    const reports = [
+  it("writes paperFeatureId across both report shapes, dedups wordings, mutates in place", async () => {
+    const reports: Array<{
+      findings?: BackfillFinding[];
+      parseResult?: { parsedTerms?: BackfillFinding[] };
+      [k: string]: unknown;
+    }> = [
+      // raw parse-output shape: top-level findings
       {
         id: "r1",
         side: "RCA",
         findings: [
           { normalizedName: "Right Dominant Coronary Circulation", context: "..." },
           { normalizedName: "foo bar", context: "" },
-        ] as BackfillFinding[],
+        ],
       },
+      // app stored shape: parseResult.parsedTerms, with a duplicate wording
       {
         id: "r2",
-        findings: [{ normalizedName: "right dominant coronary circulation" }] as BackfillFinding[],
+        parseResult: { parsedTerms: [{ normalizedName: "right dominant coronary circulation" }] },
       },
     ];
 
-    const { reports: out, summary } = await backfillReports(reports, fake);
+    const { reports: out, summary } = await backfillReports<BackfillFinding>(reports, fake);
 
     expect(summary).toEqual({ reports: 2, findings: 3, distinct: 2, resolved: 2, none: 1 });
-    expect(out[0].findings[0].paperFeatureId).toBe("right_dominance");
-    expect(out[0].findings[1].paperFeatureId).toBeNull();
-    expect(out[1].findings[0].paperFeatureId).toBe("right_dominance");
-    // extra fields pass through untouched
+    // top-level findings shape populated
+    expect(out[0].findings?.[0].paperFeatureId).toBe("right_dominance");
+    expect(out[0].findings?.[1].paperFeatureId).toBeNull();
+    // app stored shape (parseResult.parsedTerms) populated, not a new top-level array
+    expect(out[1].parseResult?.parsedTerms?.[0].paperFeatureId).toBe("right_dominance");
+    expect(out[1].findings).toBeUndefined();
+    // mutated in place (same object refs), extra fields untouched
+    expect(out[0]).toBe(reports[0]);
     expect(out[0].side).toBe("RCA");
-    expect(out[0].id).toBe("r1");
   });
 });
 

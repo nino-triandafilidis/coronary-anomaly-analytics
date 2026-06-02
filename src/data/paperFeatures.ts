@@ -263,10 +263,15 @@ export function isPaperTrackedFeature(term: string): boolean {
 }
 
 export function resolveParsedTermPaperFeature(term: ParsedTerm): PaperFeature | undefined {
+  // A stored paperFeatureId (written by the #66 LLM resolver) is authoritative:
+  // it must win over the rule-based name/term match, otherwise a context-based
+  // correction (e.g. a high-takeoff-at-STJ term the resolver maps to high_origin)
+  // would be overridden by the legacy alias match. Findings with no stored id
+  // (paperFeatureId null) fall through to the rule tiers unchanged.
   return (
+    (term.paperFeatureId ? PAPER_FEATURES_BY_ID.get(term.paperFeatureId) : undefined) ??
     resolvePaperFeature(term.normalizedName) ??
-    resolvePaperFeature(term.term) ??
-    (term.paperFeatureId ? PAPER_FEATURES_BY_ID.get(term.paperFeatureId) : undefined)
+    resolvePaperFeature(term.term)
   );
 }
 

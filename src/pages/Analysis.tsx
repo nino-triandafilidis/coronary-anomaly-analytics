@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -12,11 +12,12 @@ import {
 import {
   Activity,
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
-  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   FileText,
-  Highlighter,
-  PlusCircle,
   Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,12 +45,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   getStoredParsedReports,
   getStoredParsedTerms,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ParsedTerm, ReviewDecisionRecord } from "@/data/parseTypes";
+import type { ReviewDecisionRecord, ParsedTerm } from "@/data/parseTypes";
 import {
   PAPER_FEATURES,
   resolveParsedTermPaperFeature,
@@ -65,138 +67,19 @@ import {
   cleanIntramuralCourseLengthMeasurements,
 } from "@/data/intramuralCourseLengths";
 import { getReportAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
-import { ProvenancePanel } from "@/components/ProvenancePanel";
 import {
-  distinctReportCount,
-  type ProvenanceContributor,
-  type ProvenanceSource,
-} from "@/lib/provenance";
+  deriveReportLaterality,
+  reportMatchesFilter,
+  type LateralityFilter,
+  type LeftSubtypeFilter,
+} from "@/data/laterality";
+import {
+  canonicalFeature,
+  normalizeCoronaryNarrowingFeature,
+  reportIncidence,
+} from "@/data/featureCanonical";
 
-const ADDED_TERMS_PLACEHOLDER = 0;
 const TABLE_PAGE_SIZE = 10;
-
-const ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS = {
-  intraconal_left: "anomalous_left_intraconal",
-  intramural_interarterial_left: "anomalous_left_intramural_interarterial",
-} as const;
-
-function termContributor(reportId: string, term: ParsedTerm): ProvenanceContributor {
-  return {
-    reportId,
-    matchedText: term.term?.trim() || term.normalizedName?.trim() || "",
-    context: term.context,
-    assertion: term.assertion,
-    startIndex: term.startIndex,
-    endIndex: term.endIndex,
-  };
-}
-
-function occurrenceSubtitle(contributors: ProvenanceContributor[]): string {
-  const reports = distinctReportCount(contributors);
-  return `${contributors.length} occurrence${contributors.length === 1 ? "" : "s"} · ${reports} report${reports === 1 ? "" : "s"}`;
-}
-
-function reportCountSubtitle(reports: number): string {
-  return `${reports} report${reports === 1 ? "" : "s"}`;
-}
-
-function buildBinContributors(
-  reports: StoredParsedReport[],
-  getMeasurements: (
-    report: StoredParsedReport
-  ) => { value: number; rawText: string; vessel?: string }[],
-  binSizeMm = 5
-): Map<string, ProvenanceContributor[]> {
-  const map = new Map<string, ProvenanceContributor[]>();
-  reports.forEach((report) => {
-    getMeasurements(report).forEach((measurement) => {
-      const binStart = Math.floor(measurement.value / binSizeMm) * binSizeMm;
-      const label = `${binStart}-${binStart + binSizeMm} mm`;
-      const list = map.get(label) ?? [];
-      list.push({
-        reportId: report.id,
-        matchedText: measurement.rawText?.trim() || `${measurement.value} mm`,
-        context: measurement.vessel
-          ? `${measurement.rawText ?? ""} (${measurement.vessel})`.trim()
-          : measurement.rawText,
-      });
-      map.set(label, list);
-    });
-  });
-  return map;
-}
-
-function getAnalysisFeatureName(record: {
-  normalizedName?: string;
-  term?: string;
-}): string {
-  return (record.normalizedName?.trim() || record.term?.trim() || "").replace(/\s+/g, " ");
-}
-
-function normalizeCoronaryNarrowingFeature(record: {
-  normalizedName?: string;
-  term?: string;
-  context?: string;
-}): string | null {
-  const featureName = getAnalysisFeatureName(record);
-  const haystack = `${featureName} ${record.context ?? ""}`.toLowerCase();
-
-  const hasNarrowingConcept =
-    /\bnarrow(?:ing|ed)?\b/.test(haystack) ||
-    /\bstenos(?:is|ed)\b/.test(haystack) ||
-    /\bcompression\b/.test(haystack) ||
-    /\bcompressed\b/.test(haystack);
-  if (!hasNarrowingConcept) return null;
-
-  const vessel = (() => {
-    if (/\bleft\s+main\b|\blmca\b|\bleft\s+main\s+coronary\s+artery\b/.test(haystack)) {
-      return "left main coronary artery";
-    }
-    if (/\bleft\s+circumflex\b|\bcircumflex\b|\blcx\b/.test(haystack)) {
-      return "left circumflex artery";
-    }
-    if (/\bright\s+coronary\b|\brca\b/.test(haystack)) {
-      return "right coronary artery";
-    }
-    if (/\bleft\s+anterior\s+descending\b|\blad\b/.test(haystack)) {
-      return "left anterior descending artery";
-    }
-    if (/\bleft\s+coronary\s+artery\b|\blca\b/.test(haystack)) {
-      return "left coronary artery";
-    }
-    if (/\bcoronary\s+arter(?:y|ies)\b/.test(haystack)) {
-      return "coronary artery";
-    }
-    return null;
-  })();
-  if (!vessel) return null;
-
-  const location = (() => {
-    if (/\bostium\b|\bostial\b/.test(haystack)) return "ostial ";
-    if (/\bproximal(?:ly)?\b/.test(haystack)) return "proximal ";
-    if (/\bmid\b/.test(haystack)) return "mid ";
-    if (/\bdistal(?:ly)?\b/.test(haystack)) return "distal ";
-    return "";
-  })();
-
-  const severity = (() => {
-    if (/\bsevere(?:ly)?\b/.test(haystack)) return "severe ";
-    if (/\bmoderate(?:ly)?\b/.test(haystack)) return "moderate ";
-    if (/\bmild(?:ly)?\b/.test(haystack)) return "mild ";
-    if (/\bsignificant(?:ly)?\b/.test(haystack)) return "significant ";
-    if (/\bslight(?:ly)?\b/.test(haystack)) return "slight ";
-    if (/\bminimal(?:ly)?\b/.test(haystack)) return "minimal ";
-    return "";
-  })();
-
-  const concept = /\bcompression\b|\bcompressed\b/.test(haystack)
-    ? "compression"
-    : /\bstenos(?:is|ed)\b/.test(haystack)
-      ? "stenosis"
-      : "narrowing";
-
-  return `${severity}${location}${concept} of ${vessel}`.replace(/\s+/g, " ").trim();
-}
 
 interface NormalizedFeatureRow {
   name: string;
@@ -237,11 +120,6 @@ interface HorizontalBarDatum {
   value: number;
 }
 
-type PaperFeatureOverviewMode =
-  | "overall"
-  | "intraconal_left"
-  | "intramural_interarterial_left";
-
 type FeatureSortKey = keyof NormalizedFeatureRow;
 type FeatureSortDirection = "asc" | "desc";
 
@@ -254,12 +132,10 @@ export default function Analysis() {
     key: FeatureSortKey;
     direction: FeatureSortDirection;
   }>({ key: "count", direction: "desc" });
-  const [paperFeatureOverviewMode, setPaperFeatureOverviewMode] =
-    useState<PaperFeatureOverviewMode>("overall");
+  const [lateralityFilter, setLateralityFilter] = useState<LateralityFilter>("overall");
+  const [leftSubtype, setLeftSubtype] = useState<LeftSubtypeFilter>("all");
   const [coronaryPage, setCoronaryPage] = useState(1);
   const [featurePage, setFeaturePage] = useState(1);
-  const [activeProvenance, setActiveProvenance] = useState<ProvenanceSource | null>(null);
-  const navigate = useNavigate();
   useEffect(() => {
     const loadReports = async () => {
       setLoading(true);
@@ -277,35 +153,38 @@ export default function Analysis() {
     loadReports();
   }, []);
 
-  const highlightedTermCount = useMemo(() => {
-    const uniqueNames = new Set<string>();
-
-    reports.forEach((report) => {
-      getStoredParsedTerms(report).forEach((term) => {
-        const name = getAnalysisFeatureName(term);
-        if (name) uniqueNames.add(name);
-      });
-    });
-
-    return uniqueNames.size;
-  }, [reports]);
-
-  const allTerms = useMemo(
-    () => reports.flatMap((report) => getStoredParsedTerms(report)),
+  const reportsWithSide = useMemo(
+    () => reports.map((report) => ({ report, side: deriveReportLaterality(report) })),
     [reports]
   );
+  const rightReportCount = useMemo(
+    () => reportsWithSide.filter(({ side }) => side.right).length,
+    [reportsWithSide]
+  );
+  const leftReportCount = useMemo(
+    () => reportsWithSide.filter(({ side }) => side.left).length,
+    [reportsWithSide]
+  );
+  const filteredReports = useMemo(
+    () =>
+      reportsWithSide
+        .filter(({ side }) => reportMatchesFilter(side, lateralityFilter, leftSubtype))
+        .map(({ report }) => report),
+    [reportsWithSide, lateralityFilter, leftSubtype]
+  );
+
   const allReviewDecisions = useMemo<ReviewDecisionRecord[]>(
-    () => reports.flatMap((report) => report.reviewDecisions ?? []),
-    [reports]
+    () => filteredReports.flatMap((report) => report.reviewDecisions ?? []),
+    [filteredReports]
   );
   const interarterialCourseLengthMeasurements = useMemo(
     () =>
-      reports.flatMap((report) =>
+      filteredReports.flatMap((report) =>
         cleanInterarterialCourseLengthMeasurements(
           report.parseResult.interarterialCourseLengths
         )
       ),
-    [reports]
+    [filteredReports]
   );
   const interarterialCourseLengthHistogram = useMemo(
     () =>
@@ -316,12 +195,12 @@ export default function Analysis() {
   );
   const intramuralCourseLengthMeasurements = useMemo(
     () =>
-      reports.flatMap((report) =>
+      filteredReports.flatMap((report) =>
         cleanIntramuralCourseLengthMeasurements(
           report.parseResult.intramuralCourseLengths
         )
       ),
-    [reports]
+    [filteredReports]
   );
   const intramuralCourseLengthHistogram = useMemo(
     () =>
@@ -332,7 +211,6 @@ export default function Analysis() {
   );
 
   const reportCount = reports.length;
-  const reviewedReportCount = reports.filter((report) => report.reviewed).length;
   const paperFeatureRows = useMemo<PaperFeatureRow[]>(() => {
     const anomalousLeftSubtypeFeatureIds = {
       intraconal_left: "anomalous_left_intraconal",
@@ -350,9 +228,12 @@ export default function Analysis() {
       ])
     );
 
-    reports.forEach((report) => {
+    filteredReports.forEach((report) => {
       const parsedTerms = getStoredParsedTerms(report);
 
+      // Per-report incidence: a feature counts once per report, not per mention.
+      const assertedIds = new Set<string>();
+      const negatedIds = new Set<string>();
       parsedTerms.forEach((term) => {
         const paperFeature = resolveParsedTermPaperFeature(term);
         if (!paperFeature || Object.values(anomalousLeftSubtypeFeatureIds).includes(
@@ -360,12 +241,20 @@ export default function Analysis() {
         )) {
           return;
         }
+        (term.assertion === "negated" ? negatedIds : assertedIds).add(paperFeature.id);
+      });
 
-        const row = rows.get(paperFeature.id);
-        if (!row) return;
-
-        row[term.assertion] += 1;
-        row.total += 1;
+      new Set([...assertedIds, ...negatedIds]).forEach((id) => {
+        const row = rows.get(id);
+        if (row) row.total += 1;
+      });
+      assertedIds.forEach((id) => {
+        const row = rows.get(id);
+        if (row) row.asserted += 1;
+      });
+      negatedIds.forEach((id) => {
+        const row = rows.get(id);
+        if (row) row.negated += 1;
       });
 
       const reportSubtypeIds = new Set(
@@ -385,31 +274,9 @@ export default function Analysis() {
     });
 
     return Array.from(rows.values());
-  }, [reports]);
+  }, [filteredReports]);
   const maxPaperFeatureCount = useMemo(
     () => Math.max(1, ...paperFeatureRows.map((row) => row.total)),
-    [paperFeatureRows]
-  );
-  const anomalousLeftOverviewCards = useMemo(
-    () => [
-      {
-        id: "anomalous_left_intraconal",
-        title: "Intraconal lefts",
-        subtitle: "Intraconal / intraseptal / subpulmonic anomalous left courses",
-        count:
-          paperFeatureRows.find((row) => row.id === "anomalous_left_intraconal")
-            ?.total ?? 0,
-      },
-      {
-        id: "anomalous_left_intramural_interarterial",
-        title: "Intramural / inter-arterial lefts",
-        subtitle: "Intramural and/or inter-arterial anomalous left courses",
-        count:
-          paperFeatureRows.find(
-            (row) => row.id === "anomalous_left_intramural_interarterial"
-          )?.total ?? 0,
-      },
-    ],
     [paperFeatureRows]
   );
   const paperFeatureCategoryChartData = useMemo<HorizontalBarDatum[]>(() => {
@@ -419,7 +286,7 @@ export default function Analysis() {
       )
     );
 
-    reports.forEach((report) => {
+    filteredReports.forEach((report) => {
       const parsedTerms = getStoredParsedTerms(report);
       const reportSubtypes = new Set(
         getReportAnomalousLeftSubtypes(
@@ -427,12 +294,6 @@ export default function Analysis() {
           parsedTerms
         ).map((entry) => entry.subtype)
       );
-      if (
-        paperFeatureOverviewMode !== "overall" &&
-        !reportSubtypes.has(paperFeatureOverviewMode)
-      ) {
-        return;
-      }
 
       const reportCategories = new Set(
         parsedTerms.flatMap((term) => {
@@ -448,54 +309,33 @@ export default function Analysis() {
     });
 
     return Array.from(categoryCounts, ([label, value]) => ({ label, value }));
-  }, [paperFeatureOverviewMode, reports]);
+  }, [filteredReports]);
   const normalizedFeatureRows = useMemo(() => {
-    const rows = new Map<
-      string,
-      NormalizedFeatureRow
-    >();
+    // Per-report incidence, keyed by canonical feature so synonyms collapse into
+    // one row instead of fragmenting the count across wording variants.
+    const tallies = reportIncidence(filteredReports, getStoredParsedTerms, (term) =>
+      shouldIncludeInNormalizedFrequency(term) ? canonicalFeature(term) : null
+    );
 
-    allTerms.forEach((term) => {
-      if (!shouldIncludeInNormalizedFrequency(term)) return;
-
-      const name = getAnalysisFeatureName(term);
-      if (!name) return;
-
-      const existing =
-        rows.get(name) ??
-        {
-          name,
-          count: 0,
-          keep: 0,
-          skip: 0,
-        };
-
-      existing.count += 1;
-      rows.set(name, existing);
+    const byKey = new Map<string, NormalizedFeatureRow>();
+    tallies.forEach((tally) => {
+      byKey.set(tally.key, { name: tally.label, count: tally.reports, keep: 0, skip: 0 });
     });
 
     allReviewDecisions.forEach((record) => {
       if (!shouldIncludeInNormalizedFrequency(record)) return;
-
-      const name = getAnalysisFeatureName(record);
-      if (!name) return;
+      const feature = canonicalFeature(record as ParsedTerm);
+      if (!feature) return;
 
       const existing =
-        rows.get(name) ??
-        {
-          name,
-          count: 0,
-          keep: 0,
-          skip: 0,
-        };
-
+        byKey.get(feature.key) ?? { name: feature.label, count: 0, keep: 0, skip: 0 };
       if (record.decision === "keep") existing.keep += 1;
       if (record.decision === "skip") existing.skip += 1;
-      rows.set(name, existing);
+      byKey.set(feature.key, existing);
     });
 
-    return Array.from(rows.values());
-  }, [allReviewDecisions, allTerms]);
+    return Array.from(byKey.values());
+  }, [allReviewDecisions, filteredReports]);
   const filteredFeatureRows = useMemo(() => {
     const query = featureSearch.trim().toLowerCase();
     const rows = query
@@ -517,21 +357,18 @@ export default function Analysis() {
     });
   }, [featureSearch, featureSort, normalizedFeatureRows]);
   const coronaryNarrowingRows = useMemo<CoronaryNarrowingRow[]>(() => {
-    const rows = new Map<string, CoronaryNarrowingRow>();
-
-    allTerms.forEach((term) => {
-      const normalizedName = normalizeCoronaryNarrowingFeature(term);
-      if (!normalizedName) return;
-
-      const existing = rows.get(normalizedName) ?? { name: normalizedName, count: 0 };
-      existing.count += 1;
-      rows.set(normalizedName, existing);
+    // Per-report incidence of each canonical narrowing concept.
+    const tallies = reportIncidence(filteredReports, getStoredParsedTerms, (term) => {
+      const narrowing = normalizeCoronaryNarrowingFeature(term);
+      return narrowing
+        ? { key: `narrowing:${narrowing.toLowerCase()}`, label: narrowing, category: "Coronary narrowing" }
+        : null;
     });
 
-    return Array.from(rows.values()).sort(
-      (a, b) => b.count - a.count || a.name.localeCompare(b.name)
-    );
-  }, [allTerms]);
+    return tallies
+      .map((tally) => ({ name: tally.label, count: tally.reports }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [filteredReports]);
 
   const coronaryPageCount = Math.max(
     1,
@@ -554,7 +391,7 @@ export default function Analysis() {
 
   useEffect(() => {
     setFeaturePage(1);
-  }, [featureSearch, featureSort]);
+  }, [featureSearch, featureSort, lateralityFilter, leftSubtype]);
   useEffect(() => {
     setCoronaryPage(1);
   }, [coronaryNarrowingRows]);
@@ -574,7 +411,7 @@ export default function Analysis() {
     let bridgePatients = 0;
     let multipleBridgePatients = 0;
 
-    reports.forEach((report) => {
+    filteredReports.forEach((report) => {
       const summary = report.parseResult.myocardialBridgeSummary;
       const bridgeCount = summary?.bridgeCount ?? 0;
       const bridgeGrades =
@@ -606,13 +443,13 @@ export default function Analysis() {
     });
 
     return {
-      totalPatients: reports.length,
+      totalPatients: filteredReports.length,
       bridgePatients,
       multipleBridgePatients,
       categories,
       bridgeCounts,
     };
-  }, [reports]);
+  }, [filteredReports]);
   const bridgeCountChartData = useMemo<HorizontalBarDatum[]>(
     () => [
       { label: "Not Present", value: bridgeDashboardStats.bridgeCounts.notPresent },
@@ -631,311 +468,26 @@ export default function Analysis() {
     ],
     [bridgeDashboardStats]
   );
-
-  // --- Provenance: contributing reports behind each aggregate (issue #63). ---
-  // Each map mirrors the count logic above so the drill-down can never diverge
-  // from the number on screen; it just keeps the per-report linkage the counts
-  // throw away.
-  const paperFeatureContributors = useMemo(() => {
-    const map = new Map<string, ProvenanceContributor[]>();
-    const subtypeIds = Object.values(ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS) as string[];
-    reports.forEach((report) => {
-      getStoredParsedTerms(report).forEach((term) => {
-        const paperFeature = resolveParsedTermPaperFeature(term);
-        if (!paperFeature || subtypeIds.includes(paperFeature.id)) return;
-        const list = map.get(paperFeature.id) ?? [];
-        list.push(termContributor(report.id, term));
-        map.set(paperFeature.id, list);
-      });
-    });
-    return map;
-  }, [reports]);
-  const subtypeContributors = useMemo(() => {
-    const map = new Map<string, ProvenanceContributor[]>();
-    reports.forEach((report) => {
-      const parsedTerms = getStoredParsedTerms(report);
-      const seen = new Set<string>();
-      getReportAnomalousLeftSubtypes(
-        report.parseResult.anomalousLeftSubtypes,
-        parsedTerms
-      ).forEach((entry) => {
-        const featureId = ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS[entry.subtype];
-        if (seen.has(featureId)) return;
-        seen.add(featureId);
-        const list = map.get(featureId) ?? [];
-        list.push({
-          reportId: report.id,
-          matchedText: entry.rawText?.trim() || entry.subtype.replace(/_/g, " "),
-          context: entry.rawText,
-        });
-        map.set(featureId, list);
-      });
-    });
-    return map;
-  }, [reports]);
-  const categoryContributors = useMemo(() => {
-    const map = new Map<string, ProvenanceContributor[]>();
-    reports.forEach((report) => {
-      const parsedTerms = getStoredParsedTerms(report);
-      const reportSubtypes = new Set(
-        getReportAnomalousLeftSubtypes(
-          report.parseResult.anomalousLeftSubtypes,
-          parsedTerms
-        ).map((entry) => entry.subtype)
-      );
-      if (
-        paperFeatureOverviewMode !== "overall" &&
-        !reportSubtypes.has(paperFeatureOverviewMode)
-      ) {
-        return;
-      }
-      const repByCategory = new Map<string, ParsedTerm>();
-      parsedTerms.forEach((term) => {
-        const paperFeature = resolveParsedTermPaperFeature(term);
-        if (!paperFeature || repByCategory.has(paperFeature.category)) return;
-        repByCategory.set(paperFeature.category, term);
-      });
-      const categories = new Set(repByCategory.keys());
-      if (reportSubtypes.size > 0) categories.add("Anomalous vessel");
-      categories.forEach((category) => {
-        const list = map.get(category) ?? [];
-        const rep = repByCategory.get(category);
-        if (rep) {
-          list.push(termContributor(report.id, rep));
-        } else {
-          const subtype = getReportAnomalousLeftSubtypes(
-            report.parseResult.anomalousLeftSubtypes,
-            parsedTerms
-          )[0];
-          list.push({
-            reportId: report.id,
-            matchedText: subtype?.rawText?.trim() || "anomalous coronary artery",
-            context: subtype?.rawText,
-          });
-        }
-        map.set(category, list);
-      });
-    });
-    return map;
-  }, [paperFeatureOverviewMode, reports]);
-  const coronaryContributors = useMemo(() => {
-    const map = new Map<string, ProvenanceContributor[]>();
-    reports.forEach((report) => {
-      getStoredParsedTerms(report).forEach((term) => {
-        const name = normalizeCoronaryNarrowingFeature(term);
-        if (!name) return;
-        const list = map.get(name) ?? [];
-        list.push(termContributor(report.id, term));
-        map.set(name, list);
-      });
-    });
-    return map;
-  }, [reports]);
-  const featureTableContributors = useMemo(() => {
-    const map = new Map<string, ProvenanceContributor[]>();
-    reports.forEach((report) => {
-      getStoredParsedTerms(report).forEach((term) => {
-        if (!shouldIncludeInNormalizedFrequency(term)) return;
-        const name = getAnalysisFeatureName(term);
-        if (!name) return;
-        const list = map.get(name) ?? [];
-        list.push(termContributor(report.id, term));
-        map.set(name, list);
-      });
-    });
-    return map;
-  }, [reports]);
-  const bridgeContributors = useMemo(() => {
-    const grade: Record<BridgeDashboardCategory, ProvenanceContributor[]> = {
-      notPresent: [],
-      grade1: [],
-      grade2: [],
-      grade3: [],
-    };
-    const count: Record<BridgeCountCategory, ProvenanceContributor[]> = {
-      notPresent: [],
-      one: [],
-      two: [],
-      threePlus: [],
-    };
-    reports.forEach((report) => {
-      const summary = report.parseResult.myocardialBridgeSummary;
-      const bridgeCount = summary?.bridgeCount ?? 0;
-      const bridges = summary?.bridges ?? [];
-      const bridgeGrades = bridges
-        .map((bridge) => bridge.grade)
-        .filter((g): g is 1 | 2 | 3 => g === 1 || g === 2 || g === 3);
-      const highestGrade =
-        summary?.highestGrade === 1 ||
-        summary?.highestGrade === 2 ||
-        summary?.highestGrade === 3
-          ? summary.highestGrade
-          : bridgeGrades.length > 0
-            ? (Math.max(...bridgeGrades) as 1 | 2 | 3)
-            : null;
-      if (bridgeCount <= 0 || !highestGrade) {
-        const contributor: ProvenanceContributor = {
-          reportId: report.id,
-          matchedText: "no myocardial bridge reported",
-        };
-        grade.notPresent.push(contributor);
-        count.notPresent.push(contributor);
-        return;
-      }
-      const evidenceFor = (bridge?: (typeof bridges)[number]) =>
-        bridge?.evidenceText?.trim() ||
-        [bridge?.vessel, bridge?.segment].filter(Boolean).join(" ") ||
-        `${bridgeCount} bridge${bridgeCount === 1 ? "" : "s"}`;
-      const topBridge = bridges.find((bridge) => bridge.grade === highestGrade) ?? bridges[0];
-      grade[`grade${highestGrade}` as BridgeDashboardCategory].push({
-        reportId: report.id,
-        matchedText: evidenceFor(topBridge),
-        context: topBridge?.evidenceText,
-      });
-      const countKey: BridgeCountCategory =
-        bridgeCount === 1 ? "one" : bridgeCount === 2 ? "two" : "threePlus";
-      count[countKey].push({
-        reportId: report.id,
-        matchedText: evidenceFor(bridges[0]),
-        context: bridges[0]?.evidenceText,
-      });
-    });
-    return { grade, count };
-  }, [reports]);
-  const interarterialBinContributors = useMemo(
-    () =>
-      buildBinContributors(reports, (report) =>
-        cleanInterarterialCourseLengthMeasurements(
-          report.parseResult.interarterialCourseLengths
-        )
-      ),
-    [reports]
-  );
-  const intramuralBinContributors = useMemo(
-    () =>
-      buildBinContributors(reports, (report) =>
-        cleanIntramuralCourseLengthMeasurements(
-          report.parseResult.intramuralCourseLengths
-        )
-      ),
-    [reports]
-  );
-
-  const openProvenance = (source: ProvenanceSource) => {
-    if (source.contributors.length === 0) return;
-    setActiveProvenance(source);
-  };
-  const handleOpenReport = (contributor: ProvenanceContributor) => {
-    const params = new URLSearchParams();
-    params.set("reportId", contributor.reportId);
-    params.set("returnTo", "/analysis");
-    if (
-      typeof contributor.startIndex === "number" &&
-      typeof contributor.endIndex === "number" &&
-      contributor.endIndex > contributor.startIndex
-    ) {
-      params.set("focusStart", String(contributor.startIndex));
-      params.set("focusEnd", String(contributor.endIndex));
-    }
-    navigate(`/dataset?${params.toString()}`);
-  };
-  const openPaperFeatureRow = (row: PaperFeatureRow) => {
-    const subtypeIds = Object.values(ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS) as string[];
-    const isSubtype = subtypeIds.includes(row.id);
-    const contributors = isSubtype
-      ? subtypeContributors.get(row.id) ?? []
-      : paperFeatureContributors.get(row.id) ?? [];
-    openProvenance({
-      title: row.canonical,
-      subtitle: isSubtype
-        ? reportCountSubtitle(distinctReportCount(contributors))
-        : occurrenceSubtitle(contributors),
-      splitByAssertion: !isSubtype,
-      contributors,
-    });
-  };
-  const openSubtype = (featureId: string, title: string) => {
-    const contributors = subtypeContributors.get(featureId) ?? [];
-    openProvenance({
-      title,
-      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
-      splitByAssertion: false,
-      contributors,
-    });
-  };
-  const openCategory = (label: string) => {
-    const contributors = categoryContributors.get(label) ?? [];
-    openProvenance({
-      title: label,
-      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
-      splitByAssertion: false,
-      contributors,
-    });
-  };
-  const openCoronaryRow = (name: string) => {
-    const contributors = coronaryContributors.get(name) ?? [];
-    openProvenance({
-      title: name,
-      subtitle: occurrenceSubtitle(contributors),
-      splitByAssertion: true,
-      contributors,
-    });
-  };
-  const openFeatureRow = (name: string) => {
-    const contributors = featureTableContributors.get(name) ?? [];
-    openProvenance({
-      title: name,
-      subtitle: occurrenceSubtitle(contributors),
-      splitByAssertion: true,
-      contributors,
-    });
-  };
-  const openBridgeGrade = (label: string) => {
-    const key =
-      label === "Not Present"
-        ? "notPresent"
-        : label === "Grade 1"
-          ? "grade1"
-          : label === "Grade 2"
-            ? "grade2"
-            : "grade3";
-    const contributors = bridgeContributors.grade[key as BridgeDashboardCategory] ?? [];
-    openProvenance({
-      title: `Highest bridge grade — ${label}`,
-      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
-      splitByAssertion: false,
-      contributors,
-    });
-  };
-  const openBridgeCount = (label: string) => {
-    const key =
-      label === "Not Present" ? "notPresent" : label === "1" ? "one" : label === "2" ? "two" : "threePlus";
-    const contributors = bridgeContributors.count[key as BridgeCountCategory] ?? [];
-    openProvenance({
-      title: `Bridge count — ${label}`,
-      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
-      splitByAssertion: false,
-      contributors,
-    });
-  };
-  const openLengthBin = (
-    title: string,
-    binContributors: Map<string, ProvenanceContributor[]>,
-    label: string
-  ) => {
-    const contributors = binContributors.get(label) ?? [];
-    openProvenance({
-      title: `${title} — ${label}`,
-      subtitle: occurrenceSubtitle(contributors),
-      splitByAssertion: false,
-      contributors,
-    });
-  };
   const handleFeatureSort = (key: FeatureSortKey) => {
     setFeatureSort((prev) => ({
       key,
       direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
     }));
+  };
+  const handleLateralityChange = (value: string) => {
+    if (value !== "overall" && value !== "right" && value !== "left") return;
+    setLateralityFilter(value);
+    if (value !== "left") setLeftSubtype("all");
+  };
+  const handleLeftSubtypeChange = (value: string) => {
+    if (
+      value !== "all" &&
+      value !== "intraconal_left" &&
+      value !== "intramural_interarterial_left"
+    ) {
+      return;
+    }
+    setLeftSubtype(value);
   };
   const summaryCards = [
     {
@@ -944,19 +496,14 @@ export default function Analysis() {
       icon: FileText,
     },
     {
-      title: "Number of Reviewed Reports",
-      value: reviewedReportCount,
-      icon: CheckCircle2,
+      title: "Number of Right (R-AAOCA) Reports",
+      value: rightReportCount,
+      icon: ArrowRight,
     },
     {
-      title: "Number of Unique Highlighted Terms",
-      value: highlightedTermCount,
-      icon: Highlighter,
-    },
-    {
-      title: "Number of Added Terms",
-      value: ADDED_TERMS_PLACEHOLDER,
-      icon: PlusCircle,
+      title: "Number of Left (L-AAOCA) Reports",
+      value: leftReportCount,
+      icon: ArrowLeft,
     },
   ];
 
@@ -1044,18 +591,57 @@ export default function Analysis() {
         </aside>
 
         <div className="min-w-0">
+          <div className="mb-6 flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Laterality</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Filters every number and chart below by AAOCA form.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <ToggleGroup
+                type="single"
+                value={lateralityFilter}
+                onValueChange={handleLateralityChange}
+                variant="outline"
+                size="sm"
+                className="flex-wrap justify-start"
+              >
+                <ToggleGroupItem value="overall">Overall</ToggleGroupItem>
+                <ToggleGroupItem value="right">Right (R-AAOCA)</ToggleGroupItem>
+                <ToggleGroupItem value="left">Left (L-AAOCA)</ToggleGroupItem>
+              </ToggleGroup>
+              {lateralityFilter === "left" && (
+                <ToggleGroup
+                  type="single"
+                  value={leftSubtype}
+                  onValueChange={handleLeftSubtypeChange}
+                  variant="outline"
+                  size="sm"
+                  className="flex-wrap justify-start"
+                >
+                  <ToggleGroupItem value="all">All lefts</ToggleGroupItem>
+                  <ToggleGroupItem value="intraconal_left">Intraconal</ToggleGroupItem>
+                  <ToggleGroupItem value="intramural_interarterial_left">
+                    Intramural / inter-arterial
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              )}
+            </div>
+          </div>
+
           <section id="summary-cards" className="scroll-mt-6">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-foreground">Summary Cards</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Overview of parsed reports and highlighted terminology.
+                Cohort size and laterality breakdown across all parsed reports.
               </p>
               {loadError && (
                 <p className="mt-3 text-sm text-destructive">{loadError}</p>
               )}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-3">
               {summaryCards.map((card) => {
                 const Icon = card.icon;
                 return (
@@ -1081,7 +667,7 @@ export default function Analysis() {
           <div className="mb-6">
             <h2 className="text-2xl font-semibold text-foreground">Paper Features Overview</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Complete paper-tracked AAOCA feature dictionary with occurrence counts across parsed reports.
+              Complete paper-tracked AAOCA feature dictionary with per-report incidence (reports containing the feature) across parsed reports.
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               Paper reference:{" "}
@@ -1096,43 +682,10 @@ export default function Analysis() {
             </p>
           </div>
 
-          <div className="mb-4 grid gap-4 md:grid-cols-2">
-            {anomalousLeftOverviewCards.map((card) => (
-              <Card
-                key={card.title}
-                role="button"
-                tabIndex={0}
-                onClick={() => openSubtype(card.id, card.title)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    openSubtype(card.id, card.title);
-                  }
-                }}
-                className="cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/40"
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{card.title}</CardTitle>
-                  <p className="text-xs text-muted-foreground">{card.subtitle}</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-semibold tabular-nums text-foreground">
-                    {loading ? "..." : card.count}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    reports with this subtype · click to see source reports
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
           <PaperFeatureCategoryChart
             data={paperFeatureCategoryChartData}
+            featureRows={paperFeatureRows}
             loading={loading}
-            mode={paperFeatureOverviewMode}
-            onModeChange={setPaperFeatureOverviewMode}
-            onSelect={openCategory}
           />
 
           <Card>
@@ -1144,18 +697,14 @@ export default function Analysis() {
                     <TableHead className="min-w-[210px]">Canonical keyword</TableHead>
                     <TableHead className="min-w-[260px]">Aliases</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead className="min-w-[150px]">Total occurrences</TableHead>
+                    <TableHead className="min-w-[150px]">Reports</TableHead>
                     <TableHead className="text-right">Asserted</TableHead>
                     <TableHead className="text-right">Negated</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paperFeatureRows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="cursor-pointer transition-colors hover:bg-accent/50"
-                      onClick={() => openPaperFeatureRow(row)}
-                    >
+                    <TableRow key={row.id}>
                       <TableCell className="text-sm text-muted-foreground">
                         {row.category}
                       </TableCell>
@@ -1220,11 +769,7 @@ export default function Analysis() {
                 <TableBody>
                   {coronaryNarrowingRows.length > 0 ? (
                     paginatedCoronaryRows.map((row) => (
-                      <TableRow
-                        key={row.name}
-                        className="cursor-pointer transition-colors hover:bg-accent/50"
-                        onClick={() => openCoronaryRow(row.name)}
-                      >
+                      <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
                       </TableRow>
@@ -1260,9 +805,6 @@ export default function Analysis() {
             title="Inter-arterial Course Length Distribution"
             loadingLabel="Loading inter-arterial course length values..."
             emptyLabel="No inter-arterial course length values found."
-            onSelectBin={(label) =>
-              openLengthBin("Inter-arterial course length", interarterialBinContributors, label)
-            }
           />
         </section>
 
@@ -1274,9 +816,6 @@ export default function Analysis() {
             title="Intramural Course Length Distribution"
             loadingLabel="Loading intramural course length values..."
             emptyLabel="No intramural course length values found."
-            onSelectBin={(label) =>
-              openLengthBin("Intramural course length", intramuralBinContributors, label)
-            }
           />
         </section>
 
@@ -1296,14 +835,12 @@ export default function Analysis() {
               subtitle={`${bridgeDashboardStats.bridgePatients} patients with bridges; ${bridgeDashboardStats.multipleBridgePatients} with more than one`}
               data={bridgeCountChartData}
               loading={loading}
-              onSelect={openBridgeCount}
             />
             <HorizontalBarChart
               title="Highest Bridge Grade"
               subtitle="If multiple bridges are present, only the highest grade is counted"
               data={bridgeGradeChartData}
               loading={loading}
-              onSelect={openBridgeGrade}
             />
           </div>
         </section>
@@ -1372,11 +909,7 @@ export default function Analysis() {
                 <TableBody>
                   {filteredFeatureRows.length > 0 ? (
                     paginatedFeatureRows.map((row) => (
-                      <TableRow
-                        key={row.name}
-                        className="cursor-pointer transition-colors hover:bg-accent/50"
-                        onClick={() => openFeatureRow(row.name)}
-                      >
+                      <TableRow key={row.name}>
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.keep}</TableCell>
@@ -1408,14 +941,6 @@ export default function Analysis() {
         </div>
       </main>
 
-      <ProvenancePanel
-        source={activeProvenance}
-        onClose={() => setActiveProvenance(null)}
-        onOpenReport={(contributor) => {
-          setActiveProvenance(null);
-          handleOpenReport(contributor);
-        }}
-      />
     </div>
   );
 }
@@ -1541,13 +1066,11 @@ function HorizontalBarChart({
   subtitle,
   data,
   loading,
-  onSelect,
 }: {
   title: string;
   subtitle: string;
   data: HorizontalBarDatum[];
   loading: boolean;
-  onSelect?: (label: string) => void;
 }) {
   const maxValue = Math.max(1, ...data.map((item) => item.value));
 
@@ -1558,19 +1081,11 @@ function HorizontalBarChart({
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </CardHeader>
       <CardContent>
-        <div className="space-y-1">
+        <div className="space-y-3">
           {data.map((item) => {
             const width = loading ? 0 : Math.max(3, (item.value / maxValue) * 100);
-            const disabled = !onSelect || item.value === 0;
             return (
-              <button
-                key={item.label}
-                type="button"
-                disabled={disabled}
-                onClick={() => onSelect?.(item.label)}
-                title={disabled ? undefined : "Show source reports"}
-                className="grid w-full grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors enabled:hover:bg-accent/60 disabled:cursor-default"
-              >
+              <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3">
                 <span className="text-sm text-muted-foreground">{item.label}</span>
                 <div className="h-7 overflow-hidden rounded-md bg-muted">
                   <div
@@ -1581,7 +1096,7 @@ function HorizontalBarChart({
                 <span className="text-right text-sm font-medium tabular-nums text-foreground">
                   {loading ? "..." : item.value}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -1592,26 +1107,24 @@ function HorizontalBarChart({
 
 function PaperFeatureCategoryChart({
   data,
+  featureRows,
   loading,
-  mode,
-  onModeChange,
-  onSelect,
 }: {
   data: HorizontalBarDatum[];
+  featureRows: PaperFeatureRow[];
   loading: boolean;
-  mode: PaperFeatureOverviewMode;
-  onModeChange: (mode: PaperFeatureOverviewMode) => void;
-  onSelect?: (label: string) => void;
 }) {
-  const modes: { value: PaperFeatureOverviewMode; label: string }[] = [
-    { value: "overall", label: "Overall" },
-    { value: "intraconal_left", label: "Intraconal lefts" },
-    {
-      value: "intramural_interarterial_left",
-      label: "Intramural / inter-arterial lefts",
-    },
-  ];
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const maxValue = Math.max(1, ...data.map((item) => item.value));
+
+  const toggleCategory = (label: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
 
   return (
     <Card className="mb-4">
@@ -1620,45 +1133,72 @@ function PaperFeatureCategoryChart({
         <p className="text-xs text-muted-foreground">
           Number of reports containing at least one tracked feature in each category.
         </p>
-        <div className="flex flex-wrap gap-2 pt-2">
-          {modes.map((option) => (
-            <Button
-              key={option.value}
-              type="button"
-              size="sm"
-              variant={mode === option.value ? "default" : "outline"}
-              onClick={() => onModeChange(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-1">
+        <div className="space-y-3">
           {data.map((item) => {
+            const isExpanded = expandedCategories.has(item.label);
+            const categoryFeatures = featureRows
+              .filter((row) => row.category === item.label)
+              .sort((a, b) => b.total - a.total || a.canonical.localeCompare(b.canonical));
             const width = loading ? 0 : (item.value / maxValue) * 100;
-            const disabled = !onSelect || item.value === 0;
+
             return (
-              <button
-                key={item.label}
-                type="button"
-                disabled={disabled}
-                onClick={() => onSelect?.(item.label)}
-                title={disabled ? undefined : "Show source reports"}
-                className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors enabled:hover:bg-accent/60 disabled:cursor-default"
-              >
-                <span className="text-sm text-muted-foreground">{item.label}</span>
-                <div className="h-7 overflow-hidden rounded-md bg-muted">
-                  <div
-                    className="h-full rounded-md bg-primary transition-all"
-                    style={{ width: `${width}%` }}
-                  />
-                </div>
-                <span className="text-right text-sm font-medium tabular-nums text-foreground">
-                  {loading ? "..." : item.value}
-                </span>
-              </button>
+              <div key={item.label}>
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(item.label)}
+                  className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3 rounded-sm text-left"
+                >
+                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                    {isExpanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  <div className="h-7 overflow-hidden rounded-md bg-muted">
+                    <div
+                      className="h-full rounded-md bg-primary transition-all"
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                  <span className="text-right text-sm font-medium tabular-nums text-foreground">
+                    {loading ? "..." : item.value}
+                  </span>
+                </button>
+
+                {isExpanded && !loading && (
+                  <div className="mt-4 space-y-1.5">
+                    {categoryFeatures.map((feat) => {
+                      const featWidth = (feat.total / maxValue) * 100;
+                      return (
+                        <div
+                          key={feat.id}
+                          className="grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3"
+                        >
+                          <span
+                            className="truncate pl-5 text-xs text-muted-foreground"
+                            title={feat.canonical}
+                          >
+                            {feat.canonical}
+                          </span>
+                          <div className="h-5 overflow-hidden rounded-md bg-muted/60">
+                            <div
+                              className="h-full rounded-md bg-primary/60 transition-all"
+                              style={{ width: `${featWidth}%` }}
+                            />
+                          </div>
+                          <span className="text-right text-xs tabular-nums text-muted-foreground">
+                            {feat.total}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -1674,7 +1214,6 @@ function CourseLengthHistogram({
   title,
   loadingLabel,
   emptyLabel,
-  onSelectBin,
 }: {
   bins: CourseLengthHistogramBin[];
   measurementCount: number;
@@ -1682,7 +1221,6 @@ function CourseLengthHistogram({
   title: string;
   loadingLabel: string;
   emptyLabel: string;
-  onSelectBin?: (label: string) => void;
 }) {
   return (
     <Card>
@@ -1691,7 +1229,7 @@ function CourseLengthHistogram({
         <p className="text-xs text-muted-foreground">
           {loading
             ? "Loading measurements..."
-            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports${onSelectBin && bins.length > 0 ? " · click a bar for source reports" : ""}`}
+            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports`}
         </p>
       </CardHeader>
       <CardContent>
@@ -1706,15 +1244,7 @@ function CourseLengthHistogram({
         ) : (
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={bins}
-                margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
-                className={onSelectBin ? "cursor-pointer" : undefined}
-                onClick={(state) => {
-                  const label = (state as { activeLabel?: string } | null)?.activeLabel;
-                  if (label) onSelectBin?.(label);
-                }}
-              >
+              <BarChart data={bins} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis
                   dataKey="label"

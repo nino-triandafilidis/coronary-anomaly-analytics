@@ -160,15 +160,20 @@ function parsedReportsFileApi() {
             const original = JSON.parse(await fs.readFile(originalJsonPath, "utf8"));
             const text = await fs.readFile(txtPath, "utf8");
             const updatedAt = new Date().toISOString();
-            const restoredPayload = buildStoredReportPayload(
-              reportId,
-              text,
-              original.parseResult,
-              existing.storedAt ?? original.storedAt ?? updatedAt,
-              false,
-              updatedAt,
-              []
-            );
+            const restoredPayload = {
+              ...buildStoredReportPayload(
+                reportId,
+                text,
+                original.parseResult,
+                existing.storedAt ?? original.storedAt ?? updatedAt,
+                false,
+                updatedAt,
+                []
+              ),
+              // The cohort side is independent of parse content, so it survives a
+              // restore-to-original rather than reverting to the heuristic.
+              ...(existing.side ? { side: existing.side } : {}),
+            };
 
             await fs.writeFile(jsonPath, JSON.stringify(restoredPayload, null, 2), "utf8");
             sendJson(res, 200, restoredPayload);
@@ -255,6 +260,7 @@ function parsedReportsFileApi() {
                   : existing.reviewDecisions ?? []
               ),
               ...("originalJsonFile" in existing ? { originalJsonFile: existing.originalJsonFile } : {}),
+              ...(existing.side ? { side: existing.side } : {}),
             };
 
             await fs.writeFile(jsonPath, JSON.stringify(jsonPayload, null, 2), "utf8");

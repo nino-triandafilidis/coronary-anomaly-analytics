@@ -1170,16 +1170,32 @@ function PaperFeatureCategoryChart({
                 </button>
 
                 {isExpanded && !loading && (
-                  <div className="ml-1 mt-1 space-y-0.5 border-l border-border pb-1 pl-4">
-                    {categoryFeatures.map((feat) => (
-                      <div
-                        key={feat.id}
-                        className="flex items-center justify-between py-0.5 text-xs"
-                      >
-                        <span className="text-muted-foreground">{feat.canonical}</span>
-                        <span className="ml-4 shrink-0 tabular-nums">{feat.total}</span>
-                      </div>
-                    ))}
+                  <div className="mt-4 space-y-1.5">
+                    {categoryFeatures.map((feat) => {
+                      const featWidth = (feat.total / maxValue) * 100;
+                      return (
+                        <div
+                          key={feat.id}
+                          className="grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3"
+                        >
+                          <span
+                            className="truncate pl-5 text-xs text-muted-foreground"
+                            title={feat.canonical}
+                          >
+                            {feat.canonical}
+                          </span>
+                          <div className="h-5 overflow-hidden rounded-md bg-muted/60">
+                            <div
+                              className="h-full rounded-md bg-primary/60 transition-all"
+                              style={{ width: `${featWidth}%` }}
+                            />
+                          </div>
+                          <span className="text-right text-xs tabular-nums text-muted-foreground">
+                            {feat.total}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

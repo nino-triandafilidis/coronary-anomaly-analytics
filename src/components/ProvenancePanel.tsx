@@ -272,11 +272,20 @@ export function ProvenancePanel({ source, onClose, onOpenReport }: ProvenancePan
                         <span className="max-w-[96px] shrink-0 truncate font-mono text-xs font-semibold text-foreground">
                           {contributor.reportId}
                         </span>
-                        <span className="min-w-0 flex-1 break-words text-xs leading-relaxed text-muted-foreground">
-                          <HighlightedSnippet
-                            text={contributor.context?.trim() || contributor.matchedText}
-                            match={contributor.matchedText}
-                          />
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="break-words text-xs leading-relaxed text-muted-foreground">
+                            <HighlightedSnippet
+                              text={contributor.context?.trim() || contributor.matchedText}
+                              match={contributor.matchedText}
+                            />
+                          </span>
+                          {contributor.normalizedName &&
+                            contributor.normalizedName.trim().toLowerCase() !==
+                              contributor.matchedText.trim().toLowerCase() && (
+                              <span className="break-words text-[11px] leading-snug text-muted-foreground/70">
+                                normalized: {contributor.normalizedName}
+                              </span>
+                            )}
                         </span>
                         <MoveRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
                       </button>

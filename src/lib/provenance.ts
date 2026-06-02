@@ -10,6 +10,7 @@ import type { Assertion } from "@/data/parseTypes";
 export interface ProvenanceContributor {
   reportId: string;
   matchedText: string; // verbatim span / rawText / evidence text
+  normalizedName?: string; // parser's canonical label for the term, e.g. the vessel it resolved
   context?: string; // surrounding sentence, when the source carries one
   assertion?: Assertion; // omitted for report-level surfaces that don't split
   startIndex?: number; // for focusing the span in the Dataset view

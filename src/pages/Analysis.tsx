@@ -130,6 +130,7 @@ function termContributor(
   return {
     reportId: report.id,
     matchedText,
+    normalizedName: term.normalizedName?.trim() || undefined,
     context: context || undefined,
     assertion: term.assertion,
     startIndex: term.startIndex,

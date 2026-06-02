@@ -46,6 +46,9 @@ interface TermReviewProps {
   ) => void | Promise<void>;
   onBack: () => void;
   readOnly?: boolean;
+  // When set (e.g. from an Analysis provenance deep-link), the matching term is
+  // scrolled into view and ringed on mount.
+  focusSpan?: { startIndex: number; endIndex: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +61,7 @@ export function TermReview({
   onConfirm,
   onBack,
   readOnly = false,
+  focusSpan,
 }: TermReviewProps) {
   const [terms, setTerms] = useState<ReviewableTerm[]>(() =>
     initialTerms ??
@@ -89,6 +93,34 @@ export function TermReview({
 
   const keptCount = counts.accepted + counts.added;
   const reviewedCount = counts.accepted + counts.rejected + counts.added;
+
+  // Deep-link focus: ring + scroll the term matching focusSpan into view. The
+  // span/card scroll waits for the dialog open animation to settle.
+  useEffect(() => {
+    if (!focusSpan) return;
+    const exact = terms.findIndex(
+      (t) => t.startIndex === focusSpan.startIndex && t.endIndex === focusSpan.endIndex
+    );
+    const resolved =
+      exact >= 0
+        ? exact
+        : terms.findIndex(
+            (t) => t.startIndex <= focusSpan.startIndex && t.endIndex >= focusSpan.endIndex
+          );
+    if (resolved < 0) return;
+    setHoveredIdx(resolved);
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector(`[data-term-index="${resolved}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document
+        .querySelector(`[data-term-card-index="${resolved}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 160);
+    return () => window.clearTimeout(timer);
+    // terms is stable from mount; re-running only on focusSpan keeps this a one-shot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSpan]);
 
   // --- Actions ---
   const toggleStatus = useCallback(

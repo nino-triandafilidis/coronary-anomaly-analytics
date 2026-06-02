@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -78,10 +78,135 @@ import {
   normalizeCoronaryNarrowingFeature,
   reportIncidence,
 } from "@/data/featureCanonical";
+import { ProvenancePanel } from "@/components/ProvenancePanel";
+import {
+  distinctReportCount,
+  type ProvenanceContributor,
+  type ProvenanceSource,
+} from "@/lib/provenance";
 
 const TABLE_PAGE_SIZE = 10;
 
+const ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS = {
+  intraconal_left: "anomalous_left_intraconal",
+  intramural_interarterial_left: "anomalous_left_intramural_interarterial",
+} as const;
+
+// The sentence around [start, end) in the report text, for when a term carries
+// no usable context of its own.
+function sentenceContext(text: string, start: number, end: number): string {
+  const from = text.lastIndexOf(".", Math.max(0, start - 1)) + 1;
+  let to = text.indexOf(".", end);
+  if (to < 0) to = text.length;
+  return text.slice(from, to + 1).replace(/\s+/g, " ").trim();
+}
+
+// One report's contribution to a term-level aggregate, keeping the verbatim span
+// and the surrounding quote (derived from the report text when the parsed term
+// lacks a context that actually contains the span) plus offsets for the
+// Dataset deep-link focus.
+function termContributor(
+  report: StoredParsedReport,
+  term: ParsedTerm
+): ProvenanceContributor {
+  const matchedText = (term.term?.trim() || term.normalizedName?.trim() || "").replace(
+    /\s+/g,
+    " "
+  );
+  let context = (term.context ?? "").replace(/\s+/g, " ").trim();
+  const hasMatch =
+    matchedText.length > 0 && context.toLowerCase().includes(matchedText.toLowerCase());
+  if (!hasMatch) {
+    const reportText = report.parseResult?.reportText ?? report.text ?? "";
+    if (
+      reportText &&
+      Number.isFinite(term.startIndex) &&
+      Number.isFinite(term.endIndex) &&
+      term.endIndex > term.startIndex
+    ) {
+      context = sentenceContext(reportText, term.startIndex, term.endIndex);
+    }
+  }
+  return {
+    reportId: report.id,
+    matchedText,
+    normalizedName: term.normalizedName?.trim() || undefined,
+    context: context || undefined,
+    assertion: term.assertion,
+    startIndex: term.startIndex,
+    endIndex: term.endIndex,
+  };
+}
+
+function occurrenceSubtitle(contributors: ProvenanceContributor[]): string {
+  const reports = distinctReportCount(contributors);
+  return `${contributors.length} occurrence${contributors.length === 1 ? "" : "s"} · ${reports} report${reports === 1 ? "" : "s"}`;
+}
+
+function reportCountSubtitle(reports: number): string {
+  return `${reports} report${reports === 1 ? "" : "s"}`;
+}
+
+// Collect contributors per aggregate key, mirroring the same term->key selector
+// reportIncidence() uses for the count. The backing tables count per-report
+// incidence (a feature counts once per report per assertion), so dedupe by
+// (report, assertion) here: otherwise a report that mentions a feature twice
+// would render duplicate rows and inflate the panel's asserted/negated badges
+// past the report count shown in the table.
+function contributorsByFeature(
+  reports: StoredParsedReport[],
+  selectKey: (term: ParsedTerm) => string | null
+): Map<string, ProvenanceContributor[]> {
+  const map = new Map<string, ProvenanceContributor[]>();
+  const seen = new Map<string, Set<string>>();
+  reports.forEach((report) => {
+    getStoredParsedTerms(report).forEach((term) => {
+      const key = selectKey(term);
+      if (!key) return;
+      let seenForKey = seen.get(key);
+      if (!seenForKey) {
+        seenForKey = new Set<string>();
+        seen.set(key, seenForKey);
+      }
+      const dedupeKey = `${report.id}|${term.assertion}`;
+      if (seenForKey.has(dedupeKey)) return;
+      seenForKey.add(dedupeKey);
+      const list = map.get(key) ?? [];
+      list.push(termContributor(report, term));
+      map.set(key, list);
+    });
+  });
+  return map;
+}
+
+function buildBinContributors(
+  reports: StoredParsedReport[],
+  getMeasurements: (
+    report: StoredParsedReport
+  ) => { value: number; rawText: string; vessel?: string }[],
+  binSizeMm = 5
+): Map<string, ProvenanceContributor[]> {
+  const map = new Map<string, ProvenanceContributor[]>();
+  reports.forEach((report) => {
+    getMeasurements(report).forEach((measurement) => {
+      const binStart = Math.floor(measurement.value / binSizeMm) * binSizeMm;
+      const label = `${binStart}-${binStart + binSizeMm} mm`;
+      const list = map.get(label) ?? [];
+      list.push({
+        reportId: report.id,
+        matchedText: measurement.rawText?.trim() || `${measurement.value} mm`,
+        context: measurement.vessel
+          ? `${measurement.rawText ?? ""} (${measurement.vessel})`.trim()
+          : measurement.rawText,
+      });
+      map.set(label, list);
+    });
+  });
+  return map;
+}
+
 interface NormalizedFeatureRow {
+  key: string;
   name: string;
   count: number;
   keep: number;
@@ -89,6 +214,7 @@ interface NormalizedFeatureRow {
 }
 
 interface CoronaryNarrowingRow {
+  key: string;
   name: string;
   count: number;
 }
@@ -137,6 +263,8 @@ export default function Analysis() {
   const [leftSubtype, setLeftSubtype] = useState<LeftSubtypeFilter>("all");
   const [coronaryPage, setCoronaryPage] = useState(1);
   const [featurePage, setFeaturePage] = useState(1);
+  const [activeProvenance, setActiveProvenance] = useState<ProvenanceSource | null>(null);
+  const navigate = useNavigate();
   useEffect(() => {
     const loadReports = async () => {
       setLoading(true);
@@ -320,7 +448,7 @@ export default function Analysis() {
 
     const byKey = new Map<string, NormalizedFeatureRow>();
     tallies.forEach((tally) => {
-      byKey.set(tally.key, { name: tally.label, count: tally.reports, keep: 0, skip: 0 });
+      byKey.set(tally.key, { key: tally.key, name: tally.label, count: tally.reports, keep: 0, skip: 0 });
     });
 
     allReviewDecisions.forEach((record) => {
@@ -329,7 +457,7 @@ export default function Analysis() {
       if (!feature) return;
 
       const existing =
-        byKey.get(feature.key) ?? { name: feature.label, count: 0, keep: 0, skip: 0 };
+        byKey.get(feature.key) ?? { key: feature.key, name: feature.label, count: 0, keep: 0, skip: 0 };
       if (record.decision === "keep") existing.keep += 1;
       if (record.decision === "skip") existing.skip += 1;
       byKey.set(feature.key, existing);
@@ -367,7 +495,7 @@ export default function Analysis() {
     });
 
     return tallies
-      .map((tally) => ({ name: tally.label, count: tally.reports }))
+      .map((tally) => ({ key: tally.key, name: tally.label, count: tally.reports }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [filteredReports]);
   const filteredCoronaryNarrowingRows = useMemo(() => {
@@ -479,6 +607,247 @@ export default function Analysis() {
     ],
     [bridgeDashboardStats]
   );
+
+  // --- Provenance: contributing reports behind each aggregate (issue #63). ---
+  // Each map mirrors the count logic above (same filteredReports, same term->key
+  // selector reportIncidence uses) so the drill-down can't diverge from the
+  // number on screen; it just keeps the per-report linkage the counts drop.
+  const paperFeatureContributors = useMemo(() => {
+    const subtypeIds = Object.values(ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS) as string[];
+    return contributorsByFeature(filteredReports, (term) => {
+      const paperFeature = resolveParsedTermPaperFeature(term);
+      return paperFeature && !subtypeIds.includes(paperFeature.id) ? paperFeature.id : null;
+    });
+  }, [filteredReports]);
+  const subtypeContributors = useMemo(() => {
+    const map = new Map<string, ProvenanceContributor[]>();
+    filteredReports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
+      const seen = new Set<string>();
+      getReportAnomalousLeftSubtypes(
+        report.parseResult.anomalousLeftSubtypes,
+        parsedTerms
+      ).forEach((entry) => {
+        const featureId = ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS[entry.subtype];
+        if (seen.has(featureId)) return;
+        seen.add(featureId);
+        const list = map.get(featureId) ?? [];
+        list.push({
+          reportId: report.id,
+          matchedText: (entry.rawText?.trim() || entry.subtype.replace(/_/g, " ")).replace(/\s+/g, " "),
+          context: entry.rawText,
+        });
+        map.set(featureId, list);
+      });
+    });
+    return map;
+  }, [filteredReports]);
+  const categoryContributors = useMemo(() => {
+    // Mirrors paperFeatureCategoryChartData: one contributor per report per
+    // category it has a tracked feature in (report-level, so the count matches).
+    const map = new Map<string, ProvenanceContributor[]>();
+    filteredReports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
+      const reportSubtypes = getReportAnomalousLeftSubtypes(
+        report.parseResult.anomalousLeftSubtypes,
+        parsedTerms
+      );
+      const repByCategory = new Map<string, ParsedTerm>();
+      parsedTerms.forEach((term) => {
+        const paperFeature = resolveParsedTermPaperFeature(term);
+        if (!paperFeature || repByCategory.has(paperFeature.category)) return;
+        repByCategory.set(paperFeature.category, term);
+      });
+      const categories = new Set(repByCategory.keys());
+      if (reportSubtypes.length > 0) categories.add("Anomalous vessel");
+      categories.forEach((category) => {
+        const list = map.get(category) ?? [];
+        const rep = repByCategory.get(category);
+        if (rep) {
+          list.push(termContributor(report, rep));
+        } else {
+          const subtype = reportSubtypes[0];
+          list.push({
+            reportId: report.id,
+            matchedText: (subtype?.rawText?.trim() || "anomalous coronary artery").replace(/\s+/g, " "),
+            context: subtype?.rawText,
+          });
+        }
+        map.set(category, list);
+      });
+    });
+    return map;
+  }, [filteredReports]);
+  const coronaryContributors = useMemo(
+    () =>
+      contributorsByFeature(filteredReports, (term) => {
+        const narrowing = normalizeCoronaryNarrowingFeature(term);
+        return narrowing ? `narrowing:${narrowing.toLowerCase()}` : null;
+      }),
+    [filteredReports]
+  );
+  const featureTableContributors = useMemo(
+    () =>
+      contributorsByFeature(filteredReports, (term) =>
+        shouldIncludeInNormalizedFrequency(term) ? canonicalFeature(term)?.key ?? null : null
+      ),
+    [filteredReports]
+  );
+  const bridgeContributors = useMemo(() => {
+    const grade: Record<BridgeDashboardCategory, ProvenanceContributor[]> = {
+      notPresent: [],
+      grade1: [],
+      grade2: [],
+      grade3: [],
+    };
+    const count: Record<BridgeCountCategory, ProvenanceContributor[]> = {
+      notPresent: [],
+      one: [],
+      two: [],
+      threePlus: [],
+    };
+    filteredReports.forEach((report) => {
+      const summary = report.parseResult.myocardialBridgeSummary;
+      const bridgeCount = summary?.bridgeCount ?? 0;
+      const bridges = summary?.bridges ?? [];
+      const bridgeGrades = bridges
+        .map((bridge) => bridge.grade)
+        .filter((g): g is 1 | 2 | 3 => g === 1 || g === 2 || g === 3);
+      const highestGrade =
+        summary?.highestGrade === 1 ||
+        summary?.highestGrade === 2 ||
+        summary?.highestGrade === 3
+          ? summary.highestGrade
+          : bridgeGrades.length > 0
+            ? (Math.max(...bridgeGrades) as 1 | 2 | 3)
+            : null;
+      if (bridgeCount <= 0 || !highestGrade) {
+        const contributor: ProvenanceContributor = {
+          reportId: report.id,
+          matchedText: "no myocardial bridge reported",
+        };
+        grade.notPresent.push(contributor);
+        count.notPresent.push(contributor);
+        return;
+      }
+      const evidenceFor = (bridge?: (typeof bridges)[number]) =>
+        bridge?.evidenceText?.trim() ||
+        [bridge?.vessel, bridge?.segment].filter(Boolean).join(" ") ||
+        `${bridgeCount} bridge${bridgeCount === 1 ? "" : "s"}`;
+      const topBridge = bridges.find((bridge) => bridge.grade === highestGrade) ?? bridges[0];
+      grade[`grade${highestGrade}` as BridgeDashboardCategory].push({
+        reportId: report.id,
+        matchedText: evidenceFor(topBridge),
+        context: topBridge?.evidenceText,
+      });
+      const countKey: BridgeCountCategory =
+        bridgeCount === 1 ? "one" : bridgeCount === 2 ? "two" : "threePlus";
+      count[countKey].push({
+        reportId: report.id,
+        matchedText: evidenceFor(bridges[0]),
+        context: bridges[0]?.evidenceText,
+      });
+    });
+    return { grade, count };
+  }, [filteredReports]);
+  const interarterialBinContributors = useMemo(
+    () =>
+      buildBinContributors(filteredReports, (report) =>
+        cleanInterarterialCourseLengthMeasurements(report.parseResult.interarterialCourseLengths)
+      ),
+    [filteredReports]
+  );
+  const intramuralBinContributors = useMemo(
+    () =>
+      buildBinContributors(filteredReports, (report) =>
+        cleanIntramuralCourseLengthMeasurements(report.parseResult.intramuralCourseLengths)
+      ),
+    [filteredReports]
+  );
+
+  const openProvenance = (source: ProvenanceSource) => {
+    if (source.contributors.length === 0) return;
+    setActiveProvenance(source);
+  };
+  const handleOpenReport = (contributor: ProvenanceContributor) => {
+    const params = new URLSearchParams();
+    params.set("reportId", contributor.reportId);
+    params.set("returnTo", "/analysis");
+    if (
+      typeof contributor.startIndex === "number" &&
+      typeof contributor.endIndex === "number" &&
+      contributor.endIndex > contributor.startIndex
+    ) {
+      params.set("focusStart", String(contributor.startIndex));
+      params.set("focusEnd", String(contributor.endIndex));
+    }
+    navigate(`/dataset?${params.toString()}`);
+  };
+  const openPaperFeatureRow = (row: PaperFeatureRow) => {
+    const subtypeIds = Object.values(ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS) as string[];
+    const isSubtype = subtypeIds.includes(row.id);
+    const contributors = isSubtype
+      ? subtypeContributors.get(row.id) ?? []
+      : paperFeatureContributors.get(row.id) ?? [];
+    openProvenance({
+      title: row.canonical,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: !isSubtype,
+      contributors,
+    });
+  };
+  const openCategory = (label: string) => {
+    const contributors = categoryContributors.get(label) ?? [];
+    openProvenance({
+      title: label,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openCoronaryRow = (key: string, name: string) => {
+    const contributors = coronaryContributors.get(key) ?? [];
+    openProvenance({ title: name, subtitle: reportCountSubtitle(distinctReportCount(contributors)), splitByAssertion: true, contributors });
+  };
+  const openFeatureRow = (key: string, name: string) => {
+    const contributors = featureTableContributors.get(key) ?? [];
+    openProvenance({ title: name, subtitle: reportCountSubtitle(distinctReportCount(contributors)), splitByAssertion: true, contributors });
+  };
+  const openBridgeGrade = (label: string) => {
+    const key =
+      label === "Not Present" ? "notPresent" : label === "Grade 1" ? "grade1" : label === "Grade 2" ? "grade2" : "grade3";
+    const contributors = bridgeContributors.grade[key as BridgeDashboardCategory] ?? [];
+    openProvenance({
+      title: `Highest bridge grade — ${label}`,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openBridgeCount = (label: string) => {
+    const key =
+      label === "Not Present" ? "notPresent" : label === "1" ? "one" : label === "2" ? "two" : "threePlus";
+    const contributors = bridgeContributors.count[key as BridgeCountCategory] ?? [];
+    openProvenance({
+      title: `Bridge count — ${label}`,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openLengthBin = (
+    title: string,
+    binContributors: Map<string, ProvenanceContributor[]>,
+    label: string
+  ) => {
+    const contributors = binContributors.get(label) ?? [];
+    openProvenance({
+      title: `${title} — ${label}`,
+      subtitle: occurrenceSubtitle(contributors),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
   const handleFeatureSort = (key: FeatureSortKey) => {
     setFeatureSort((prev) => ({
       key,
@@ -697,6 +1066,8 @@ export default function Analysis() {
             data={paperFeatureCategoryChartData}
             featureRows={paperFeatureRows}
             loading={loading}
+            onSelectRow={openPaperFeatureRow}
+            onSelectCategory={openCategory}
           />
 
           <Card>
@@ -715,7 +1086,11 @@ export default function Analysis() {
                 </TableHeader>
                 <TableBody>
                   {paperFeatureRows.map((row) => (
-                    <TableRow key={row.id}>
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer transition-colors hover:bg-accent/50"
+                      onClick={() => openPaperFeatureRow(row)}
+                    >
                       <TableCell className="text-sm text-muted-foreground">
                         {row.category}
                       </TableCell>
@@ -789,7 +1164,11 @@ export default function Analysis() {
                 <TableBody>
                   {filteredCoronaryNarrowingRows.length > 0 ? (
                     paginatedCoronaryRows.map((row) => (
-                      <TableRow key={row.name}>
+                      <TableRow
+                        key={row.key}
+                        className="cursor-pointer transition-colors hover:bg-accent/50"
+                        onClick={() => openCoronaryRow(row.key, row.name)}
+                      >
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
                       </TableRow>
@@ -827,6 +1206,9 @@ export default function Analysis() {
             title="Inter-arterial Course Length Distribution"
             loadingLabel="Loading inter-arterial course length values..."
             emptyLabel="No inter-arterial course length values found."
+            onSelectBin={(label) =>
+              openLengthBin("Inter-arterial course length", interarterialBinContributors, label)
+            }
           />
         </section>
 
@@ -838,6 +1220,9 @@ export default function Analysis() {
             title="Intramural Course Length Distribution"
             loadingLabel="Loading intramural course length values..."
             emptyLabel="No intramural course length values found."
+            onSelectBin={(label) =>
+              openLengthBin("Intramural course length", intramuralBinContributors, label)
+            }
           />
         </section>
 
@@ -857,12 +1242,14 @@ export default function Analysis() {
               subtitle={`${bridgeDashboardStats.bridgePatients} patients with bridges; ${bridgeDashboardStats.multipleBridgePatients} with more than one`}
               data={bridgeCountChartData}
               loading={loading}
+              onSelect={openBridgeCount}
             />
             <HorizontalBarChart
               title="Highest Bridge Grade"
               subtitle="If multiple bridges are present, only the highest grade is counted"
               data={bridgeGradeChartData}
               loading={loading}
+              onSelect={openBridgeGrade}
             />
           </div>
         </section>
@@ -931,7 +1318,11 @@ export default function Analysis() {
                 <TableBody>
                   {filteredFeatureRows.length > 0 ? (
                     paginatedFeatureRows.map((row) => (
-                      <TableRow key={row.name}>
+                      <TableRow
+                        key={row.key}
+                        className="cursor-pointer transition-colors hover:bg-accent/50"
+                        onClick={() => openFeatureRow(row.key, row.name)}
+                      >
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.keep}</TableCell>
@@ -963,6 +1354,14 @@ export default function Analysis() {
         </div>
       </main>
 
+      <ProvenancePanel
+        source={activeProvenance}
+        onClose={() => setActiveProvenance(null)}
+        onOpenReport={(contributor) => {
+          setActiveProvenance(null);
+          handleOpenReport(contributor);
+        }}
+      />
     </div>
   );
 }
@@ -1124,11 +1523,13 @@ function HorizontalBarChart({
   subtitle,
   data,
   loading,
+  onSelect,
 }: {
   title: string;
   subtitle: string;
   data: HorizontalBarDatum[];
   loading: boolean;
+  onSelect?: (label: string) => void;
 }) {
   const maxValue = Math.max(1, ...data.map((item) => item.value));
 
@@ -1139,11 +1540,19 @@ function HorizontalBarChart({
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
+        <div className="space-y-1">
           {data.map((item) => {
             const width = loading ? 0 : Math.max(3, (item.value / maxValue) * 100);
+            const disabled = !onSelect || item.value === 0;
             return (
-              <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3">
+              <button
+                key={item.label}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect?.(item.label)}
+                title={disabled ? undefined : "Show source reports"}
+                className="grid w-full grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors enabled:hover:bg-accent/60 disabled:cursor-default"
+              >
                 <span className="text-sm text-muted-foreground">{item.label}</span>
                 <div className="h-7 overflow-hidden rounded-md bg-muted">
                   <div
@@ -1154,7 +1563,7 @@ function HorizontalBarChart({
                 <span className="text-right text-sm font-medium tabular-nums text-foreground">
                   {loading ? "..." : item.value}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -1167,10 +1576,14 @@ function PaperFeatureCategoryChart({
   data,
   featureRows,
   loading,
+  onSelectRow,
+  onSelectCategory,
 }: {
   data: HorizontalBarDatum[];
   featureRows: PaperFeatureRow[];
   loading: boolean;
+  onSelectRow?: (row: PaperFeatureRow) => void;
+  onSelectCategory?: (label: string) => void;
 }) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const maxValue = Math.max(1, ...data.map((item) => item.value));
@@ -1203,38 +1616,72 @@ function PaperFeatureCategoryChart({
 
             return (
               <div key={item.label}>
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(item.label)}
-                  className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3 rounded-sm text-left"
-                >
-                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                    {isExpanded ? (
-                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                    )}
-                    <span className="truncate">{item.label}</span>
-                  </span>
-                  <div className="h-7 overflow-hidden rounded-md bg-muted">
-                    <div
-                      className="h-full rounded-md bg-primary transition-all"
-                      style={{ width: `${width}%` }}
-                    />
-                  </div>
-                  <span className="text-right text-sm font-medium tabular-nums text-foreground">
-                    {loading ? "..." : item.value}
-                  </span>
-                </button>
+                {(() => {
+                  const drillDisabled = !onSelectCategory || item.value === 0;
+                  const drillTitle = drillDisabled ? undefined : "Show source reports";
+                  return (
+                    <div className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3">
+                      <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(item.label)}
+                          aria-label={isExpanded ? "Collapse category" : "Expand category"}
+                          className="shrink-0 rounded-sm transition-colors hover:text-foreground"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={drillDisabled}
+                          onClick={() => onSelectCategory?.(item.label)}
+                          title={drillTitle}
+                          className="truncate text-left transition-colors enabled:hover:text-foreground disabled:cursor-default"
+                        >
+                          {item.label}
+                        </button>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={drillDisabled}
+                        onClick={() => onSelectCategory?.(item.label)}
+                        title={drillTitle}
+                        className="h-7 overflow-hidden rounded-md bg-muted text-left disabled:cursor-default"
+                      >
+                        <div
+                          className="h-full rounded-md bg-primary transition-all"
+                          style={{ width: `${width}%` }}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={drillDisabled}
+                        onClick={() => onSelectCategory?.(item.label)}
+                        title={drillTitle}
+                        className="text-right text-sm font-medium tabular-nums text-foreground transition-colors enabled:hover:text-primary disabled:cursor-default"
+                      >
+                        {loading ? "..." : item.value}
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {isExpanded && !loading && (
                   <div className="mt-4 space-y-1.5">
                     {categoryFeatures.map((feat) => {
                       const featWidth = (feat.total / maxValue) * 100;
+                      const disabled = !onSelectRow || feat.total === 0;
                       return (
-                        <div
+                        <button
                           key={feat.id}
-                          className="grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3"
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => onSelectRow?.(feat)}
+                          title={disabled ? undefined : "Show source reports"}
+                          className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3 rounded-md py-0.5 text-left transition-colors enabled:hover:bg-accent/50 disabled:cursor-default"
                         >
                           <span
                             className="truncate pl-5 text-xs text-muted-foreground"
@@ -1251,7 +1698,7 @@ function PaperFeatureCategoryChart({
                           <span className="text-right text-xs tabular-nums text-muted-foreground">
                             {feat.total}
                           </span>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -1272,6 +1719,7 @@ function CourseLengthHistogram({
   title,
   loadingLabel,
   emptyLabel,
+  onSelectBin,
 }: {
   bins: CourseLengthHistogramBin[];
   measurementCount: number;
@@ -1279,6 +1727,7 @@ function CourseLengthHistogram({
   title: string;
   loadingLabel: string;
   emptyLabel: string;
+  onSelectBin?: (label: string) => void;
 }) {
   return (
     <Card>
@@ -1287,7 +1736,7 @@ function CourseLengthHistogram({
         <p className="text-xs text-muted-foreground">
           {loading
             ? "Loading measurements..."
-            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports`}
+            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports${onSelectBin && bins.length > 0 ? " · click a bar for source reports" : ""}`}
         </p>
       </CardHeader>
       <CardContent>
@@ -1302,7 +1751,15 @@ function CourseLengthHistogram({
         ) : (
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={bins} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+              <BarChart
+                data={bins}
+                margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
+                className={onSelectBin ? "cursor-pointer" : undefined}
+                onClick={(state) => {
+                  const label = (state as { activeLabel?: string } | null)?.activeLabel;
+                  if (label) onSelectBin?.(label);
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis
                   dataKey="label"

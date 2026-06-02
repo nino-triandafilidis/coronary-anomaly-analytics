@@ -11,7 +11,9 @@ describe("resolver golden set integrity", () => {
   });
 
   it("has no duplicate inputs", () => {
-    const keys = RESOLVER_GOLDEN_SET.map((ex) => ex.normalizedName.toLowerCase());
+    const keys = RESOLVER_GOLDEN_SET.map((ex) =>
+      ex.normalizedName.toLowerCase().replace(/\s+/g, " ").trim()
+    );
     expect(keys.length).toBe(new Set(keys).size);
   });
 

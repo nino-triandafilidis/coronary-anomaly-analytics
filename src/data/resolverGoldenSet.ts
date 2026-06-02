@@ -166,8 +166,8 @@ export const RESOLVER_GOLDEN_SET: ResolverGoldenExample[] = [
     normalizedName: "sinotubular junction",
     context: "High takeoff of the coronary arteries, about the level of the sinotubular junction.",
     assertion: "asserted",
-    expected: "sinutubular_junction",
-    note: "Spelling variant: report uses sino-, the entity canonical is sinu-. The rules miss it on that one letter.",
+    expected: "high_origin",
+    note: "Contract: resolve the clinical concept from name + context, not the bare surface name. A high-takeoff-at-the-STJ context is high_origin; the parser prompt already treats 'origin at/above the STJ' as high origin and says bare STJ landmarks should not be standalone findings. Also a sino-/sinu- spelling-robustness case: the spelling must not block resolution.",
   },
 
   // --- Atherosclerotic lesions: tracked as presence; detailed CAD grading is
@@ -205,8 +205,8 @@ export const RESOLVER_GOLDEN_SET: ResolverGoldenExample[] = [
     context:
       "After its aberrant origin, the LMCA turns sharply to the left and dives into the ventricular outlet septum. The LMCA courses intramuscularly for 2.7 cm.",
     assertion: "asserted",
-    expected: "myocardial_bridge",
-    note: "BOUNDARY: intramuscular/intramyocardial is a bridge, NOT intramural (aortic wall). 'Dives into the outlet septum' also reads as intraseptal_course; flagged for reviewer.",
+    expected: "intraseptal_course",
+    note: "Aberrant LMCA diving into the ventricular outlet septum is the intraseptal pattern, not a myocardial bridge (a normally-arising epicardial vessel tunneling under myocardium mid-course) and not intramural (within the aortic wall). The 'intramuscular = bridge' heuristic misfires because the septum is muscle. anomalous_left_intraconal (alias 'left main with intraseptal course') is the same finding on the anomalous-vessel axis; resolver author sets axis priority.",
   },
 
   // --- Single trunk. --------------------------------------------------------
@@ -215,7 +215,7 @@ export const RESOLVER_GOLDEN_SET: ResolverGoldenExample[] = [
     context: "Single coronary artery arising off the left cusp, designated the left main coronary artery.",
     assertion: "asserted",
     expected: "st_aaoca",
-    note: "The alias list only carries 'single trunk'; 'single coronary artery' misses.",
+    note: "The alias list only carries 'single trunk'; 'single coronary artery' misses. Two-axis ambiguity: st_aaoca is the anomalous-vessel label; type_4_single_coronary_trunk (alias 'single coronary trunk') is the same concept on the ostial-relationship axis. Labeled on the vessel axis here; resolver author sets axis priority.",
   },
 
   // --- None: normal anatomy and genuinely out-of-scope. ---------------------
@@ -237,7 +237,7 @@ export const RESOLVER_GOLDEN_SET: ResolverGoldenExample[] = [
     normalizedName: "Obstructive coronary artery disease",
     context: "No evidence of obstructive coronary artery disease [CAD-RADS 0].",
     assertion: "negated",
-    expected: NONE,
-    note: "BOUNDARY: CAD-RADS 0 negates atherosclerosis presence. Detailed CAD grading is beyond paper scope (p13); a reviewer may prefer negated coronary_atherosclerotic_lesions here.",
+    expected: "coronary_atherosclerotic_lesions",
+    note: "Scope rule: lesion presence/absence is the tracked feature; obstruction/stenosis-severity grading (CAD-RADS as a risk grade) is beyond paper scope (p13). CAD-RADS 0 asserts no plaque, the same presence axis as 'Mild Coronary Plaque' and 'No calcifications', so it is negated coronary_atherosclerotic_lesions, not none.",
   },
 ];

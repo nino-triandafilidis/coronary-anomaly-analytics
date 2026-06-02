@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -49,7 +49,7 @@ import {
   getStoredParsedTerms,
   type StoredParsedReport,
 } from "@/lib/parsedReportStorage";
-import type { ReviewDecisionRecord } from "@/data/parseTypes";
+import type { ParsedTerm, ReviewDecisionRecord } from "@/data/parseTypes";
 import {
   PAPER_FEATURES,
   resolveParsedTermPaperFeature,
@@ -65,9 +65,66 @@ import {
   cleanIntramuralCourseLengthMeasurements,
 } from "@/data/intramuralCourseLengths";
 import { getReportAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
+import { ProvenancePanel } from "@/components/ProvenancePanel";
+import {
+  distinctReportCount,
+  type ProvenanceContributor,
+  type ProvenanceSource,
+} from "@/lib/provenance";
 
 const ADDED_TERMS_PLACEHOLDER = 0;
 const TABLE_PAGE_SIZE = 10;
+
+const ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS = {
+  intraconal_left: "anomalous_left_intraconal",
+  intramural_interarterial_left: "anomalous_left_intramural_interarterial",
+} as const;
+
+function termContributor(reportId: string, term: ParsedTerm): ProvenanceContributor {
+  return {
+    reportId,
+    matchedText: term.term?.trim() || term.normalizedName?.trim() || "",
+    context: term.context,
+    assertion: term.assertion,
+    startIndex: term.startIndex,
+    endIndex: term.endIndex,
+  };
+}
+
+function occurrenceSubtitle(contributors: ProvenanceContributor[]): string {
+  const reports = distinctReportCount(contributors);
+  return `${contributors.length} occurrence${contributors.length === 1 ? "" : "s"} · ${reports} report${reports === 1 ? "" : "s"}`;
+}
+
+function reportCountSubtitle(reports: number): string {
+  return `${reports} report${reports === 1 ? "" : "s"}`;
+}
+
+function buildBinContributors(
+  reports: StoredParsedReport[],
+  getMeasurements: (
+    report: StoredParsedReport
+  ) => { value: number; rawText: string; vessel?: string }[],
+  binSizeMm = 5
+): Map<string, ProvenanceContributor[]> {
+  const map = new Map<string, ProvenanceContributor[]>();
+  reports.forEach((report) => {
+    getMeasurements(report).forEach((measurement) => {
+      const binStart = Math.floor(measurement.value / binSizeMm) * binSizeMm;
+      const label = `${binStart}-${binStart + binSizeMm} mm`;
+      const list = map.get(label) ?? [];
+      list.push({
+        reportId: report.id,
+        matchedText: measurement.rawText?.trim() || `${measurement.value} mm`,
+        context: measurement.vessel
+          ? `${measurement.rawText ?? ""} (${measurement.vessel})`.trim()
+          : measurement.rawText,
+      });
+      map.set(label, list);
+    });
+  });
+  return map;
+}
 
 function getAnalysisFeatureName(record: {
   normalizedName?: string;
@@ -201,6 +258,8 @@ export default function Analysis() {
     useState<PaperFeatureOverviewMode>("overall");
   const [coronaryPage, setCoronaryPage] = useState(1);
   const [featurePage, setFeaturePage] = useState(1);
+  const [activeProvenance, setActiveProvenance] = useState<ProvenanceSource | null>(null);
+  const navigate = useNavigate();
   useEffect(() => {
     const loadReports = async () => {
       setLoading(true);
@@ -334,6 +393,7 @@ export default function Analysis() {
   const anomalousLeftOverviewCards = useMemo(
     () => [
       {
+        id: "anomalous_left_intraconal",
         title: "Intraconal lefts",
         subtitle: "Intraconal / intraseptal / subpulmonic anomalous left courses",
         count:
@@ -341,6 +401,7 @@ export default function Analysis() {
             ?.total ?? 0,
       },
       {
+        id: "anomalous_left_intramural_interarterial",
         title: "Intramural / inter-arterial lefts",
         subtitle: "Intramural and/or inter-arterial anomalous left courses",
         count:
@@ -570,6 +631,306 @@ export default function Analysis() {
     ],
     [bridgeDashboardStats]
   );
+
+  // --- Provenance: contributing reports behind each aggregate (issue #63). ---
+  // Each map mirrors the count logic above so the drill-down can never diverge
+  // from the number on screen; it just keeps the per-report linkage the counts
+  // throw away.
+  const paperFeatureContributors = useMemo(() => {
+    const map = new Map<string, ProvenanceContributor[]>();
+    const subtypeIds = Object.values(ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS) as string[];
+    reports.forEach((report) => {
+      getStoredParsedTerms(report).forEach((term) => {
+        const paperFeature = resolveParsedTermPaperFeature(term);
+        if (!paperFeature || subtypeIds.includes(paperFeature.id)) return;
+        const list = map.get(paperFeature.id) ?? [];
+        list.push(termContributor(report.id, term));
+        map.set(paperFeature.id, list);
+      });
+    });
+    return map;
+  }, [reports]);
+  const subtypeContributors = useMemo(() => {
+    const map = new Map<string, ProvenanceContributor[]>();
+    reports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
+      const seen = new Set<string>();
+      getReportAnomalousLeftSubtypes(
+        report.parseResult.anomalousLeftSubtypes,
+        parsedTerms
+      ).forEach((entry) => {
+        const featureId = ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS[entry.subtype];
+        if (seen.has(featureId)) return;
+        seen.add(featureId);
+        const list = map.get(featureId) ?? [];
+        list.push({
+          reportId: report.id,
+          matchedText: entry.rawText?.trim() || entry.subtype.replace(/_/g, " "),
+          context: entry.rawText,
+        });
+        map.set(featureId, list);
+      });
+    });
+    return map;
+  }, [reports]);
+  const categoryContributors = useMemo(() => {
+    const map = new Map<string, ProvenanceContributor[]>();
+    reports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
+      const reportSubtypes = new Set(
+        getReportAnomalousLeftSubtypes(
+          report.parseResult.anomalousLeftSubtypes,
+          parsedTerms
+        ).map((entry) => entry.subtype)
+      );
+      if (
+        paperFeatureOverviewMode !== "overall" &&
+        !reportSubtypes.has(paperFeatureOverviewMode)
+      ) {
+        return;
+      }
+      const repByCategory = new Map<string, ParsedTerm>();
+      parsedTerms.forEach((term) => {
+        const paperFeature = resolveParsedTermPaperFeature(term);
+        if (!paperFeature || repByCategory.has(paperFeature.category)) return;
+        repByCategory.set(paperFeature.category, term);
+      });
+      const categories = new Set(repByCategory.keys());
+      if (reportSubtypes.size > 0) categories.add("Anomalous vessel");
+      categories.forEach((category) => {
+        const list = map.get(category) ?? [];
+        const rep = repByCategory.get(category);
+        if (rep) {
+          list.push(termContributor(report.id, rep));
+        } else {
+          const subtype = getReportAnomalousLeftSubtypes(
+            report.parseResult.anomalousLeftSubtypes,
+            parsedTerms
+          )[0];
+          list.push({
+            reportId: report.id,
+            matchedText: subtype?.rawText?.trim() || "anomalous coronary artery",
+            context: subtype?.rawText,
+          });
+        }
+        map.set(category, list);
+      });
+    });
+    return map;
+  }, [paperFeatureOverviewMode, reports]);
+  const coronaryContributors = useMemo(() => {
+    const map = new Map<string, ProvenanceContributor[]>();
+    reports.forEach((report) => {
+      getStoredParsedTerms(report).forEach((term) => {
+        const name = normalizeCoronaryNarrowingFeature(term);
+        if (!name) return;
+        const list = map.get(name) ?? [];
+        list.push(termContributor(report.id, term));
+        map.set(name, list);
+      });
+    });
+    return map;
+  }, [reports]);
+  const featureTableContributors = useMemo(() => {
+    const map = new Map<string, ProvenanceContributor[]>();
+    reports.forEach((report) => {
+      getStoredParsedTerms(report).forEach((term) => {
+        if (!shouldIncludeInNormalizedFrequency(term)) return;
+        const name = getAnalysisFeatureName(term);
+        if (!name) return;
+        const list = map.get(name) ?? [];
+        list.push(termContributor(report.id, term));
+        map.set(name, list);
+      });
+    });
+    return map;
+  }, [reports]);
+  const bridgeContributors = useMemo(() => {
+    const grade: Record<BridgeDashboardCategory, ProvenanceContributor[]> = {
+      notPresent: [],
+      grade1: [],
+      grade2: [],
+      grade3: [],
+    };
+    const count: Record<BridgeCountCategory, ProvenanceContributor[]> = {
+      notPresent: [],
+      one: [],
+      two: [],
+      threePlus: [],
+    };
+    reports.forEach((report) => {
+      const summary = report.parseResult.myocardialBridgeSummary;
+      const bridgeCount = summary?.bridgeCount ?? 0;
+      const bridges = summary?.bridges ?? [];
+      const bridgeGrades = bridges
+        .map((bridge) => bridge.grade)
+        .filter((g): g is 1 | 2 | 3 => g === 1 || g === 2 || g === 3);
+      const highestGrade =
+        summary?.highestGrade === 1 ||
+        summary?.highestGrade === 2 ||
+        summary?.highestGrade === 3
+          ? summary.highestGrade
+          : bridgeGrades.length > 0
+            ? (Math.max(...bridgeGrades) as 1 | 2 | 3)
+            : null;
+      if (bridgeCount <= 0 || !highestGrade) {
+        const contributor: ProvenanceContributor = {
+          reportId: report.id,
+          matchedText: "no myocardial bridge reported",
+        };
+        grade.notPresent.push(contributor);
+        count.notPresent.push(contributor);
+        return;
+      }
+      const evidenceFor = (bridge?: (typeof bridges)[number]) =>
+        bridge?.evidenceText?.trim() ||
+        [bridge?.vessel, bridge?.segment].filter(Boolean).join(" ") ||
+        `${bridgeCount} bridge${bridgeCount === 1 ? "" : "s"}`;
+      const topBridge = bridges.find((bridge) => bridge.grade === highestGrade) ?? bridges[0];
+      grade[`grade${highestGrade}` as BridgeDashboardCategory].push({
+        reportId: report.id,
+        matchedText: evidenceFor(topBridge),
+        context: topBridge?.evidenceText,
+      });
+      const countKey: BridgeCountCategory =
+        bridgeCount === 1 ? "one" : bridgeCount === 2 ? "two" : "threePlus";
+      count[countKey].push({
+        reportId: report.id,
+        matchedText: evidenceFor(bridges[0]),
+        context: bridges[0]?.evidenceText,
+      });
+    });
+    return { grade, count };
+  }, [reports]);
+  const interarterialBinContributors = useMemo(
+    () =>
+      buildBinContributors(reports, (report) =>
+        cleanInterarterialCourseLengthMeasurements(
+          report.parseResult.interarterialCourseLengths
+        )
+      ),
+    [reports]
+  );
+  const intramuralBinContributors = useMemo(
+    () =>
+      buildBinContributors(reports, (report) =>
+        cleanIntramuralCourseLengthMeasurements(
+          report.parseResult.intramuralCourseLengths
+        )
+      ),
+    [reports]
+  );
+
+  const openProvenance = (source: ProvenanceSource) => {
+    if (source.contributors.length === 0) return;
+    setActiveProvenance(source);
+  };
+  const handleOpenReport = (contributor: ProvenanceContributor) => {
+    const params = new URLSearchParams();
+    params.set("reportId", contributor.reportId);
+    params.set("returnTo", "/analysis");
+    if (
+      typeof contributor.startIndex === "number" &&
+      typeof contributor.endIndex === "number" &&
+      contributor.endIndex > contributor.startIndex
+    ) {
+      params.set("focusStart", String(contributor.startIndex));
+      params.set("focusEnd", String(contributor.endIndex));
+    }
+    navigate(`/dataset?${params.toString()}`);
+  };
+  const openPaperFeatureRow = (row: PaperFeatureRow) => {
+    const subtypeIds = Object.values(ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS) as string[];
+    const isSubtype = subtypeIds.includes(row.id);
+    const contributors = isSubtype
+      ? subtypeContributors.get(row.id) ?? []
+      : paperFeatureContributors.get(row.id) ?? [];
+    openProvenance({
+      title: row.canonical,
+      subtitle: isSubtype
+        ? reportCountSubtitle(distinctReportCount(contributors))
+        : occurrenceSubtitle(contributors),
+      splitByAssertion: !isSubtype,
+      contributors,
+    });
+  };
+  const openSubtype = (featureId: string, title: string) => {
+    const contributors = subtypeContributors.get(featureId) ?? [];
+    openProvenance({
+      title,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openCategory = (label: string) => {
+    const contributors = categoryContributors.get(label) ?? [];
+    openProvenance({
+      title: label,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openCoronaryRow = (name: string) => {
+    const contributors = coronaryContributors.get(name) ?? [];
+    openProvenance({
+      title: name,
+      subtitle: occurrenceSubtitle(contributors),
+      splitByAssertion: true,
+      contributors,
+    });
+  };
+  const openFeatureRow = (name: string) => {
+    const contributors = featureTableContributors.get(name) ?? [];
+    openProvenance({
+      title: name,
+      subtitle: occurrenceSubtitle(contributors),
+      splitByAssertion: true,
+      contributors,
+    });
+  };
+  const openBridgeGrade = (label: string) => {
+    const key =
+      label === "Not Present"
+        ? "notPresent"
+        : label === "Grade 1"
+          ? "grade1"
+          : label === "Grade 2"
+            ? "grade2"
+            : "grade3";
+    const contributors = bridgeContributors.grade[key as BridgeDashboardCategory] ?? [];
+    openProvenance({
+      title: `Highest bridge grade — ${label}`,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openBridgeCount = (label: string) => {
+    const key =
+      label === "Not Present" ? "notPresent" : label === "1" ? "one" : label === "2" ? "two" : "threePlus";
+    const contributors = bridgeContributors.count[key as BridgeCountCategory] ?? [];
+    openProvenance({
+      title: `Bridge count — ${label}`,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
+  const openLengthBin = (
+    title: string,
+    binContributors: Map<string, ProvenanceContributor[]>,
+    label: string
+  ) => {
+    const contributors = binContributors.get(label) ?? [];
+    openProvenance({
+      title: `${title} — ${label}`,
+      subtitle: occurrenceSubtitle(contributors),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
   const handleFeatureSort = (key: FeatureSortKey) => {
     setFeatureSort((prev) => ({
       key,
@@ -737,7 +1098,19 @@ export default function Analysis() {
 
           <div className="mb-4 grid gap-4 md:grid-cols-2">
             {anomalousLeftOverviewCards.map((card) => (
-              <Card key={card.title}>
+              <Card
+                key={card.title}
+                role="button"
+                tabIndex={0}
+                onClick={() => openSubtype(card.id, card.title)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openSubtype(card.id, card.title);
+                  }
+                }}
+                className="cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/40"
+              >
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{card.title}</CardTitle>
                   <p className="text-xs text-muted-foreground">{card.subtitle}</p>
@@ -747,7 +1120,7 @@ export default function Analysis() {
                     {loading ? "..." : card.count}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    reports with this subtype
+                    reports with this subtype · click to see source reports
                   </p>
                 </CardContent>
               </Card>
@@ -759,6 +1132,7 @@ export default function Analysis() {
             loading={loading}
             mode={paperFeatureOverviewMode}
             onModeChange={setPaperFeatureOverviewMode}
+            onSelect={openCategory}
           />
 
           <Card>
@@ -777,7 +1151,11 @@ export default function Analysis() {
                 </TableHeader>
                 <TableBody>
                   {paperFeatureRows.map((row) => (
-                    <TableRow key={row.id}>
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer transition-colors hover:bg-accent/50"
+                      onClick={() => openPaperFeatureRow(row)}
+                    >
                       <TableCell className="text-sm text-muted-foreground">
                         {row.category}
                       </TableCell>
@@ -842,7 +1220,11 @@ export default function Analysis() {
                 <TableBody>
                   {coronaryNarrowingRows.length > 0 ? (
                     paginatedCoronaryRows.map((row) => (
-                      <TableRow key={row.name}>
+                      <TableRow
+                        key={row.name}
+                        className="cursor-pointer transition-colors hover:bg-accent/50"
+                        onClick={() => openCoronaryRow(row.name)}
+                      >
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
                       </TableRow>
@@ -878,6 +1260,9 @@ export default function Analysis() {
             title="Inter-arterial Course Length Distribution"
             loadingLabel="Loading inter-arterial course length values..."
             emptyLabel="No inter-arterial course length values found."
+            onSelectBin={(label) =>
+              openLengthBin("Inter-arterial course length", interarterialBinContributors, label)
+            }
           />
         </section>
 
@@ -889,6 +1274,9 @@ export default function Analysis() {
             title="Intramural Course Length Distribution"
             loadingLabel="Loading intramural course length values..."
             emptyLabel="No intramural course length values found."
+            onSelectBin={(label) =>
+              openLengthBin("Intramural course length", intramuralBinContributors, label)
+            }
           />
         </section>
 
@@ -908,12 +1296,14 @@ export default function Analysis() {
               subtitle={`${bridgeDashboardStats.bridgePatients} patients with bridges; ${bridgeDashboardStats.multipleBridgePatients} with more than one`}
               data={bridgeCountChartData}
               loading={loading}
+              onSelect={openBridgeCount}
             />
             <HorizontalBarChart
               title="Highest Bridge Grade"
               subtitle="If multiple bridges are present, only the highest grade is counted"
               data={bridgeGradeChartData}
               loading={loading}
+              onSelect={openBridgeGrade}
             />
           </div>
         </section>
@@ -982,7 +1372,11 @@ export default function Analysis() {
                 <TableBody>
                   {filteredFeatureRows.length > 0 ? (
                     paginatedFeatureRows.map((row) => (
-                      <TableRow key={row.name}>
+                      <TableRow
+                        key={row.name}
+                        className="cursor-pointer transition-colors hover:bg-accent/50"
+                        onClick={() => openFeatureRow(row.name)}
+                      >
                         <TableCell className="font-medium">{row.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.count}</TableCell>
                         <TableCell className="text-right tabular-nums">{row.keep}</TableCell>
@@ -1014,6 +1408,14 @@ export default function Analysis() {
         </div>
       </main>
 
+      <ProvenancePanel
+        source={activeProvenance}
+        onClose={() => setActiveProvenance(null)}
+        onOpenReport={(contributor) => {
+          setActiveProvenance(null);
+          handleOpenReport(contributor);
+        }}
+      />
     </div>
   );
 }
@@ -1139,11 +1541,13 @@ function HorizontalBarChart({
   subtitle,
   data,
   loading,
+  onSelect,
 }: {
   title: string;
   subtitle: string;
   data: HorizontalBarDatum[];
   loading: boolean;
+  onSelect?: (label: string) => void;
 }) {
   const maxValue = Math.max(1, ...data.map((item) => item.value));
 
@@ -1154,11 +1558,19 @@ function HorizontalBarChart({
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
+        <div className="space-y-1">
           {data.map((item) => {
             const width = loading ? 0 : Math.max(3, (item.value / maxValue) * 100);
+            const disabled = !onSelect || item.value === 0;
             return (
-              <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3">
+              <button
+                key={item.label}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect?.(item.label)}
+                title={disabled ? undefined : "Show source reports"}
+                className="grid w-full grid-cols-[92px_minmax(0,1fr)_48px] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors enabled:hover:bg-accent/60 disabled:cursor-default"
+              >
                 <span className="text-sm text-muted-foreground">{item.label}</span>
                 <div className="h-7 overflow-hidden rounded-md bg-muted">
                   <div
@@ -1169,7 +1581,7 @@ function HorizontalBarChart({
                 <span className="text-right text-sm font-medium tabular-nums text-foreground">
                   {loading ? "..." : item.value}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -1183,11 +1595,13 @@ function PaperFeatureCategoryChart({
   loading,
   mode,
   onModeChange,
+  onSelect,
 }: {
   data: HorizontalBarDatum[];
   loading: boolean;
   mode: PaperFeatureOverviewMode;
   onModeChange: (mode: PaperFeatureOverviewMode) => void;
+  onSelect?: (label: string) => void;
 }) {
   const modes: { value: PaperFeatureOverviewMode; label: string }[] = [
     { value: "overall", label: "Overall" },
@@ -1221,13 +1635,18 @@ function PaperFeatureCategoryChart({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
+        <div className="space-y-1">
           {data.map((item) => {
             const width = loading ? 0 : (item.value / maxValue) * 100;
+            const disabled = !onSelect || item.value === 0;
             return (
-              <div
+              <button
                 key={item.label}
-                className="grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3"
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect?.(item.label)}
+                title={disabled ? undefined : "Show source reports"}
+                className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors enabled:hover:bg-accent/60 disabled:cursor-default"
               >
                 <span className="text-sm text-muted-foreground">{item.label}</span>
                 <div className="h-7 overflow-hidden rounded-md bg-muted">
@@ -1239,7 +1658,7 @@ function PaperFeatureCategoryChart({
                 <span className="text-right text-sm font-medium tabular-nums text-foreground">
                   {loading ? "..." : item.value}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -1255,6 +1674,7 @@ function CourseLengthHistogram({
   title,
   loadingLabel,
   emptyLabel,
+  onSelectBin,
 }: {
   bins: CourseLengthHistogramBin[];
   measurementCount: number;
@@ -1262,6 +1682,7 @@ function CourseLengthHistogram({
   title: string;
   loadingLabel: string;
   emptyLabel: string;
+  onSelectBin?: (label: string) => void;
 }) {
   return (
     <Card>
@@ -1270,7 +1691,7 @@ function CourseLengthHistogram({
         <p className="text-xs text-muted-foreground">
           {loading
             ? "Loading measurements..."
-            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports`}
+            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports${onSelectBin && bins.length > 0 ? " · click a bar for source reports" : ""}`}
         </p>
       </CardHeader>
       <CardContent>
@@ -1285,7 +1706,15 @@ function CourseLengthHistogram({
         ) : (
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={bins} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+              <BarChart
+                data={bins}
+                margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
+                className={onSelectBin ? "cursor-pointer" : undefined}
+                onClick={(state) => {
+                  const label = (state as { activeLabel?: string } | null)?.activeLabel;
+                  if (label) onSelectBin?.(label);
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis
                   dataKey="label"

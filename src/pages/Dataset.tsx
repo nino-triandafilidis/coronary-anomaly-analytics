@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Activity,
@@ -82,6 +82,15 @@ export default function Dataset() {
   const [savingError, setSavingError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+
+  const focusSpan = useMemo(() => {
+    const start = Number(searchParams.get("focusStart"));
+    const end = Number(searchParams.get("focusEnd"));
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      return { startIndex: start, endIndex: end };
+    }
+    return undefined;
+  }, [searchParams]);
 
   const refreshReports = async () => {
     setLoading(true);
@@ -466,6 +475,7 @@ export default function Dataset() {
                   closePreview();
                 }}
                 readOnly={previewReadOnly}
+                focusSpan={focusSpan}
               />
             )}
           </DialogContent>

@@ -143,6 +143,15 @@ export const RESOLVER_GOLDEN_SET: ResolverGoldenExample[] = [
   },
 
   // --- Sinus / ostium. ------------------------------------------------------
+  // high_origin here is the OPERATIONAL reading, not the paper's strict threshold.
+  // The paper defines HO formally as >=5 mm or >20% of sinus depth above the STJ
+  // (Level IV), with at-the-STJ being Level III. But reports almost never state
+  // the measurement, so reserving high_origin for the strict threshold would push
+  // most real "high takeoff" findings to none or an unassignable height level and
+  // lose the signal. The measured-height case is what level_i..level_iv are for.
+  // So both cases below resolve to high_origin: the 9 mm one (clearly above) and
+  // the qualitative at-the-STJ takeoff. Decided 2026-06-02; the catalog definition
+  // of high_origin was widened to match (entityCatalog.ts).
   {
     normalizedName: "High origin of right coronary artery above sinotubular junction, 9 mm",
     context: "Right: High origin of the right coronary artery which arises approximately 9 mm above the sinotubular junction.",

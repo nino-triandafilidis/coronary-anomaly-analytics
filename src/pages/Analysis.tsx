@@ -15,6 +15,8 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  ChevronDown,
+  ChevronRight,
   FileText,
   Search,
 } from "lucide-react";
@@ -682,6 +684,7 @@ export default function Analysis() {
 
           <PaperFeatureCategoryChart
             data={paperFeatureCategoryChartData}
+            featureRows={paperFeatureRows}
             loading={loading}
           />
 
@@ -1104,12 +1107,24 @@ function HorizontalBarChart({
 
 function PaperFeatureCategoryChart({
   data,
+  featureRows,
   loading,
 }: {
   data: HorizontalBarDatum[];
+  featureRows: PaperFeatureRow[];
   loading: boolean;
 }) {
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const maxValue = Math.max(1, ...data.map((item) => item.value));
+
+  const toggleCategory = (label: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
 
   return (
     <Card className="mb-4">
@@ -1122,22 +1137,51 @@ function PaperFeatureCategoryChart({
       <CardContent>
         <div className="space-y-3">
           {data.map((item) => {
+            const isExpanded = expandedCategories.has(item.label);
+            const categoryFeatures = featureRows
+              .filter((row) => row.category === item.label)
+              .sort((a, b) => b.total - a.total || a.canonical.localeCompare(b.canonical));
             const width = loading ? 0 : (item.value / maxValue) * 100;
+
             return (
-              <div
-                key={item.label}
-                className="grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3"
-              >
-                <span className="text-sm text-muted-foreground">{item.label}</span>
-                <div className="h-7 overflow-hidden rounded-md bg-muted">
-                  <div
-                    className="h-full rounded-md bg-primary transition-all"
-                    style={{ width: `${width}%` }}
-                  />
-                </div>
-                <span className="text-right text-sm font-medium tabular-nums text-foreground">
-                  {loading ? "..." : item.value}
-                </span>
+              <div key={item.label}>
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(item.label)}
+                  className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3 rounded-sm text-left"
+                >
+                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                    {isExpanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  <div className="h-7 overflow-hidden rounded-md bg-muted">
+                    <div
+                      className="h-full rounded-md bg-primary transition-all"
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                  <span className="text-right text-sm font-medium tabular-nums text-foreground">
+                    {loading ? "..." : item.value}
+                  </span>
+                </button>
+
+                {isExpanded && !loading && (
+                  <div className="ml-1 mt-1 space-y-0.5 border-l border-border pb-1 pl-4">
+                    {categoryFeatures.map((feat) => (
+                      <div
+                        key={feat.id}
+                        className="flex items-center justify-between py-0.5 text-xs"
+                      >
+                        <span className="text-muted-foreground">{feat.canonical}</span>
+                        <span className="ml-4 shrink-0 tabular-nums">{feat.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

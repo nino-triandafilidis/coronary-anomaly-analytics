@@ -689,7 +689,7 @@ export default function Analysis() {
           />
 
           <Card>
-            <CardContent className="overflow-x-auto p-0">
+            <CardContent className="p-0 [&>div]:h-[32rem] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-background">
               <Table>
                 <TableHeader>
                   <TableRow>

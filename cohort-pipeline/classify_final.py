@@ -41,18 +41,35 @@ ORIGIN_VERB = r'(?:aris\w+|arising|origin\w*|takes?\s*[\- ]?off|take[\- ]?off|gi
 LEX_ANOM_OF = re.compile(r'(?:anomalous|aberrant|ectopic)' + MOD + r'\s+(?:(?:origin|arising)\s+(?:of|to)\s+)?(?:the\s+)?(' + RIGHT_V + r'|' + LEFT_V + r'|' + GEN_V + r')', re.I)
 LEX_GENERIC = re.compile(r'anomalous\s+(?:origin|course)[/ ]?(?:and\s+|/)?(?:origin|course)?\s*of\s+(?:the\s+)?coronary', re.I)
 LEX_SIDE_AN = re.compile(r'(left|right)\s+coronary\s+anomaly', re.I)
-LEX_OPP     = re.compile(r'(' + RIGHT_V + r'|' + LEFT_V + r')[^.]{0,60}?from\s+the\s+(?:opposite|wrong|non[\-\s]?coronary)\s+(?:coronary\s+)?(?:sinus|cusp)', re.I)
+LEX_OPP     = re.compile(r'(' + RIGHT_V + r'|' + LEFT_V + r')[^.\n]{0,60}?from\s+the\s+(?:opposite|wrong|non[\-\s]?coronary)\s+(?:coronary\s+)?(?:sinus|cusp)', re.I)
 LEX_SINGLE  = re.compile(r'single\s+coronary\s+(?:artery|ostium|trunk|origin)', re.I)
 LEX_COMMON  = re.compile(r'common\s+origin\s+of\s+(?:the\s+)?(?:both\s+the\s+)?(?:left and right|right and left|left main and right)\s*coronary', re.I)
 # sinus/cusp-anchored mismatch (no origin verb needed); requires opposite-side SINUS/CUSP, so "from the left main" (landmark) won't trip it
-MIS_RCA  = re.compile(RIGHT_V + r'[^.]{0,55}?\bfrom\b[^.]{0,30}?\bleft\b\s*(?:coronary\s+|anterior\s+|aortic\s+)?(?:sinus|cusp)', re.I)
-MIS_RCA2 = re.compile(RIGHT_V + r'[^.]{0,90}?(?:above|over|off)\s+the\s+left\s+(?:coronary\s+)?(?:sinus|cusp)', re.I)
-MIS_LEFT = re.compile(LEFT_V  + r'[^.]{0,55}?\bfrom\b[^.]{0,30}?\bright\b\s*(?:coronary\s+|anterior\s+|aortic\s+)?(?:sinus|cusp)', re.I)
+MIS_RCA  = re.compile(RIGHT_V + r'[^.\n]{0,55}?\bfrom\b[^.\n]{0,30}?\bleft\b\s*(?:coronary\s+(?:artery\s+)?|anterior\s+|aortic\s+)?(?:sinus|cusp)', re.I)
+MIS_RCA2 = re.compile(RIGHT_V + r'[^.\n]{0,90}?(?:above|over|off)\s+the\s+left\s+(?:coronary\s+(?:artery\s+)?)?(?:sinus|cusp)', re.I)
+MIS_LEFT = re.compile(LEFT_V  + r'[^.\n]{0,55}?\bfrom\b[^.\n]{0,30}?\bright\b\s*(?:coronary\s+(?:artery\s+)?|anterior\s+|aortic\s+)?(?:sinus|cusp)', re.I)
+# Explicit subject-vessel origin from the opposite coronary system. This catches
+# reports phrased as "variant take-off" or "RCA arising off the left main" where
+# the anomaly word is absent, and prevents the nearby interarterial-course text
+# from guessing the side based on the source vessel instead of the anomalous one.
+RIGHT_SOURCE = r'(?:left\s+(?:main|coronary(?:\s+artery)?|coronary(?:\s+artery)?\s+(?:sinus|cusp)|anterior\s+descending|circumflex)|lmca|lca|lad|lcx)'
+LEFT_SOURCE  = r'(?:right\s+(?:coronary(?:\s+artery)?|coronary(?:\s+artery)?\s+(?:sinus|cusp))|rca)'
+CROSS_ORIGIN_VERB = r'(?:aris\w+|arising|originates?)'
+SOURCE_LEAD = r'(?:the\s+)?(?:(?:most\s+)?(?:proximal|mid|distal)\s+(?:portion\s+of\s+)?)?(?:hub\s+(?:off\s+of|at)\s+(?:the\s+)?)?'
+CROSS_RCA = re.compile(RIGHT_V + r'[^.\n]{0,90}?' + CROSS_ORIGIN_VERB + r'\s+(?:from|off|of)\s+' + SOURCE_LEAD + RIGHT_SOURCE + r'\b', re.I)
+CROSS_LEFT = re.compile(LEFT_V + r'[^.\n]{0,90}?' + CROSS_ORIGIN_VERB + r'\s+(?:from|off|of)\s+' + SOURCE_LEAD + LEFT_SOURCE + r'\b', re.I)
 IA       = re.compile(r'inter[\-\s]?arterial', re.I)
 PA_RX    = re.compile(r'from\s+the\s+(?:main\s+)?pulmonary\s+artery|alcapa|arcapa', re.I)
 
 NEG = re.compile(r'\b(?:no|not|without|neither|rather than|versus|vs\.?|normal)\b', re.I)
 NORMAL_SENT = re.compile(r'arise[s]?\s+from\s+(?:their|its)\s+expected|expected\s+(?:sinus|location|position)|no\s+coronary\s+anomaly|normal\s+(?:in\s+)?origin|no\s+(?:evidence\s+of\s+)?(?:anomalous|interarterial|inter-arterial)', re.I)
+CAD_RADS_BOILERPLATE_BLOCK = re.compile(
+    r'\bCAD-RADS(?:\s+\d(?:\.\d)?)?(?:\s+CATEGORIES)?\b'
+    r'.*?\b(?:grading scale|modifiers|exceptions?:\s+identification|example:\s+anomalous coronary artery|adapted from cury)\b'
+    r'.*?(?=(?:\n\s*\d+\.\s+|\n\s*IMPRESSION:|\Z))',
+    re.I | re.S,
+)
+SOFT_LINEBREAK = re.compile(r'(?<![.:])\n\s*(?!\s*[A-Za-z][A-Za-z /&()]{0,40}\s*:)', re.I)
 
 def side_from_vessel(v):
     v = v.lower()
@@ -76,7 +93,7 @@ def items(field):
         parts = re.split(r'(?<=[.])\s+', field)
     return [p.strip() for p in parts if p.strip()]
 
-EXPLICIT_KINDS = {'anom_of','side_an','opp','mis'}
+EXPLICIT_KINDS = {'anom_of','side_an','opp','mis','cross_origin'}
 
 def analyze(text):
     """Return (relevant, pre|post, laterality, evidence, flags, reason) for one report's text."""
@@ -85,9 +102,11 @@ def analyze(text):
     field = ' \n '.join(x for x in (impr, coro) if x)
     if not field:
         field = re.sub(r'CLINICAL HISTORY:.*?(?=COMPARISON:|PROCEDURE|TECHNIQUE:|FINDINGS:|\Z)', ' ', text, flags=re.I|re.S)
+    field = CAD_RADS_BOILERPLATE_BLOCK.sub(' ', field)
 
     hits = []; pa = False
     for it in items(field):
+        it = SOFT_LINEBREAK.sub(' ', it)
         if NORMAL_SENT.search(it) and not re.search(r'anomalous|aberrant|ectopic', it, re.I):
             continue
         for m in PA_RX.finditer(it):
@@ -103,6 +122,8 @@ def analyze(text):
         for m in MIS_RCA.finditer(it):     add('mis',     'RCA', m)
         for m in MIS_RCA2.finditer(it):    add('mis',     'RCA', m)
         for m in MIS_LEFT.finditer(it):    add('mis',     'LEFT', m)
+        for m in CROSS_RCA.finditer(it):   add('cross_origin', 'RCA', m)
+        for m in CROSS_LEFT.finditer(it):  add('cross_origin', 'LEFT', m)
         for m in LEX_SINGLE.finditer(it):  add('single',  'SINGLE', m)
         for m in LEX_COMMON.finditer(it):  add('common',  'OTHER', m)
         for m in IA.finditer(it):          add('ia',      side_near(it, m.start()) or 'UNSPEC', m)

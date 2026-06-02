@@ -38,6 +38,10 @@ export const ENTITY_DEFINITIONS: Record<string, string> = {
   left_sinus: "left coronary sinus of Valsalva (LS) as the site of origin",
   right_sinus: "right coronary sinus of Valsalva (RS) as the site of origin",
   nonfacing_sinus: "nonfacing / noncoronary sinus (NS) as the site of origin",
+  // Operational reading: covers qualitative "high takeoff at/near the STJ", not
+  // only the strict HO threshold, since reports rarely state the measurement.
+  // Rationale in resolverGoldenSet.ts (Sinus / ostium). level_i..level_iv carry
+  // the precise measured height.
   high_origin: "high origin / high takeoff (HO): ostium positioned high, at or above the sinotubular junction; formally >=5 mm or >20% of sinus depth above the STJ",
   left_right_juxtacommissural: "origin at the left-right commissure (LR)",
   left_nonfacing_juxtacommissural: "origin at the left-nonfacing commissure (LN)",

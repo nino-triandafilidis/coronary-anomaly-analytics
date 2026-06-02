@@ -7,7 +7,6 @@ import {
   Search,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -223,8 +222,10 @@ export function ProvenancePanel({ source, onClose, onOpenReport }: ProvenancePan
           </div>
         </div>
 
-        {/* Grouped report list */}
-        <ScrollArea className="min-h-0 flex-1">
+        {/* Grouped report list. A plain overflow container (not Radix ScrollArea,
+            whose display:table viewport grows to content width) so long snippets
+            stay within the panel and wrap. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-0.5 p-3">
             {groups.length === 0 && (
               <p className="px-3 py-10 text-center text-sm text-muted-foreground">
@@ -271,7 +272,7 @@ export function ProvenancePanel({ source, onClose, onOpenReport }: ProvenancePan
                         <span className="max-w-[96px] shrink-0 truncate font-mono text-xs font-semibold text-foreground">
                           {contributor.reportId}
                         </span>
-                        <span className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                        <span className="min-w-0 flex-1 break-words text-xs leading-relaxed text-muted-foreground">
                           <HighlightedSnippet
                             text={contributor.context?.trim() || contributor.matchedText}
                             match={contributor.matchedText}
@@ -294,7 +295,7 @@ export function ProvenancePanel({ source, onClose, onOpenReport }: ProvenancePan
               );
             })}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">

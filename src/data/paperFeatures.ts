@@ -262,11 +262,24 @@ export function isPaperTrackedFeature(term: string): boolean {
   return Boolean(resolvePaperFeature(term));
 }
 
+/**
+ * Sentinel stored in `paperFeatureId` when the #66 resolver judged a term out of
+ * scope / normal. Distinct from null, which means "not yet backfilled".
+ */
+export const NONE_PAPER_FEATURE_ID = "none";
+
 export function resolveParsedTermPaperFeature(term: ParsedTerm): PaperFeature | undefined {
+  // A stored paperFeatureId (written by the #66 LLM resolver) is authoritative.
+  // The NONE sentinel means the resolver explicitly judged the term out of scope
+  // / normal: honor it and do NOT fall through to the rule tiers, otherwise a
+  // rule-matchable wording (e.g. a normal "left sinus" origin) would still be
+  // counted. A real id wins too. A null/absent id means not-yet-backfilled, so
+  // fall through to the rule tiers unchanged.
+  if (term.paperFeatureId === NONE_PAPER_FEATURE_ID) return undefined;
   return (
+    (term.paperFeatureId ? PAPER_FEATURES_BY_ID.get(term.paperFeatureId) : undefined) ??
     resolvePaperFeature(term.normalizedName) ??
-    resolvePaperFeature(term.term) ??
-    (term.paperFeatureId ? PAPER_FEATURES_BY_ID.get(term.paperFeatureId) : undefined)
+    resolvePaperFeature(term.term)
   );
 }
 

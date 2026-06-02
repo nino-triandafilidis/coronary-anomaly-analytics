@@ -14,10 +14,11 @@
  * entity cannot ship without a definition.
  */
 
-import { PAPER_FEATURES, PAPER_FEATURE_IDS } from "@/data/paperFeatures";
+import { NONE_PAPER_FEATURE_ID, PAPER_FEATURES, PAPER_FEATURE_IDS } from "@/data/paperFeatures";
 
-/** The out-of-scope / normal-anatomy label, outside PAPER_FEATURES. */
-export const NONE_LABEL = "none" as const;
+/** The out-of-scope / normal-anatomy label, outside PAPER_FEATURES. Shared with
+ * the paperFeatureId sentinel so the stored value and the resolver label match. */
+export const NONE_LABEL = NONE_PAPER_FEATURE_ID;
 
 /**
  * One-line authoritative definition per paper entity, keyed by id. Kept in sync

@@ -92,6 +92,20 @@ describe.skipIf(!RUN_REAL)("backfillReports (real model)", () => {
         .filter(Boolean)
         .map((line) => JSON.parse(line));
 
+      // Fail loud before spending budget if the shape isn't one the default
+      // accessor reads (top-level findings or parseResult.parsedTerms).
+      const totalFindings = reports.reduce(
+        (n, r) => n + ((r.findings ?? r.parseResult?.parsedTerms ?? []) as unknown[]).length,
+        0
+      );
+      if (totalFindings === 0) {
+        throw new Error(
+          `No findings found in ${inPath} via the default accessor (top-level "findings" or ` +
+            `"parseResult.parsedTerms"). Check the report shape or pass a getFindings override ` +
+            `before spending API budget.`
+        );
+      }
+
       const { reports: out, summary } = await backfillReports(reports, createOpenAIResolver(), {
         batchSize: 25,
       });

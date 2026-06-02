@@ -617,6 +617,42 @@ export default function Analysis() {
     });
     return map;
   }, [filteredReports]);
+  const categoryContributors = useMemo(() => {
+    // Mirrors paperFeatureCategoryChartData: one contributor per report per
+    // category it has a tracked feature in (report-level, so the count matches).
+    const map = new Map<string, ProvenanceContributor[]>();
+    filteredReports.forEach((report) => {
+      const parsedTerms = getStoredParsedTerms(report);
+      const reportSubtypes = getReportAnomalousLeftSubtypes(
+        report.parseResult.anomalousLeftSubtypes,
+        parsedTerms
+      );
+      const repByCategory = new Map<string, ParsedTerm>();
+      parsedTerms.forEach((term) => {
+        const paperFeature = resolveParsedTermPaperFeature(term);
+        if (!paperFeature || repByCategory.has(paperFeature.category)) return;
+        repByCategory.set(paperFeature.category, term);
+      });
+      const categories = new Set(repByCategory.keys());
+      if (reportSubtypes.length > 0) categories.add("Anomalous vessel");
+      categories.forEach((category) => {
+        const list = map.get(category) ?? [];
+        const rep = repByCategory.get(category);
+        if (rep) {
+          list.push(termContributor(report, rep));
+        } else {
+          const subtype = reportSubtypes[0];
+          list.push({
+            reportId: report.id,
+            matchedText: (subtype?.rawText?.trim() || "anomalous coronary artery").replace(/\s+/g, " "),
+            context: subtype?.rawText,
+          });
+        }
+        map.set(category, list);
+      });
+    });
+    return map;
+  }, [filteredReports]);
   const coronaryContributors = useMemo(
     () =>
       contributorsByFeature(filteredReports, (term) => {
@@ -734,6 +770,15 @@ export default function Analysis() {
         ? reportCountSubtitle(distinctReportCount(contributors))
         : occurrenceSubtitle(contributors),
       splitByAssertion: !isSubtype,
+      contributors,
+    });
+  };
+  const openCategory = (label: string) => {
+    const contributors = categoryContributors.get(label) ?? [];
+    openProvenance({
+      title: label,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
       contributors,
     });
   };
@@ -999,6 +1044,7 @@ export default function Analysis() {
             featureRows={paperFeatureRows}
             loading={loading}
             onSelectRow={openPaperFeatureRow}
+            onSelectCategory={openCategory}
           />
 
           <Card>
@@ -1461,11 +1507,13 @@ function PaperFeatureCategoryChart({
   featureRows,
   loading,
   onSelectRow,
+  onSelectCategory,
 }: {
   data: HorizontalBarDatum[];
   featureRows: PaperFeatureRow[];
   loading: boolean;
   onSelectRow?: (row: PaperFeatureRow) => void;
+  onSelectCategory?: (label: string) => void;
 }) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const maxValue = Math.max(1, ...data.map((item) => item.value));
@@ -1498,29 +1546,58 @@ function PaperFeatureCategoryChart({
 
             return (
               <div key={item.label}>
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(item.label)}
-                  className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3 rounded-sm text-left"
-                >
-                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                    {isExpanded ? (
-                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                    )}
-                    <span className="truncate">{item.label}</span>
-                  </span>
-                  <div className="h-7 overflow-hidden rounded-md bg-muted">
-                    <div
-                      className="h-full rounded-md bg-primary transition-all"
-                      style={{ width: `${width}%` }}
-                    />
-                  </div>
-                  <span className="text-right text-sm font-medium tabular-nums text-foreground">
-                    {loading ? "..." : item.value}
-                  </span>
-                </button>
+                {(() => {
+                  const drillDisabled = !onSelectCategory || item.value === 0;
+                  const drillTitle = drillDisabled ? undefined : "Show source reports";
+                  return (
+                    <div className="grid w-full grid-cols-[minmax(150px,220px)_minmax(0,1fr)_48px] items-center gap-3">
+                      <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(item.label)}
+                          aria-label={isExpanded ? "Collapse category" : "Expand category"}
+                          className="shrink-0 rounded-sm transition-colors hover:text-foreground"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={drillDisabled}
+                          onClick={() => onSelectCategory?.(item.label)}
+                          title={drillTitle}
+                          className="truncate text-left transition-colors enabled:hover:text-foreground disabled:cursor-default"
+                        >
+                          {item.label}
+                        </button>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={drillDisabled}
+                        onClick={() => onSelectCategory?.(item.label)}
+                        title={drillTitle}
+                        className="h-7 overflow-hidden rounded-md bg-muted text-left disabled:cursor-default"
+                      >
+                        <div
+                          className="h-full rounded-md bg-primary transition-all"
+                          style={{ width: `${width}%` }}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={drillDisabled}
+                        onClick={() => onSelectCategory?.(item.label)}
+                        title={drillTitle}
+                        className="text-right text-sm font-medium tabular-nums text-foreground transition-colors enabled:hover:text-primary disabled:cursor-default"
+                      >
+                        {loading ? "..." : item.value}
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {isExpanded && !loading && (
                   <div className="mt-4 space-y-1.5">

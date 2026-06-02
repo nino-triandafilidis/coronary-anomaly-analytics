@@ -37,17 +37,39 @@ function filterBySide(
   return contributors.filter((c) => (c.assertion ?? "asserted") === side);
 }
 
+// Chars of surrounding quote to keep before the matched term so the green stays
+// visible without pushing the row past a few lines.
+const SNIPPET_LEAD = 56;
+
 function HighlightedSnippet({ text, match }: { text: string; match: string }) {
-  const index = match ? text.toLowerCase().indexOf(match.toLowerCase()) : -1;
-  if (index < 0) return <>{text}</>;
+  const clean = text.replace(/\s+/g, " ").trim();
+  const needle = match.replace(/\s+/g, " ").trim();
+  const index = needle ? clean.toLowerCase().indexOf(needle.toLowerCase()) : -1;
+
+  // Nothing distinct to highlight inside a longer quote (report-level evidence,
+  // or a context that doesn't contain the span): show the quote plainly rather
+  // than a lone green term.
+  if (index < 0 || clean.toLowerCase() === needle.toLowerCase()) {
+    return <span className="line-clamp-3">{clean}</span>;
+  }
+
+  // Window the quote around the match so the green term is visible even when the
+  // sentence is long; trim the lead to a word boundary and mark it with an ellipsis.
+  let start = Math.max(0, index - SNIPPET_LEAD);
+  if (start > 0) {
+    const space = clean.indexOf(" ", start);
+    if (space >= 0 && space < index) start = space + 1;
+  }
+  const lead = (start > 0 ? "… " : "") + clean.slice(start, index);
+
   return (
-    <>
-      {text.slice(0, index)}
+    <span className="line-clamp-3">
+      {lead}
       <mark className="bg-transparent font-semibold text-emerald-700 dark:text-emerald-400">
-        {text.slice(index, index + match.length)}
+        {clean.slice(index, index + needle.length)}
       </mark>
-      {text.slice(index + match.length)}
-    </>
+      {clean.slice(index + needle.length)}
+    </span>
   );
 }
 
@@ -132,7 +154,7 @@ export function ProvenancePanel({ source, onClose, onOpenReport }: ProvenancePan
     <Sheet open={open} onOpenChange={(next) => (next ? undefined : onClose())}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]"
+        className="flex w-full flex-col gap-0 p-0 sm:max-w-[600px] lg:max-w-[680px]"
       >
         {/* Header */}
         <div className="flex flex-col gap-4 border-b border-border px-5 pb-4 pt-5">

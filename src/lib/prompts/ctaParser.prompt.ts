@@ -377,8 +377,11 @@ EXCLUDE (these are scan/technique metadata, not findings):
   junction, sinus of Valsalva, coronary cusp, ostium. Extract these only inside
   an anomaly or feature ("high origin above the sinotubular junction"), never as
   a standalone term.
-- Numeric scores that are not an AAOCA feature, including a coronary calcium /
-  Agatston score (e.g. "Agatston score 0").
+- Numeric scores that are not an AAOCA feature. A coronary calcium / Agatston
+  score of 0 (a zero / normal result) is not a finding, do not emit it. A
+  nonzero calcium score, and any calcified plaque / coronary calcification /
+  atherosclerotic statement, is evidence of the in-scope atherosclerotic-lesion
+  / calcification feature and is kept.
 - Incidental non-coronary findings, even when asserted in FINDINGS or
   IMPRESSION: pulmonary embolism, pleural or pericardial effusion, atelectasis,
   pulmonary or thyroid nodules, ground-glass opacity, airway and mediastinal

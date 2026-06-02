@@ -42,7 +42,7 @@ export const ENTITY_DEFINITIONS: Record<string, string> = {
   // only the strict HO threshold, since reports rarely state the measurement.
   // Rationale in resolverGoldenSet.ts (Sinus / ostium). level_i..level_iv carry
   // the precise measured height.
-  high_origin: "high origin / high takeoff (HO): ostium positioned high, at or above the sinotubular junction; formally >=5 mm or >20% of sinus depth above the STJ",
+  high_origin: "high origin / high takeoff (HO): ostium arising high, at or above the sinotubular junction; formally >=5 mm or >20% of sinus depth above the STJ. A qualitative 'high takeoff' maps here; an explicitly-measured sub-threshold height is level_iii.",
   left_right_juxtacommissural: "origin at the left-right commissure (LR)",
   left_nonfacing_juxtacommissural: "origin at the left-nonfacing commissure (LN)",
   right_nonfacing_juxtacommissural: "origin at the right-nonfacing commissure (RN)",

@@ -147,16 +147,29 @@ function reportCountSubtitle(reports: number): string {
 }
 
 // Collect contributors per aggregate key, mirroring the same term->key selector
-// reportIncidence() uses for the count, so the drill-down can't diverge from it.
+// reportIncidence() uses for the count. The backing tables count per-report
+// incidence (a feature counts once per report per assertion), so dedupe by
+// (report, assertion) here: otherwise a report that mentions a feature twice
+// would render duplicate rows and inflate the panel's asserted/negated badges
+// past the report count shown in the table.
 function contributorsByFeature(
   reports: StoredParsedReport[],
   selectKey: (term: ParsedTerm) => string | null
 ): Map<string, ProvenanceContributor[]> {
   const map = new Map<string, ProvenanceContributor[]>();
+  const seen = new Map<string, Set<string>>();
   reports.forEach((report) => {
     getStoredParsedTerms(report).forEach((term) => {
       const key = selectKey(term);
       if (!key) return;
+      let seenForKey = seen.get(key);
+      if (!seenForKey) {
+        seenForKey = new Set<string>();
+        seen.set(key, seenForKey);
+      }
+      const dedupeKey = `${report.id}|${term.assertion}`;
+      if (seenForKey.has(dedupeKey)) return;
+      seenForKey.add(dedupeKey);
       const list = map.get(key) ?? [];
       list.push(termContributor(report, term));
       map.set(key, list);
@@ -766,9 +779,7 @@ export default function Analysis() {
       : paperFeatureContributors.get(row.id) ?? [];
     openProvenance({
       title: row.canonical,
-      subtitle: isSubtype
-        ? reportCountSubtitle(distinctReportCount(contributors))
-        : occurrenceSubtitle(contributors),
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
       splitByAssertion: !isSubtype,
       contributors,
     });
@@ -784,11 +795,11 @@ export default function Analysis() {
   };
   const openCoronaryRow = (key: string, name: string) => {
     const contributors = coronaryContributors.get(key) ?? [];
-    openProvenance({ title: name, subtitle: occurrenceSubtitle(contributors), splitByAssertion: true, contributors });
+    openProvenance({ title: name, subtitle: reportCountSubtitle(distinctReportCount(contributors)), splitByAssertion: true, contributors });
   };
   const openFeatureRow = (key: string, name: string) => {
     const contributors = featureTableContributors.get(key) ?? [];
-    openProvenance({ title: name, subtitle: occurrenceSubtitle(contributors), splitByAssertion: true, contributors });
+    openProvenance({ title: name, subtitle: reportCountSubtitle(distinctReportCount(contributors)), splitByAssertion: true, contributors });
   };
   const openBridgeGrade = (label: string) => {
     const key =

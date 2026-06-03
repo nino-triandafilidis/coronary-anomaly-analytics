@@ -270,6 +270,11 @@ export default function Dataset() {
                 Analysis Page
               </Button>
             </Link>
+            <Link to="/filtering">
+              <Button variant="ghost" size="sm">
+                Filtering Page
+              </Button>
+            </Link>
             <Link to="/">
               <Button variant="ghost" size="sm">
                 Back to Analyzer

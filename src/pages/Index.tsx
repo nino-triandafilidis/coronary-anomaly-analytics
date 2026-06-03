@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, BarChart3, Heart, Loader2, BookmarkCheck } from "lucide-react";
+import { Activity, BarChart3, Filter, Heart, Loader2, BookmarkCheck } from "lucide-react";
 import { ReportInput, type ReportSubmission } from "@/components/ReportInput";
 import { ReportViewer } from "@/components/ReportViewer";
 import { FrequencyPanel } from "@/components/FrequencyPanel";
@@ -306,6 +306,13 @@ const Index = () => {
             >
               <BarChart3 className="h-3.5 w-3.5 text-primary" />
               <span>Analysis Page</span>
+            </Link>
+            <Link
+              to="/filtering"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Filter className="h-3.5 w-3.5 text-primary" />
+              <span>Filtering Page</span>
             </Link>
             <Link
               to="/dataset"

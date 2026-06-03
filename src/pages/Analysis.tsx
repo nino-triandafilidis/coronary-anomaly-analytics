@@ -120,8 +120,35 @@ interface HorizontalBarDatum {
   value: number;
 }
 
+interface SummaryStats {
+  mean: number;
+  median: number;
+  standardDeviation: number;
+}
+
 type FeatureSortKey = keyof NormalizedFeatureRow;
 type FeatureSortDirection = "asc" | "desc";
+
+function summarizeNumericValues(values: number[]): SummaryStats | null {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  if (finiteValues.length === 0) return null;
+
+  const sorted = [...finiteValues].sort((a, b) => a - b);
+  const mean = finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length;
+  const midpoint = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 0
+      ? (sorted[midpoint - 1] + sorted[midpoint]) / 2
+      : sorted[midpoint];
+  const variance =
+    finiteValues.reduce((sum, value) => sum + (value - mean) ** 2, 0) / finiteValues.length;
+
+  return {
+    mean,
+    median,
+    standardDeviation: Math.sqrt(variance),
+  };
+}
 
 export default function Analysis() {
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
@@ -187,6 +214,13 @@ export default function Analysis() {
       ),
     [filteredReports]
   );
+  const interarterialCourseLengthStats = useMemo(
+    () =>
+      summarizeNumericValues(
+        interarterialCourseLengthMeasurements.map((measurement) => measurement.value)
+      ),
+    [interarterialCourseLengthMeasurements]
+  );
   const interarterialCourseLengthHistogram = useMemo(
     () =>
       buildInterarterialCourseLengthHistogram(
@@ -202,6 +236,13 @@ export default function Analysis() {
         )
       ),
     [filteredReports]
+  );
+  const intramuralCourseLengthStats = useMemo(
+    () =>
+      summarizeNumericValues(
+        intramuralCourseLengthMeasurements.map((measurement) => measurement.value)
+      ),
+    [intramuralCourseLengthMeasurements]
   );
   const intramuralCourseLengthHistogram = useMemo(
     () =>
@@ -461,6 +502,13 @@ export default function Analysis() {
       bridgeCounts,
     };
   }, [filteredReports]);
+  const bridgeCountStats = useMemo(
+    () =>
+      summarizeNumericValues(
+        filteredReports.map((report) => report.parseResult.myocardialBridgeSummary?.bridgeCount ?? 0)
+      ),
+    [filteredReports]
+  );
   const bridgeCountChartData = useMemo<HorizontalBarDatum[]>(
     () => [
       { label: "Not Present", value: bridgeDashboardStats.bridgeCounts.notPresent },
@@ -827,6 +875,8 @@ export default function Analysis() {
             title="Inter-arterial Course Length Distribution"
             loadingLabel="Loading inter-arterial course length values..."
             emptyLabel="No inter-arterial course length values found."
+            stats={interarterialCourseLengthStats}
+            statsUnit="mm"
           />
         </section>
 
@@ -838,6 +888,8 @@ export default function Analysis() {
             title="Intramural Course Length Distribution"
             loadingLabel="Loading intramural course length values..."
             emptyLabel="No intramural course length values found."
+            stats={intramuralCourseLengthStats}
+            statsUnit="mm"
           />
         </section>
 
@@ -857,6 +909,7 @@ export default function Analysis() {
               subtitle={`${bridgeDashboardStats.bridgePatients} patients with bridges; ${bridgeDashboardStats.multipleBridgePatients} with more than one`}
               data={bridgeCountChartData}
               loading={loading}
+              stats={bridgeCountStats}
             />
             <HorizontalBarChart
               title="Highest Bridge Grade"
@@ -1124,19 +1177,26 @@ function HorizontalBarChart({
   subtitle,
   data,
   loading,
+  stats,
+  statsUnit,
 }: {
   title: string;
   subtitle: string;
   data: HorizontalBarDatum[];
   loading: boolean;
+  stats?: SummaryStats | null;
+  statsUnit?: string;
 }) {
   const maxValue = Math.max(1, ...data.map((item) => item.value));
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      <CardHeader className="flex flex-col gap-3 space-y-0 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle className="text-base">{title}</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        <SummaryStatsDisplay stats={stats} unit={statsUnit} loading={loading} />
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -1160,6 +1220,37 @@ function HorizontalBarChart({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function SummaryStatsDisplay({
+  stats,
+  unit,
+  loading,
+}: {
+  stats?: SummaryStats | null;
+  unit?: string;
+  loading: boolean;
+}) {
+  if (loading || !stats) return null;
+
+  const formatValue = (value: number) => {
+    const formatted = Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+    return unit ? `${formatted} ${unit}` : formatted;
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground md:justify-end">
+      <span className="rounded-md bg-muted px-2 py-1">
+        Mean <span className="font-semibold tabular-nums text-foreground">{formatValue(stats.mean)}</span>
+      </span>
+      <span className="rounded-md bg-muted px-2 py-1">
+        Median <span className="font-semibold tabular-nums text-foreground">{formatValue(stats.median)}</span>
+      </span>
+      <span className="rounded-md bg-muted px-2 py-1">
+        SD <span className="font-semibold tabular-nums text-foreground">{formatValue(stats.standardDeviation)}</span>
+      </span>
+    </div>
   );
 }
 
@@ -1272,6 +1363,8 @@ function CourseLengthHistogram({
   title,
   loadingLabel,
   emptyLabel,
+  stats,
+  statsUnit,
 }: {
   bins: CourseLengthHistogramBin[];
   measurementCount: number;
@@ -1279,16 +1372,21 @@ function CourseLengthHistogram({
   title: string;
   loadingLabel: string;
   emptyLabel: string;
+  stats?: SummaryStats | null;
+  statsUnit?: string;
 }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          {loading
-            ? "Loading measurements..."
-            : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports`}
-        </p>
+      <CardHeader className="flex flex-col gap-3 space-y-0 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle className="text-base">{title}</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {loading
+              ? "Loading measurements..."
+              : `${measurementCount} explicit length measurement${measurementCount === 1 ? "" : "s"} across parsed reports`}
+          </p>
+        </div>
+        <SummaryStatsDisplay stats={stats} unit={statsUnit} loading={loading} />
       </CardHeader>
       <CardContent>
         {loading ? (

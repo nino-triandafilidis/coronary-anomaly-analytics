@@ -74,6 +74,17 @@ import {
   type LeftSubtypeFilter,
 } from "@/data/laterality";
 import {
+  RISK_FLAGS,
+  SPONSOR_FLAG,
+  countCooccurrence,
+  detectReportRiskFlags,
+  flagPrevalence,
+  type CooccurrenceCounts,
+  type FlagPrevalence,
+  type RiskFlag,
+  type RiskFlagKey,
+} from "@/data/riskCooccurrence";
+import {
   canonicalFeature,
   normalizeCoronaryNarrowingFeature,
   reportIncidence,
@@ -327,6 +338,57 @@ export default function Analysis() {
     () => reportsWithSide.filter(({ side }) => side.left).length,
     [reportsWithSide]
   );
+
+  // --- Risk-feature co-occurrence (issue: origin & risk on the right cohort). ---
+  // Fixed to R-AAOCA cases vs the L-AAOCA control, independent of the page-level
+  // laterality filter: the whole point is the right-versus-control contrast.
+  const riskCohorts = useMemo(() => {
+    const detect = (predicate: (side: ReturnType<typeof deriveReportLaterality>) => boolean) =>
+      reportsWithSide
+        .filter(({ side }) => predicate(side))
+        .map(({ report, side }) => ({ report, ...detectReportRiskFlags(report, side) }));
+    return { right: detect((side) => side.right), left: detect((side) => side.left) };
+  }, [reportsWithSide]);
+  const riskCounts = useMemo<CooccurrenceCounts>(
+    () => countCooccurrence(riskCohorts.right.map((d) => ({ reportId: d.reportId, flags: d.flags }))),
+    [riskCohorts]
+  );
+  const riskLeftCounts = useMemo<CooccurrenceCounts>(
+    () => countCooccurrence(riskCohorts.left.map((d) => ({ reportId: d.reportId, flags: d.flags }))),
+    [riskCohorts]
+  );
+  const riskRightPrevalence = useMemo(
+    () => flagPrevalence(riskCounts.diagonal, riskCounts.total),
+    [riskCounts]
+  );
+  const riskLeftPrevalence = useMemo(
+    () => flagPrevalence(riskLeftCounts.diagonal, riskLeftCounts.total),
+    [riskLeftCounts]
+  );
+  // Cell -> contributing reports, mirroring the count above so the drill-down can
+  // never diverge from the number on screen. Diagonal cells key on the flag; pair
+  // cells on "a|b" with a,b in RISK_FLAGS order.
+  const riskContributors = useMemo(() => {
+    const map = new Map<string, ProvenanceContributor[]>();
+    const order = RISK_FLAGS.map((flag) => flag.key);
+    const add = (key: string, report: StoredParsedReport, term: ParsedTerm) => {
+      const list = map.get(key) ?? [];
+      list.push(termContributor(report, term));
+      map.set(key, list);
+    };
+    riskCohorts.right.forEach(({ report, flags, evidence }) => {
+      const present = order.filter((key) => flags.has(key));
+      present.forEach((key, i) => {
+        const term = evidence.get(key);
+        if (!term) return;
+        add(key, report, term);
+        for (let j = i + 1; j < present.length; j += 1) {
+          add(`${key}|${present[j]}`, report, term);
+        }
+      });
+    });
+    return map;
+  }, [riskCohorts]);
   const filteredReports = useMemo(
     () =>
       reportsWithSide
@@ -912,6 +974,18 @@ export default function Analysis() {
       contributors,
     });
   };
+  const openRiskCell = (a: RiskFlagKey, b: RiskFlagKey, label: string) => {
+    const order = RISK_FLAGS.map((flag) => flag.key);
+    const key =
+      a === b ? a : order.indexOf(a) < order.indexOf(b) ? `${a}|${b}` : `${b}|${a}`;
+    const contributors = riskContributors.get(key) ?? [];
+    openProvenance({
+      title: `Origin & risk — ${label}`,
+      subtitle: reportCountSubtitle(distinctReportCount(contributors)),
+      splitByAssertion: false,
+      contributors,
+    });
+  };
   const openLengthBin = (
     title: string,
     binContributors: Map<string, ProvenanceContributor[]>,
@@ -1012,6 +1086,12 @@ export default function Analysis() {
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 Paper Features
+              </a>
+              <a
+                href="#origin-risk"
+                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Origin and risk
               </a>
               <a
                 href="#coronary-narrowing"
@@ -1207,6 +1287,27 @@ export default function Analysis() {
               </Table>
             </CardContent>
           </Card>
+        </section>
+
+        <section id="origin-risk" className="mt-10 scroll-mt-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-foreground">Origin and Risk (R-AAOCA)</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              How the high-risk features cluster in the right-sided cohort, with the left cohort as a control.
+              Slit-like ostium is foregrounded for the sponsor.
+            </p>
+          </div>
+
+          <RiskCooccurrenceMatrix
+            flags={RISK_FLAGS}
+            counts={riskCounts}
+            rightPrevalence={riskRightPrevalence}
+            leftPrevalence={riskLeftPrevalence}
+            leftTotal={riskLeftCounts.total}
+            loading={loading}
+            sponsorKey={SPONSOR_FLAG}
+            onSelectCell={openRiskCell}
+          />
         </section>
 
         <section id="coronary-narrowing" className="mt-10 scroll-mt-6">
@@ -1817,6 +1918,184 @@ function BridgeCountGradeMatrix({
             </span>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PrevalenceBar({
+  tone,
+  pct,
+  loading,
+}: {
+  tone: "right" | "left";
+  pct: number;
+  loading: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-2.5 text-[10px] font-medium text-muted-foreground">
+        {tone === "right" ? "R" : "L"}
+      </span>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+        <div
+          className={
+            "h-full rounded-full " + (tone === "right" ? "bg-primary" : "bg-muted-foreground/50")
+          }
+          style={{ width: loading ? "0%" : `${pct}%` }}
+        />
+      </div>
+      <span className="w-9 text-right text-[11px] tabular-nums text-muted-foreground">
+        {loading ? "…" : `${pct}%`}
+      </span>
+    </div>
+  );
+}
+
+// Symmetric risk-feature co-occurrence on the right cohort, with the left cohort
+// reduced to a control-prevalence column. Diagonal = reports with the feature,
+// off-diagonal = reports with both; shading scales with the pair count. Mirrors
+// BridgeCountGradeMatrix so the drill-down feels the same.
+function RiskCooccurrenceMatrix({
+  flags,
+  counts,
+  rightPrevalence,
+  leftPrevalence,
+  leftTotal,
+  loading,
+  sponsorKey,
+  onSelectCell,
+}: {
+  flags: RiskFlag[];
+  counts: CooccurrenceCounts;
+  rightPrevalence: Record<RiskFlagKey, FlagPrevalence>;
+  leftPrevalence: Record<RiskFlagKey, FlagPrevalence>;
+  leftTotal: number;
+  loading: boolean;
+  sponsorKey: RiskFlagKey;
+  onSelectCell: (a: RiskFlagKey, b: RiskFlagKey, label: string) => void;
+}) {
+  const value = (a: RiskFlagKey, b: RiskFlagKey) =>
+    a === b ? counts.diagonal[a] : counts.pair[a][b];
+  const maxPair = Math.max(
+    1,
+    ...flags.flatMap((row, i) =>
+      flags.slice(i + 1).map((col) => counts.pair[row.key][col.key])
+    )
+  );
+  const template = `minmax(132px,1.3fr) repeat(${flags.length}, minmax(42px,1fr)) minmax(150px,1.1fr)`;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Risk-feature co-occurrence</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Right cohort (n = {counts.total}); left shown as a control (n = {leftTotal}). Diagonal = reports with the
+          feature, off-diagonal = reports with both; click a cell for source reports. Fixed to the R-AAOCA cohort, so
+          the laterality filter above does not change it.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {counts.total === 0 ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            No R-AAOCA reports in the dataset yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="min-w-[760px] space-y-1.5">
+              <div className="grid items-end gap-1.5" style={{ gridTemplateColumns: template }}>
+                <span />
+                {flags.map((col) => (
+                  <span
+                    key={col.key}
+                    title={col.label}
+                    className={
+                      "pb-1 text-center text-[11px] " +
+                      (col.key === sponsorKey
+                        ? "rounded-t-md bg-[hsl(var(--highlight)/0.4)] font-semibold text-foreground"
+                        : "font-medium text-muted-foreground")
+                    }
+                  >
+                    {col.short}
+                  </span>
+                ))}
+                <span className="pb-1 text-right text-[11px] font-medium text-muted-foreground">
+                  Prevalence · R / L
+                </span>
+              </div>
+
+              {flags.map((row, i) => {
+                const isSponsorRow = row.key === sponsorKey;
+                return (
+                  <div
+                    key={row.key}
+                    className="grid items-center gap-1.5"
+                    style={{ gridTemplateColumns: template }}
+                  >
+                    <span
+                      title={row.label}
+                      className={
+                        "truncate pr-2 text-sm " +
+                        (isSponsorRow ? "font-semibold text-foreground" : "font-medium text-muted-foreground")
+                      }
+                    >
+                      {row.label}
+                    </span>
+                    {flags.map((col, j) => {
+                      const v = value(row.key, col.key);
+                      const isDiag = i === j;
+                      const alpha = isDiag || v === 0 ? 0 : Math.max(0.12, v / maxPair);
+                      const onPrimary = alpha >= 0.5;
+                      const disabled = loading || v === 0;
+                      return (
+                        <button
+                          key={col.key}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() =>
+                            onSelectCell(
+                              row.key,
+                              col.key,
+                              isDiag ? row.label : `${row.label} × ${col.label}`
+                            )
+                          }
+                          title={
+                            disabled
+                              ? undefined
+                              : isDiag
+                                ? `${row.label}: ${v} reports`
+                                : "Show source reports"
+                          }
+                          className={
+                            "flex h-11 items-center justify-center rounded-md text-sm font-medium tabular-nums transition enabled:hover:ring-2 enabled:hover:ring-ring/60 disabled:cursor-default " +
+                            (isDiag
+                              ? "bg-muted text-foreground"
+                              : v === 0
+                                ? "bg-muted/40 text-muted-foreground"
+                                : onPrimary
+                                  ? "text-primary-foreground"
+                                  : "text-foreground")
+                          }
+                          style={
+                            !isDiag && v > 0
+                              ? { backgroundColor: `hsl(var(--primary) / ${alpha.toFixed(3)})` }
+                              : undefined
+                          }
+                        >
+                          {loading ? "…" : v === 0 ? "" : v}
+                        </button>
+                      );
+                    })}
+                    <div className="flex flex-col gap-1 pl-1">
+                      <PrevalenceBar tone="right" pct={rightPrevalence[row.key].pct} loading={loading} />
+                      <PrevalenceBar tone="left" pct={leftPrevalence[row.key].pct} loading={loading} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

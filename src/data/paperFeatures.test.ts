@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Assertion, ParsedTerm } from "@/data/parseTypes";
 import {
   enrichParsedTermWithPaperFeature,
+  resolveParsedTermPaperFeature,
   resolvePaperFeature,
   shouldIncludeInNormalizedFrequency,
 } from "@/data/paperFeatures";
@@ -57,6 +58,33 @@ describe("paper feature resolution", () => {
       "anomalous_left_intramural_interarterial"
     );
     expect(resolvePaperFeature("L-AAOCA")?.id).toBe("l_aaoca");
+  });
+
+  it("prefers a stored paperFeatureId over the rule-based name match (#66 resolver wins)", () => {
+    // "intramural course" rule-matches intramural_course, but the resolver stored
+    // intraseptal_course from context; the stored id must win.
+    const corrected: ParsedTerm = {
+      ...parsedTerm("intramural course", "asserted"),
+      paperFeatureId: "intraseptal_course",
+    };
+    expect(resolveParsedTermPaperFeature(corrected)?.id).toBe("intraseptal_course");
+    // with no stored id, it falls through to the rule match unchanged
+    expect(resolveParsedTermPaperFeature(parsedTerm("intramural course", "asserted"))?.id).toBe(
+      "intramural_course"
+    );
+  });
+
+  it("honors a stored none sentinel as authoritative out-of-scope (no rule fallthrough)", () => {
+    // "left sinus" rule-matches left_sinus, but the resolver judged this mention none.
+    const outOfScope: ParsedTerm = {
+      ...parsedTerm("left sinus", "asserted"),
+      paperFeatureId: "none",
+    };
+    expect(resolveParsedTermPaperFeature(outOfScope)).toBeUndefined();
+    // sanity: the same wording rule-matches when not backfilled
+    expect(resolveParsedTermPaperFeature(parsedTerm("left sinus", "asserted"))?.id).toBe(
+      "left_sinus"
+    );
   });
 });
 

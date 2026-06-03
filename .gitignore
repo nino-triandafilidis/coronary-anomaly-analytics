@@ -46,3 +46,4 @@ AAOCA CTA Report Copies/
 cohort-pipeline/aaoca_preprocessed/
 cohort-pipeline/*.csv
 cohort-pipeline/*.jsonl
+outputs/

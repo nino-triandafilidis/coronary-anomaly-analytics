@@ -42,6 +42,7 @@ import type {
   ReviewableTerm,
   ReviewDecisionRecord,
 } from "@/data/parseTypes";
+import { deriveReportLaterality } from "@/data/laterality";
 import { useToast } from "@/hooks/use-toast";
 
 function stripReviewStatus(term: ReviewableTerm): ParsedTerm {
@@ -67,6 +68,44 @@ function mergeReviewDecisions(
     ...(previous ?? []).filter((decision) => !nextKeys.has(getReviewDecisionKey(decision))),
     ...next,
   ];
+}
+
+function getLateralityBadge(report: StoredParsedReport): {
+  label: string;
+  className: string;
+} {
+  const laterality = deriveReportLaterality(report);
+  const leftSubtypeLabels = [
+    laterality.leftSubtypes.has("intraconal_left") ? "Intraconal" : null,
+    laterality.leftSubtypes.has("intramural_interarterial_left") ? "Intramural/IA" : null,
+  ].filter(Boolean);
+
+  if (laterality.right && laterality.left) {
+    return {
+      label: `Right (R-AAOCA) + Left${
+        leftSubtypeLabels.length > 0 ? ` · ${leftSubtypeLabels.join(" + ")}` : ""
+      }`,
+      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+    };
+  }
+  if (laterality.right) {
+    return {
+      label: "Right (R-AAOCA)",
+      className: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
+    };
+  }
+  if (laterality.left) {
+    return {
+      label: `Left${
+        leftSubtypeLabels.length > 0 ? ` · ${leftSubtypeLabels.join(" + ")}` : ""
+      }`,
+      className: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-200",
+    };
+  }
+  return {
+    label: "Unspecified",
+    className: "bg-muted text-muted-foreground",
+  };
 }
 
 export default function Dataset() {
@@ -365,9 +404,21 @@ export default function Dataset() {
             <DialogHeader>
               <div className="flex items-start justify-between gap-4 pr-8">
                 <div>
-                  <DialogTitle className="leading-snug">
-                    {previewReport?.id ?? "Report preview"}
-                  </DialogTitle>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DialogTitle className="leading-snug">
+                      {previewReport?.id ?? "Report preview"}
+                    </DialogTitle>
+                    {previewReport && (
+                      <span
+                        className={
+                          "rounded-full px-2 py-0.5 text-[11px] font-semibold " +
+                          getLateralityBadge(previewReport).className
+                        }
+                      >
+                        {getLateralityBadge(previewReport).label}
+                      </span>
+                    )}
+                  </div>
                   {savingError && (
                     <p className="mt-2 text-xs text-destructive">{savingError}</p>
                   )}

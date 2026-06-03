@@ -289,19 +289,19 @@ export default function Filtering() {
             </div>
           </Link>
           <div className="flex items-center gap-2">
-            <Link to="/">
-              <Button variant="ghost" size="sm">
-                Analyzer
-              </Button>
-            </Link>
             <Link to="/analysis">
               <Button variant="ghost" size="sm">
-                Analysis
+                Analysis Page
               </Button>
             </Link>
             <Link to="/dataset">
               <Button variant="ghost" size="sm">
-                Dataset
+                Reports in Database
+              </Button>
+            </Link>
+            <Link to="/">
+              <Button variant="ghost" size="sm">
+                Back to Analyzer
               </Button>
             </Link>
           </div>

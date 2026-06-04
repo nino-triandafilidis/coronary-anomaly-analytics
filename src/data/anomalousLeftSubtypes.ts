@@ -1,22 +1,12 @@
 import type {
   AnomalousLeftSubtypeEntry,
   AnomalousLeftSubtype,
-  ParsedTerm,
 } from "@/data/parseTypes";
 
 const VALID_SUBTYPES = new Set<AnomalousLeftSubtype>([
   "intraconal_left",
   "intramural_interarterial_left",
 ]);
-
-const LEFT_VESSEL_PATTERN =
-  /\b(?:left coronary artery|left main(?: coronary artery)?|lmca|lad|left anterior descending(?: artery)?|lcx|left circumflex(?: artery)?)\b/i;
-const INTRACONAL_PATTERN =
-  /\b(?:intraconal|intraseptal|subpulmonic|infundibular|conal[\s-]?septal)\b/i;
-const INTRAMURAL_INTERARTERIAL_PATTERN =
-  /\b(?:intramural|inter[\s-]?arterial|between the aorta and (?:the )?pulmonary artery)\b/i;
-const EXPLICIT_LEFT_SUBTYPE_PATTERN =
-  /\b(?:intraconal|intraseptal|subpulmonic|infundibular|conal[\s-]?septal|intramural|inter[\s-]?arterial)\s+left\b/i;
 
 function normalizeEntryKey(entry: AnomalousLeftSubtypeEntry): string {
   return [
@@ -63,36 +53,6 @@ export function cleanAnomalousLeftSubtypes(
   return cleaned;
 }
 
-export function resolveAnomalousLeftSubtypesFromTerm(
-  term: Pick<ParsedTerm, "term" | "normalizedName" | "context" | "assertion">
-): AnomalousLeftSubtypeEntry[] {
-  // A negated finding ("No intramural course of the left main") reports the
-  // subtype as absent. The keyword patterns below can't tell asserted from
-  // ruled-out on their own, so guard here or negated terms inflate the counts.
-  if (term.assertion === "negated") return [];
-
-  const rawText = term.term.trim() || term.normalizedName.trim();
-  const evidence = `${term.normalizedName} ${term.term} ${term.context}`;
-  if (!LEFT_VESSEL_PATTERN.test(evidence) && !EXPLICIT_LEFT_SUBTYPE_PATTERN.test(evidence)) {
-    return [];
-  }
-
-  const subtypes: AnomalousLeftSubtypeEntry[] = [];
-  if (INTRACONAL_PATTERN.test(evidence)) {
-    subtypes.push({ subtype: "intraconal_left", rawText });
-  }
-  if (INTRAMURAL_INTERARTERIAL_PATTERN.test(evidence)) {
-    subtypes.push({ subtype: "intramural_interarterial_left", rawText });
-  }
-  return subtypes;
-}
-
-export function getReportAnomalousLeftSubtypes(
-  entries: unknown,
-  parsedTerms: ParsedTerm[]
-): AnomalousLeftSubtypeEntry[] {
-  return cleanAnomalousLeftSubtypes([
-    ...cleanAnomalousLeftSubtypes(entries),
-    ...parsedTerms.flatMap(resolveAnomalousLeftSubtypesFromTerm),
-  ]);
+export function getReportAnomalousLeftSubtypes(entries: unknown): AnomalousLeftSubtypeEntry[] {
+  return cleanAnomalousLeftSubtypes(entries);
 }

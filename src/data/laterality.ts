@@ -44,10 +44,9 @@ export interface ReportLaterality {
 export function deriveReportLaterality(report: StoredParsedReport): ReportLaterality {
   const parsedTerms = getStoredParsedTerms(report);
   const leftSubtypes = new Set<AnomalousLeftSubtype>(
-    getReportAnomalousLeftSubtypes(
-      report.parseResult.anomalousLeftSubtypes,
-      parsedTerms
-    ).map((entry) => entry.subtype)
+    getReportAnomalousLeftSubtypes(report.parseResult.anomalousLeftSubtypes).map(
+      (entry) => entry.subtype
+    )
   );
 
   if (report.side === "RCA") return { right: true, left: false, leftSubtypes };

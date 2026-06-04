@@ -8,6 +8,8 @@ export interface PaperFeature {
   canonical: string;
   aliases: string[];
   trackingRole: PaperFeatureTrackingRole;
+  shortLabel?: string;
+  description?: string;
 }
 
 const feature = (
@@ -15,13 +17,15 @@ const feature = (
   category: string,
   canonical: string,
   aliases: string[] = [],
-  trackingRole: PaperFeatureTrackingRole = "feature"
+  trackingRole: PaperFeatureTrackingRole = "feature",
+  metadata: Pick<PaperFeature, "shortLabel" | "description"> = {}
 ): PaperFeature => ({
   id,
   category,
   canonical,
   aliases,
   trackingRole,
+  ...metadata,
 });
 
 export const PAPER_FEATURES: PaperFeature[] = [
@@ -64,7 +68,7 @@ export const PAPER_FEATURES: PaperFeature[] = [
   feature(
     "anomalous_left_intramural_interarterial",
     "Anomalous vessel",
-    "intramural/inter-arterial anomalous left coronary artery",
+    "Left AAOCA with intramural/interarterial course",
     [
       "intramural left",
       "inter-arterial left",
@@ -79,7 +83,13 @@ export const PAPER_FEATURES: PaperFeature[] = [
       "LAD with intramural course",
       "LCX with inter-arterial course",
       "LCX with intramural course",
-    ]
+    ],
+    "feature",
+    {
+      shortLabel: "Left AAOCA — intramural/interarterial",
+      description:
+        "Counts left-sided anomalous coronary arteries, such as anomalous LMCA/LAD/LCX, only when the anomalous left-sided vessel itself has an intramural and/or interarterial course.",
+    }
   ),
 
   feature("left_sinus", "Sinus of origin", "left sinus", [
@@ -217,6 +227,11 @@ export const PAPER_FEATURES: PaperFeature[] = [
 
 export const PAPER_FEATURE_IDS = new Set(PAPER_FEATURES.map((paperFeature) => paperFeature.id));
 
+const STRUCTURED_ONLY_PAPER_FEATURE_IDS = new Set([
+  "anomalous_left_intraconal",
+  "anomalous_left_intramural_interarterial",
+]);
+
 const PAPER_FEATURES_BY_ID = new Map(
   PAPER_FEATURES.map((paperFeature) => [paperFeature.id, paperFeature])
 );
@@ -239,6 +254,8 @@ function normalizePaperFeatureTerm(term: string): string {
 const PAPER_FEATURE_LOOKUP = new Map<string, PaperFeature>();
 
 PAPER_FEATURES.forEach((paperFeature) => {
+  if (STRUCTURED_ONLY_PAPER_FEATURE_IDS.has(paperFeature.id)) return;
+
   [paperFeature.canonical, ...paperFeature.aliases].forEach((name) => {
     PAPER_FEATURE_LOOKUP.set(normalizePaperFeatureTerm(name), paperFeature);
   });
@@ -276,6 +293,9 @@ export function resolveParsedTermPaperFeature(term: ParsedTerm): PaperFeature | 
   // counted. A real id wins too. A null/absent id means not-yet-backfilled, so
   // fall through to the rule tiers unchanged.
   if (term.paperFeatureId === NONE_PAPER_FEATURE_ID) return undefined;
+  if (term.paperFeatureId && STRUCTURED_ONLY_PAPER_FEATURE_IDS.has(term.paperFeatureId)) {
+    return undefined;
+  }
   return (
     (term.paperFeatureId ? PAPER_FEATURES_BY_ID.get(term.paperFeatureId) : undefined) ??
     resolvePaperFeature(term.normalizedName) ??

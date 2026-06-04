@@ -95,6 +95,41 @@ describe("deriveReportLaterality", () => {
     expect(laterality.left).toBe(false);
   });
 
+  it("does not infer an anomalous-left subtype from an interarterial R-AAOCA report", () => {
+    const laterality = deriveReportLaterality(
+      makeReport([
+        makeTerm("R-AAOCA"),
+        makeTerm("Anomalous origin of RCA from left coronary sinus"),
+        makeTerm("Interarterial course of RCA"),
+        makeTerm("Normal origin of left main coronary artery"),
+        makeTerm("LAD and LCX are patent"),
+      ])
+    );
+
+    expect(laterality.right).toBe(true);
+    expect(laterality.left).toBe(false);
+    expect(laterality.leftSubtypes.has("intramural_interarterial_left")).toBe(false);
+    expect(laterality.leftSubtypes.size).toBe(0);
+  });
+
+  it("keeps a true left intramural/interarterial subtype when structured output provides it", () => {
+    const laterality = deriveReportLaterality(
+      makeReport(
+        [makeTerm("Anomalous origin of left main coronary artery from right coronary sinus")],
+        [
+          {
+            subtype: "intramural_interarterial_left",
+            vessel: "left main",
+            rawText: "left main coronary artery with interarterial course",
+          },
+        ]
+      )
+    );
+
+    expect(laterality.left).toBe(true);
+    expect(laterality.leftSubtypes.has("intramural_interarterial_left")).toBe(true);
+  });
+
   it("reads a free-text left-circumflex anomaly as left", () => {
     const laterality = deriveReportLaterality(
       makeReport([makeTerm("Anomalous Origin of Left Circumflex Artery")])

@@ -236,6 +236,8 @@ interface PaperFeatureRow {
   canonical: string;
   aliases: string[];
   trackingRole: "feature" | "measurement" | "reference";
+  shortLabel?: string;
+  description?: string;
   asserted: number;
   negated: number;
   total: number;
@@ -496,10 +498,9 @@ export default function Analysis() {
       });
 
       const reportSubtypeIds = new Set(
-        getReportAnomalousLeftSubtypes(
-          report.parseResult.anomalousLeftSubtypes,
-          parsedTerms
-        ).map((entry) => anomalousLeftSubtypeFeatureIds[entry.subtype])
+        getReportAnomalousLeftSubtypes(report.parseResult.anomalousLeftSubtypes).map(
+          (entry) => anomalousLeftSubtypeFeatureIds[entry.subtype]
+        )
       );
 
       reportSubtypeIds.forEach((featureId) => {
@@ -527,10 +528,9 @@ export default function Analysis() {
     filteredReports.forEach((report) => {
       const parsedTerms = getStoredParsedTerms(report);
       const reportSubtypes = new Set(
-        getReportAnomalousLeftSubtypes(
-          report.parseResult.anomalousLeftSubtypes,
-          parsedTerms
-        ).map((entry) => entry.subtype)
+        getReportAnomalousLeftSubtypes(report.parseResult.anomalousLeftSubtypes).map(
+          (entry) => entry.subtype
+        )
       );
 
       const reportCategories = new Set(
@@ -738,12 +738,8 @@ export default function Analysis() {
   const subtypeContributors = useMemo(() => {
     const map = new Map<string, ProvenanceContributor[]>();
     filteredReports.forEach((report) => {
-      const parsedTerms = getStoredParsedTerms(report);
       const seen = new Set<string>();
-      getReportAnomalousLeftSubtypes(
-        report.parseResult.anomalousLeftSubtypes,
-        parsedTerms
-      ).forEach((entry) => {
+      getReportAnomalousLeftSubtypes(report.parseResult.anomalousLeftSubtypes).forEach((entry) => {
         const featureId = ANOMALOUS_LEFT_SUBTYPE_FEATURE_IDS[entry.subtype];
         if (seen.has(featureId)) return;
         seen.add(featureId);
@@ -764,10 +760,7 @@ export default function Analysis() {
     const map = new Map<string, ProvenanceContributor[]>();
     filteredReports.forEach((report) => {
       const parsedTerms = getStoredParsedTerms(report);
-      const reportSubtypes = getReportAnomalousLeftSubtypes(
-        report.parseResult.anomalousLeftSubtypes,
-        parsedTerms
-      );
+      const reportSubtypes = getReportAnomalousLeftSubtypes(report.parseResult.anomalousLeftSubtypes);
       const repByCategory = new Map<string, ParsedTerm>();
       parsedTerms.forEach((term) => {
         const paperFeature = resolveParsedTermPaperFeature(term);
@@ -1256,7 +1249,9 @@ export default function Analysis() {
                       <TableCell className="text-sm text-muted-foreground">
                         {row.category}
                       </TableCell>
-                      <TableCell className="font-medium">{row.canonical}</TableCell>
+                      <TableCell className="font-medium" title={row.description}>
+                        {row.canonical}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {row.aliases.length > 0 ? row.aliases.join(" / ") : "-"}
                       </TableCell>
@@ -2219,7 +2214,7 @@ function PaperFeatureCategoryChart({
                         >
                           <span
                             className="truncate pl-5 text-xs text-muted-foreground"
-                            title={feat.canonical}
+                            title={feat.description ?? feat.canonical}
                           >
                             {feat.canonical}
                           </span>

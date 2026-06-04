@@ -1,11 +1,13 @@
 # Coronary Anomaly Analytics
 
-Clinical analytics tooling for pediatric cardiologists studying anomalous aortic origin of a coronary artery (AAOCA) from coronary CT angiogram (CTA) reports.
+Physician-facing analytics tooling for studying coronary CT angiogram (CTA) reports, with a focus on anomalous aortic origin of a coronary artery (AAOCA).
+
+The current main goal of this project is to help clinicians turn free-text CT reports into a reviewable dataset, then analyze how the features they care about appear across the cohort. The application emphasizes clinician review, feature-level evidence, report-level incidence, filtering, and source-report drill-downs rather than automated diagnosis.
 
 This repository contains two separate report-processing pipelines:
 
 1. A deterministic Python pipeline for building a research cohort from a bulk STARR radiology export.
-2. A React application for extracting, reviewing, storing, and analyzing AAOCA-related findings with an OpenAI GPT parser.
+2. A React application for extracting, reviewing, storing, filtering, and analyzing AAOCA-related findings with an OpenAI GPT parser.
 
 The pipelines solve different problems, run on different stacks, and do not share code. Rules that apply to one pipeline should not be assumed to apply to the other.
 
@@ -18,12 +20,16 @@ flowchart LR
 
     D[CTA report upload] --> E[Analysis app<br/>React + GPT-5.4]
     E --> F[Editable parsed-report files]
-    F --> G[Dataset page]
-    F --> H[Analysis dashboard]
+    F --> G[Dataset page<br/>review/edit/restore]
+    F --> H[Analysis dashboard<br/>cohort feature statistics]
+    F --> L[Filtering page<br/>clinician-selected feature cohorts]
 
     E --> I[Clinical review]
     I --> J[Browser localStorage]
     J --> K[Historical frequency<br/>on results page]
+
+    H --> M[Source-report provenance<br/>drill-down + CSV export]
+    L --> M
 ```
 
 ## Pipeline 1: AAOCA Cohort Preparation
@@ -102,11 +108,19 @@ Each JSONL record represents one patient:
 
 The `needs_medical_review` group is computed but not written by default. It includes bilateral findings, single-coronary cases, generic or unspecified anomalous origins, and pulmonary-artery origins such as ALCAPA or ARCAPA. See [`cohort-pipeline/README.md`](./cohort-pipeline/README.md) for the detailed flag definitions and PHI-handling guidance.
 
-## Pipeline 2: Interactive CTA Analysis App
+## Pipeline 2: Interactive CTA Feature Analysis App
 
 The React application lives in [`src/`](./src/). It supports interactive and batch report parsing, clinician review, local file-backed storage, and cohort-level visualization.
 
 Unlike the cohort classifier, the app parser reads the complete report. It keeps clinical-history text by design, with prompt-level rules for excluding a narrow set of suspected-diagnosis mentions from extraction.
+
+This app is the current product focus. It is designed around a clinical analysis loop:
+
+1. Convert CT report text into structured findings.
+2. Let a clinician keep, skip, or add extracted terms.
+3. Store the reviewed report as local text and JSON.
+4. Analyze report-level feature incidence across the cohort.
+5. Filter the cohort by clinician-selected features and inspect the source evidence behind each count.
 
 ### User Workflow
 
@@ -124,6 +138,11 @@ flowchart TD
     H -->|Batch| J[Batch summary]
     I --> K[Results page]
     K --> L[Optional: save to browser<br/>historical-frequency database]
+    G --> M[Dataset page]
+    G --> N[Analysis dashboard]
+    G --> O[Filtering page]
+    N --> P[Source-report provenance]
+    O --> P
 ```
 
 ### 1. Upload or paste reports
@@ -236,6 +255,8 @@ The `/analysis` page reads the file-backed parsed-report dataset and summarizes 
 
 The headline metric is per-report incidence: a feature counts once per report regardless of how many times it appears in that report.
 
+Most aggregate counts are clickable. Clicking a count, bar, matrix cell, or category opens a source-report panel showing the contributing reports, matched wording, surrounding context, assertion side, and a link back into the dataset preview. The panel can export the visible contributors as CSV.
+
 ### Dashboard features
 
 - **Summary cards:** total parsed reports, R-AAOCA reports, and L-AAOCA reports.
@@ -243,12 +264,32 @@ The headline metric is per-report incidence: a feature counts once per report re
 - **Left-subtype filters:** all left anomalies, intraconal left anomalies, and intramural/inter-arterial left anomalies.
 - **Paper-features overview:** the complete tracked AAOCA feature dictionary with category, aliases, tracking role, asserted count, negated count, and total report incidence.
 - **Paper-feature category chart:** expandable category-level feature visualization.
+- **Origin and risk co-occurrence:** R-AAOCA risk-feature matrix for opposite sinus, inter-arterial course, intramural course, slit-like ostium, high origin, acute takeoff, and significant narrowing, with L-AAOCA shown as a control prevalence column.
 - **Coronary-narrowing table:** vessel- and segment-specific normalization of narrowing, stenosis, and compression findings.
-- **Course-length histograms:** inter-arterial and intramural length distributions in `5 mm` bins.
-- **Myocardial-bridge dashboard:** patient-level bridge-count and highest-grade distributions.
+- **Course-length histograms:** inter-arterial and intramural length distributions in `5 mm` bins, including summary statistics.
+- **Myocardial-bridge dashboard:** patient-level bridge-count distribution, highest-grade distribution, and bridge count by highest-grade matrix.
 - **Normalized feature table:** synonym-collapsed feature incidence with clinician `Keep` and `Skip` counts, search, sorting, and pagination.
+- **Provenance drill-down:** source snippets grouped by phrasing, asserted/negated tabs when relevant, report search, dataset deep links, and CSV export.
 
 Feature normalization is centralized in [`src/data/featureCanonical.ts`](./src/data/featureCanonical.ts). The paper-tracked feature dictionary lives in [`src/data/paperFeatures.ts`](./src/data/paperFeatures.ts).
+
+Risk co-occurrence logic lives in [`src/data/riskCooccurrence.ts`](./src/data/riskCooccurrence.ts). Provenance grouping and CSV generation live in [`src/lib/provenance.ts`](./src/lib/provenance.ts).
+
+## Feature Filtering Page
+
+The `/filtering` page lets clinicians retrieve and profile reports that match features of interest. It reads the same local parsed-report dataset as the analysis dashboard.
+
+Users can:
+
+- Select the cohort scope: overall, right-sided AAOCA, or left-sided AAOCA.
+- Choose risk-feature filters such as inter-arterial course, intramural course, slit-like ostium, high origin, acute takeoff, and significant narrowing.
+- Add myocardial-bridge filters by grade and length bucket.
+- Use **Filter: Single** mode to retrieve reports containing every selected feature.
+- Use **Filter: Multi** mode to compare all observed feature combinations among the selected features.
+- Use **Bridge Profile** mode to summarize myocardial bridge grade by length for the filtered cohort.
+- Preview matched reports, highlighted evidence, and searchable report text.
+
+Filtering feature definitions are centralized in [`src/data/filteringFeatures.ts`](./src/data/filteringFeatures.ts). Bridge profile bucketing lives in [`src/data/bridgeProfile.ts`](./src/data/bridgeProfile.ts).
 
 ## Storage Model
 
@@ -257,7 +298,7 @@ The application intentionally uses two separate storage systems:
 | Storage | Purpose | Used by |
 | --- | --- | --- |
 | `parsed_reports/txt/` | Extracted source text | Dataset page |
-| `parsed_reports/json/` | Current editable parsed-report records | Dataset page and analysis dashboard |
+| `parsed_reports/json/` | Current editable parsed-report records | Dataset page, analysis dashboard, and filtering page |
 | `parsed_reports/original_json/` | Initial parser snapshots | Dataset restore action |
 | Browser `localStorage` | User-selected historical-frequency corpus | Single-report results page |
 
@@ -265,7 +306,7 @@ These are not the same database:
 
 - Confirming a clinical review updates `parsed_reports/json/`.
 - Clicking `Save to database` on the results page adds that report to the browser `localStorage` corpus.
-- The dashboard reads parsed-report files, while result-page historical frequencies read `localStorage`.
+- The dashboard and filtering page read parsed-report files, while result-page historical frequencies read `localStorage`.
 
 As a result, dashboard counts and result-page historical-frequency counts may differ.
 
@@ -280,6 +321,7 @@ As a result, dashboard counts and result-page historical-frequency counts may di
 - Vite development-server middleware for local parsed-report files
 - Browser `localStorage` for the optional historical-frequency corpus
 - Python regex classifier for STARR cohort preparation
+- Vitest for parser, resolver, and feature-normalization tests
 
 ## Getting Started
 
@@ -304,6 +346,13 @@ npm run dev
 
 The app is served on port `8080` by default.
 
+Primary routes:
+
+- `/` - upload, parse, review, and single-report results.
+- `/dataset` - browse, preview, edit, restore, and delete stored parsed reports.
+- `/analysis` - cohort-level feature statistics and provenance drill-down.
+- `/filtering` - clinician-selected feature filtering and bridge profiling.
+
 ## Project Structure
 
 ```text
@@ -317,11 +366,13 @@ src/
     Index.tsx                    # Upload, parsing, review, and results workflow
     Dataset.tsx                  # Parsed-report browser and editor
     Analysis.tsx                 # Cohort analytics dashboard
+    Filtering.tsx                # Clinician-selected feature filtering and bridge profiling
   components/
     ReportInput.tsx              # Paste, drag-and-drop, and multi-file upload
     TermReview.tsx               # Interactive clinical review UI
     ReportViewer.tsx             # Highlighted results report
     FrequencyPanel.tsx           # Browser-corpus historical frequencies
+    ProvenancePanel.tsx          # Source-report drill-down and CSV export
   lib/
     openaiParser.ts              # GPT-5.4 function call and ParseResult creation
     parsingOrchestrator.ts       # Cost guard and parser wrapper
@@ -329,12 +380,16 @@ src/
     fileParser.ts                # TXT, PDF, and DOCX extraction
     parsedReportStorage.ts       # File-backed parsed-report API client
     reportDatabase.ts            # localStorage historical-frequency corpus
+    provenance.ts                # Contributor grouping, report counts, and CSV export
     prompts/
       ctaParser.prompt.ts        # Clinical extraction instructions
   data/
     parseTypes.ts                # Shared parser and review types
     paperFeatures.ts             # Paper-tracked feature dictionary
     featureCanonical.ts          # Dashboard feature normalization
+    filteringFeatures.ts         # Feature definitions for the filtering page
+    riskCooccurrence.ts          # Risk-feature detection and co-occurrence counts
+    bridgeProfile.ts             # Bridge grade x length profiling
     laterality.ts                # RCA/LCA and anomalous-left classification
 
 parsed_reports/

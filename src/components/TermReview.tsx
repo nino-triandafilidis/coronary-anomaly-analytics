@@ -33,6 +33,47 @@ const STATUS_BORDER: Record<TermStatus, string> = {
   added: "border-l-sky-500",
 };
 
+function SearchHighlightedText({ text, query }: { text: string; query: string }) {
+  const needle = query.trim();
+  if (!needle) return <>{text}</>;
+
+  const lowerText = text.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const parts: { text: string; match: boolean }[] = [];
+  let cursor = 0;
+  let index = lowerText.indexOf(lowerNeedle);
+
+  while (index >= 0) {
+    if (index > cursor) {
+      parts.push({ text: text.slice(cursor, index), match: false });
+    }
+    parts.push({ text: text.slice(index, index + needle.length), match: true });
+    cursor = index + needle.length;
+    index = lowerText.indexOf(lowerNeedle, cursor);
+  }
+
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor), match: false });
+  }
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.match ? (
+          <mark
+            key={index}
+            className="rounded-sm bg-yellow-200 px-0.5 text-yellow-950 dark:bg-yellow-500/35 dark:text-yellow-100"
+          >
+            {part.text}
+          </mark>
+        ) : (
+          <Fragment key={index}>{part.text}</Fragment>
+        )
+      )}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -49,6 +90,8 @@ interface TermReviewProps {
   // When set (e.g. from an Analysis provenance deep-link), the matching term is
   // scrolled into view and ringed on mount.
   focusSpan?: { startIndex: number; endIndex: number };
+  searchQuery?: string;
+  className?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +105,8 @@ export function TermReview({
   onBack,
   readOnly = false,
   focusSpan,
+  searchQuery = "",
+  className = "",
 }: TermReviewProps) {
   const [terms, setTerms] = useState<ReviewableTerm[]>(() =>
     initialTerms ??
@@ -93,6 +138,28 @@ export function TermReview({
 
   const keptCount = counts.accepted + counts.added;
   const reviewedCount = counts.accepted + counts.rejected + counts.added;
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+
+  const visibleTermEntries = useMemo(() => {
+    const entries = terms.map((term, idx) => ({ term, idx }));
+    if (!normalizedSearch) return entries;
+
+    return entries.filter(({ term }) => {
+      const reportSpan =
+        term.startIndex >= 0 && term.endIndex > term.startIndex
+          ? parseResult.reportText.slice(term.startIndex, term.endIndex)
+          : "";
+      return [
+        term.normalizedName,
+        term.term,
+        term.context,
+        term.assertion,
+        term.correctionType,
+        term.resolutionNote,
+        reportSpan,
+      ].some((value) => (value ?? "").toLowerCase().includes(normalizedSearch));
+    });
+  }, [normalizedSearch, parseResult.reportText, terms]);
 
   // Deep-link focus: ring + scroll the term matching focusSpan into view. The
   // span/card scroll waits for the dialog open animation to settle.
@@ -309,7 +376,7 @@ export function TermReview({
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="animate-fade-in">
+      <div className={`flex min-h-0 flex-col animate-fade-in ${className}`}>
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -318,7 +385,7 @@ export function TermReview({
             </h2>
             <p className="text-xs text-muted-foreground">
               {readOnly
-                ? `${terms.length} terms extracted`
+                ? `${terms.length} terms extracted${normalizedSearch ? ` · ${visibleTermEntries.length} shown` : ""}`
                 : `${terms.length} terms extracted · approve or reject before continuing`}
             </p>
           </div>
@@ -327,11 +394,11 @@ export function TermReview({
           </button>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
+        <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-stretch">
           {/* LEFT — Report with highlights. min-w-0 (via minmax(0,1fr) above)
               lets the column shrink past its content width so the right
               column never gets pushed off-screen. */}
-          <div className="relative min-w-0 rounded-lg border border-border bg-card p-5 overflow-auto max-h-[75vh]">
+          <div className="relative min-h-0 min-w-0 overflow-auto rounded-lg border border-border bg-card p-5">
             <p
               ref={reportRef}
               className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-card-foreground"
@@ -342,7 +409,11 @@ export function TermReview({
                 // like the rest of the report. The card on the right keeps the
                 // rejected badge so the choice is still visible.
                 if (seg.termIdx === null || seg.status === "rejected") {
-                  return <Fragment key={i}>{seg.text}</Fragment>;
+                  return (
+                    <Fragment key={i}>
+                      <SearchHighlightedText text={seg.text} query={searchQuery} />
+                    </Fragment>
+                  );
                 }
                 const term = terms[seg.termIdx];
                 const isHovered = hoveredIdx === seg.termIdx;
@@ -369,7 +440,7 @@ export function TermReview({
                           card?.scrollIntoView({ behavior: "smooth", block: "center" });
                         }}
                       >
-                        {seg.text}
+                        <SearchHighlightedText text={seg.text} query={searchQuery} />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs text-xs">
@@ -425,7 +496,7 @@ export function TermReview({
           </div>
 
           {/* RIGHT — Term review panel */}
-          <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:h-[75vh] lg:max-h-[75vh]">
+          <div className="flex min-h-0 min-w-0 flex-col gap-4">
             {/* Model metadata */}
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -479,7 +550,12 @@ export function TermReview({
             {/* Term cards */}
             <ScrollArea className="min-h-0 flex-1">
               <div className="flex flex-col gap-2 pr-3">
-                {terms.map((term, idx) => {
+                {visibleTermEntries.length === 0 && normalizedSearch && (
+                  <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                    No extracted findings match this search.
+                  </div>
+                )}
+                {visibleTermEntries.map(({ term, idx }) => {
                   const isHovered = hoveredIdx === idx;
                   return (
                     <div
@@ -497,7 +573,7 @@ export function TermReview({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="min-w-0 break-words text-sm font-medium text-card-foreground">
-                              {term.normalizedName}
+                              <SearchHighlightedText text={term.normalizedName} query={searchQuery} />
                             </span>
                             <button
                               type="button"

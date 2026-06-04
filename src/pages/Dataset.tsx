@@ -9,8 +9,10 @@ import {
   Database,
   Pencil,
   RotateCcw,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -116,6 +118,7 @@ export default function Dataset() {
   const [reports, setReports] = useState<StoredParsedReport[]>([]);
   const [previewReport, setPreviewReport] = useState<StoredParsedReport | null>(null);
   const [previewReadOnly, setPreviewReadOnly] = useState(true);
+  const [previewSearch, setPreviewSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [savingError, setSavingError] = useState<string | null>(null);
@@ -156,6 +159,7 @@ export default function Dataset() {
       setSavingError(null);
       setSavedNotice(null);
       setPreviewReadOnly(true);
+      setPreviewSearch("");
       setPreviewReport(report);
     }
   }, [previewReport?.id, reports, searchParams]);
@@ -167,6 +171,7 @@ export default function Dataset() {
     setSavedNotice(null);
     setSavingError(null);
     setPreviewReadOnly(true);
+    setPreviewSearch("");
 
     if (returnTo) {
       navigate(returnTo, { replace: true });
@@ -343,6 +348,7 @@ export default function Dataset() {
                     setSavingError(null);
                     setSavedNotice(null);
                     setPreviewReadOnly(true);
+                    setPreviewSearch("");
                     setPreviewReport(report);
                   }}
                   className="group flex flex-col items-start rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
@@ -405,7 +411,7 @@ export default function Dataset() {
             }
           }}
         >
-          <DialogContent className="max-h-[94vh] max-w-7xl overflow-y-auto">
+          <DialogContent className="flex h-[94vh] max-w-7xl flex-col overflow-hidden">
             <DialogHeader>
               <div className="flex items-start justify-between gap-4 pr-8">
                 <div>
@@ -515,6 +521,18 @@ export default function Dataset() {
             </DialogHeader>
 
             {previewReport && (
+              <div className="relative shrink-0">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={previewSearch}
+                  onChange={(event) => setPreviewSearch(event.target.value)}
+                  placeholder="Search report text or extracted findings"
+                  className="pl-9"
+                />
+              </div>
+            )}
+
+            {previewReport && (
               <TermReview
                 key={`${previewReport.id}-${previewReadOnly ? "preview" : "edit"}-${previewReport.updatedAt ?? previewReport.storedAt}-${previewReport.parseResult.parsedTerms.length}`}
                 parseResult={previewReport.parseResult}
@@ -532,6 +550,8 @@ export default function Dataset() {
                 }}
                 readOnly={previewReadOnly}
                 focusSpan={focusSpan}
+                searchQuery={previewSearch}
+                className="min-h-0 flex-1"
               />
             )}
           </DialogContent>

@@ -9,10 +9,9 @@
  * so the UI can render one symmetric heatmap instead of a matrix per flag.
  *
  * Detection reuses the existing resolvers: paper-feature ids for the binary
- * features, normalizeCoronaryNarrowingFeature for narrowing, and the report's
- * laterality for the vessel-relative "opposite sinus" flag (a right from the left
- * sinus, a left from the right sinus). Counting is pure and unit-tested; the
- * Analysis page owns provenance, mirroring the rest of the drill-down.
+ * features and normalizeCoronaryNarrowingFeature for narrowing. Counting is
+ * pure and unit-tested; the Analysis page owns provenance, mirroring the rest
+ * of the drill-down.
  */
 
 import type { ParsedTerm } from "@/data/parseTypes";
@@ -78,11 +77,11 @@ export interface ReportRiskFlags {
 /**
  * Reduce one report to its present risk flags plus the supporting term per flag.
  * Only asserted terms count (a negated "no interarterial course" is absence, not
- * presence). The opposite-sinus flag is vessel-relative and uses the report side.
+ * presence). No side-plus-sinus fallback is used to infer opposite-sinus risk.
  */
 export function detectReportRiskFlags(
   report: StoredParsedReport,
-  side: ReportLaterality
+  _side: ReportLaterality
 ): ReportRiskFlags {
   const evidence = new Map<RiskFlagKey, ParsedTerm>();
   const set = (key: RiskFlagKey, term: ParsedTerm) => {
@@ -96,11 +95,6 @@ export function detectReportRiskFlags(
     if (feature) {
       const flag = PAPER_FEATURE_TO_FLAG.get(feature.id);
       if (flag) set(flag, term);
-      // Opposite sinus is the vessel arising from the wrong sinus: a right from
-      // the left sinus, a left from the right sinus. Keyed off the report side so
-      // the same flag is meaningful for the control cohort too.
-      if (side.right && feature.id === "left_sinus") set("opposite_sinus", term);
-      if (side.left && feature.id === "right_sinus") set("opposite_sinus", term);
     }
 
     if (normalizeCoronaryNarrowingFeature(term)) set("narrowing", term);

@@ -30,7 +30,7 @@ export const ENTITY_DEFINITIONS: Record<string, string> = {
   r_aaoca: "anomalous RIGHT coronary artery (R-AAOCA): RCA arising from an abnormal aortic site (e.g. the left sinus)",
   l_aaoca: "anomalous LEFT main (L-AAOCA): left main arising from an abnormal aortic site (e.g. the right sinus)",
   lad_aaoca: "anomalous LAD (LAD-AAOCA): left anterior descending arising from an abnormal aortic site",
-  lcx_aaoca: "anomalous left circumflex (LCX-AAOCA): circumflex arising from an abnormal aortic site",
+  lcx_aaoca: "anomalous left circumflex (LCX-AAOCA): circumflex arising from an abnormal site such as the right sinus/cusp or the proximal RCA/right coronary artery",
   st_aaoca: "single coronary trunk (ST-AAOCA): all major coronaries arising from one aortic trunk/ostium",
   anomalous_left_intraconal: "anomalous left coronary with an intraconal/intraseptal (subpulmonic) proximal course",
   anomalous_left_intramural_interarterial: "left-sided anomalous coronary artery, such as anomalous LMCA/LAD/LCX, where the anomalous left-sided vessel itself has an intramural and/or interarterial course",

@@ -882,9 +882,9 @@ function MultiCombinationView({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Feature Combinations</CardTitle>
+          <CardTitle className="text-base">Exclusive Feature Combinations</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Selected features define the combination space. Click a combination to view matching reports.
+            Selected features are partitioned into exact, non-overlapping report groups.
           </p>
         </CardHeader>
         <CardContent>
@@ -966,6 +966,16 @@ function UpSetRows({
           const active = row.key === selectedKey;
           const isAllSelected = row.key === allSelectedKey;
           const width = `${Math.max(8, (row.reports.length / maxCount) * 100)}%`;
+          const includedLabels = row.featureIds.map(
+            (id) => featuresById.get(id)?.label ?? id
+          );
+          const excludedLabels = selectedFeatureIds
+            .filter((id) => !present.has(id))
+            .map((id) => featuresById.get(id)?.shortLabel ?? featuresById.get(id)?.label ?? id);
+          const rowLabel =
+            row.featureIds.length === 0
+              ? "None of selected features"
+              : `${excludedLabels.length > 0 ? "Only " : ""}${includedLabels.join(" + ")}`;
           return (
             <button
               key={row.key}
@@ -978,13 +988,19 @@ function UpSetRows({
               style={{ gridTemplateColumns: template }}
             >
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-foreground">
-                  {row.featureIds.length === 0
-                    ? "None of selected features"
-                    : row.featureIds.map((id) => featuresById.get(id)?.label ?? id).join(" + ")}
+                <span
+                  className="block truncate text-sm font-medium text-foreground"
+                  title={rowLabel}
+                >
+                  {rowLabel}
                 </span>
                 {isAllSelected && (
                   <span className="mt-1 block text-xs text-primary">All selected features</span>
+                )}
+                {!isAllSelected && excludedLabels.length > 0 && row.featureIds.length > 0 && (
+                  <span className="mt-1 block truncate text-xs text-muted-foreground">
+                    Excludes {excludedLabels.join(" + ")}
+                  </span>
                 )}
               </span>
               {selectedFeatureIds.map((id) => (

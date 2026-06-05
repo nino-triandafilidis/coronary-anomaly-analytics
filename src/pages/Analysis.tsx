@@ -86,7 +86,6 @@ import {
 } from "@/data/riskCooccurrence";
 import {
   canonicalFeature,
-  normalizeCoronaryNarrowingFeature,
   reportIncidence,
 } from "@/data/featureCanonical";
 import { ProvenancePanel } from "@/components/ProvenancePanel";
@@ -224,12 +223,6 @@ interface NormalizedFeatureRow {
   skip: number;
 }
 
-interface CoronaryNarrowingRow {
-  key: string;
-  name: string;
-  count: number;
-}
-
 interface PaperFeatureRow {
   id: string;
   category: string;
@@ -298,14 +291,12 @@ export default function Analysis() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [featureSearch, setFeatureSearch] = useState("");
-  const [coronarySearch, setCoronarySearch] = useState("");
   const [featureSort, setFeatureSort] = useState<{
     key: FeatureSortKey;
     direction: FeatureSortDirection;
   }>({ key: "count", direction: "desc" });
   const [lateralityFilter, setLateralityFilter] = useState<LateralityFilter>("overall");
   const [leftSubtype, setLeftSubtype] = useState<LeftSubtypeFilter>("all");
-  const [coronaryPage, setCoronaryPage] = useState(1);
   const [featurePage, setFeaturePage] = useState(1);
   const [activeProvenance, setActiveProvenance] = useState<ProvenanceSource | null>(null);
   const navigate = useNavigate();
@@ -594,39 +585,6 @@ export default function Analysis() {
       return a.name.localeCompare(b.name);
     });
   }, [featureSearch, featureSort, normalizedFeatureRows]);
-  const coronaryNarrowingRows = useMemo<CoronaryNarrowingRow[]>(() => {
-    // Per-report incidence of each canonical narrowing concept.
-    const tallies = reportIncidence(filteredReports, getStoredParsedTerms, (term) => {
-      const narrowing = normalizeCoronaryNarrowingFeature(term);
-      return narrowing
-        ? { key: `narrowing:${narrowing.toLowerCase()}`, label: narrowing, category: "Coronary narrowing" }
-        : null;
-    });
-
-    return tallies
-      .map((tally) => ({ key: tally.key, name: tally.label, count: tally.reports }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [filteredReports]);
-  const filteredCoronaryNarrowingRows = useMemo(() => {
-    const query = coronarySearch.trim().toLowerCase();
-    return query
-      ? coronaryNarrowingRows.filter((row) =>
-          [row.name, String(row.count)].some((value) =>
-            value.toLowerCase().includes(query)
-          )
-        )
-      : coronaryNarrowingRows;
-  }, [coronaryNarrowingRows, coronarySearch]);
-
-  const coronaryPageCount = Math.max(
-    1,
-    Math.ceil(filteredCoronaryNarrowingRows.length / TABLE_PAGE_SIZE)
-  );
-  const safeCoronaryPage = Math.min(coronaryPage, coronaryPageCount);
-  const paginatedCoronaryRows = filteredCoronaryNarrowingRows.slice(
-    (safeCoronaryPage - 1) * TABLE_PAGE_SIZE,
-    safeCoronaryPage * TABLE_PAGE_SIZE
-  );
   const featurePageCount = Math.max(
     1,
     Math.ceil(filteredFeatureRows.length / TABLE_PAGE_SIZE)
@@ -640,9 +598,6 @@ export default function Analysis() {
   useEffect(() => {
     setFeaturePage(1);
   }, [featureSearch, featureSort, lateralityFilter, leftSubtype]);
-  useEffect(() => {
-    setCoronaryPage(1);
-  }, [coronaryNarrowingRows, coronarySearch]);
   const bridgeDashboardStats = useMemo<BridgeDashboardStats>(() => {
     const categories: BridgeDashboardStats["categories"] = {
       notPresent: 0,
@@ -794,14 +749,6 @@ export default function Analysis() {
     });
     return map;
   }, [filteredReports]);
-  const coronaryContributors = useMemo(
-    () =>
-      contributorsByFeature(filteredReports, (term) => {
-        const narrowing = normalizeCoronaryNarrowingFeature(term);
-        return narrowing ? `narrowing:${narrowing.toLowerCase()}` : null;
-      }),
-    [filteredReports]
-  );
   const featureTableContributors = useMemo(
     () =>
       contributorsByFeature(filteredReports, (term) =>
@@ -930,10 +877,6 @@ export default function Analysis() {
       splitByAssertion: false,
       contributors,
     });
-  };
-  const openCoronaryRow = (key: string, name: string) => {
-    const contributors = coronaryContributors.get(key) ?? [];
-    openProvenance({ title: name, subtitle: reportCountSubtitle(distinctReportCount(contributors)), splitByAssertion: true, contributors });
   };
   const openFeatureRow = (key: string, name: string) => {
     const contributors = featureTableContributors.get(key) ?? [];
@@ -1097,12 +1040,6 @@ export default function Analysis() {
                 className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 Origin and risk
-              </a>
-              <a
-                href="#coronary-narrowing"
-                className="whitespace-nowrap rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                Coronary Narrowing
               </a>
               <a
                 href="#interarterial-course-lengths"
@@ -1313,72 +1250,6 @@ export default function Analysis() {
             sponsorKey={SPONSOR_FLAG}
             onSelectCell={openRiskCell}
           />
-        </section>
-
-        <section id="coronary-narrowing" className="mt-10 scroll-mt-6">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-foreground">Coronary Narrowing Details</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Narrowing-related findings resolved to the specific coronary artery or segment.
-            </p>
-          </div>
-
-          <Card>
-            <CardHeader className="flex flex-col gap-4 space-y-0 md:flex-row md:items-center md:justify-between">
-              <CardTitle className="text-base">Narrowing By Coronary Artery</CardTitle>
-              <div className="relative w-full md:max-w-sm">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={coronarySearch}
-                  onChange={(event) => setCoronarySearch(event.target.value)}
-                  placeholder="Search narrowing details"
-                  className="pl-9"
-                />
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[360px]">Resolved narrowing feature</TableHead>
-                    <TableHead className="text-right">Count</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCoronaryNarrowingRows.length > 0 ? (
-                    paginatedCoronaryRows.map((row) => (
-                      <TableRow
-                        key={row.key}
-                        className="cursor-pointer transition-colors hover:bg-accent/50"
-                        onClick={() => openCoronaryRow(row.key, row.name)}
-                      >
-                        <TableCell className="font-medium">{row.name}</TableCell>
-                        <TableCell className="text-right tabular-nums">{row.count}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={2}
-                        className="h-24 text-center text-sm text-muted-foreground"
-                      >
-                        {coronarySearch
-                          ? "No coronary narrowing details match your search."
-                          : "No vessel-specific coronary narrowing features found."}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              {filteredCoronaryNarrowingRows.length > 0 && (
-                <TablePagination
-                  page={safeCoronaryPage}
-                  pageCount={coronaryPageCount}
-                  onPageChange={setCoronaryPage}
-                />
-              )}
-            </CardContent>
-          </Card>
         </section>
 
         <section id="interarterial-course-lengths" className="mt-10 scroll-mt-6">

@@ -9,18 +9,52 @@
  * so the UI can render one symmetric heatmap instead of a matrix per flag.
  *
  * Detection reuses the existing resolvers: paper-feature ids for the binary
- * features, normalizeCoronaryNarrowingFeature for narrowing, and the report's
- * laterality for the vessel-relative "opposite sinus" flag (a right from the left
- * sinus, a left from the right sinus). Counting is pure and unit-tested; the
- * Analysis page owns provenance, mirroring the rest of the drill-down.
+ * features, a self-contained significant-narrowing predicate (see
+ * `isSignificantCoronaryNarrowing`), and the report's laterality for the
+ * vessel-relative "opposite sinus" flag (a right from the left sinus, a left from
+ * the right sinus). Counting is pure and unit-tested; the Analysis page owns
+ * provenance, mirroring the rest of the drill-down.
  */
 
 import type { ParsedTerm } from "@/data/parseTypes";
 import type { StoredParsedReport } from "@/lib/parsedReportStorage";
 import { getStoredParsedTerms } from "@/lib/parsedReportStorage";
 import { resolveParsedTermPaperFeature } from "@/data/paperFeatures";
-import { normalizeCoronaryNarrowingFeature } from "@/data/featureCanonical";
 import type { ReportLaterality } from "@/data/laterality";
+
+/**
+ * True when a term asserts narrowing/stenosis/compression of a recognizable
+ * coronary vessel — the high-risk "significant narrowing" anatomy flag for the
+ * R-AAOCA co-occurrence matrix.
+ *
+ * This is intentionally self-contained: the generic per-vessel coronary-narrowing
+ * canonical tier (and its Analysis viz) was retired in #88 because, across the
+ * whole feature pipeline, it synthesized a pseudo-feature space dominated by
+ * negated normal-patency rows. The risk matrix only ever consumed asserted terms,
+ * so the predicate (concept + recognizable vessel) lives here rather than in the
+ * canonical-feature resolver.
+ */
+export function isSignificantCoronaryNarrowing(term: ParsedTerm): boolean {
+  const name = (term.normalizedName?.trim() || term.term?.trim() || "").replace(/\s+/g, " ");
+  const haystack = `${name} ${term.context ?? ""}`.toLowerCase();
+
+  const hasNarrowingConcept =
+    /\bnarrow(?:ing|ed)?\b/.test(haystack) ||
+    /\bstenos(?:is|ed)\b/.test(haystack) ||
+    /\bcompression\b/.test(haystack) ||
+    /\bcompressed\b/.test(haystack);
+  if (!hasNarrowingConcept) return false;
+
+  const hasRecognizableVessel =
+    /\bleft\s+main\b|\blmca\b/.test(haystack) ||
+    /\bleft\s+circumflex\b|\bcircumflex\b|\blcx\b/.test(haystack) ||
+    /\bright\s+coronary\b|\brca\b/.test(haystack) ||
+    /\bleft\s+anterior\s+descending\b|\blad\b/.test(haystack) ||
+    /\bleft\s+coronary\s+artery\b|\blca\b/.test(haystack) ||
+    /\bcoronary\s+arter(?:y|ies)\b/.test(haystack);
+
+  return hasRecognizableVessel;
+}
 
 export type RiskFlagKey =
   | "opposite_sinus"
@@ -103,7 +137,7 @@ export function detectReportRiskFlags(
       if (side.left && feature.id === "right_sinus") set("opposite_sinus", term);
     }
 
-    if (normalizeCoronaryNarrowingFeature(term)) set("narrowing", term);
+    if (isSignificantCoronaryNarrowing(term)) set("narrowing", term);
   }
 
   return { reportId: report.id, flags: new Set(evidence.keys()), evidence };

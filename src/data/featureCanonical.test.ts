@@ -22,10 +22,21 @@ describe("canonicalFeature", () => {
     expect(a?.key).toBe(b?.key);
   });
 
-  it("collapses narrowing wording + vessel synonyms to one key", () => {
-    const a = canonicalFeature(term({ normalizedName: "significant narrowing of LCx" }));
-    const b = canonicalFeature(term({ normalizedName: "Significant Narrowing Of Left Circumflex Artery" }));
-    expect(a?.key).toBe(b?.key);
+  it("no longer special-cases coronary narrowing (#88 retired the rule tier)", () => {
+    // The generic per-vessel narrowing tier is gone: a narrowing wording with no
+    // resolved paperFeatureId now falls to the lowercased 'Other' bucket like any
+    // other unmatched term, rather than a synthesized 'Coronary narrowing' key.
+    const narrowing = canonicalFeature(term({ normalizedName: "significant narrowing of LCx" }));
+    expect(narrowing?.key).toBe("term:significant narrowing of lcx");
+    expect(narrowing?.category).toBe("Other");
+  });
+
+  it("routes in-scope narrowing to the paper entity via paperFeatureId", () => {
+    const csa = canonicalFeature(
+      term({ normalizedName: "ostial narrowing of RCA", paperFeatureId: "csa_narrowing" })
+    );
+    expect(csa?.key).toBe("paper:csa_narrowing");
+    expect(csa?.category).not.toBe("Coronary narrowing");
   });
 
   it("falls back to a lowercased key so case/whitespace variants still collapse", () => {

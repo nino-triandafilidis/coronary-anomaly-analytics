@@ -243,7 +243,6 @@ The headline metric is per-report incidence: a feature counts once per report re
 - **Left-subtype filters:** all left anomalies, intraconal left anomalies, and intramural/inter-arterial left anomalies.
 - **Paper-features overview:** the complete tracked AAOCA feature dictionary with category, aliases, tracking role, asserted count, negated count, and total report incidence.
 - **Paper-feature category chart:** expandable category-level feature visualization.
-- **Coronary-narrowing table:** vessel- and segment-specific normalization of narrowing, stenosis, and compression findings.
 - **Course-length histograms:** inter-arterial and intramural length distributions in `5 mm` bins.
 - **Myocardial-bridge dashboard:** patient-level bridge-count and highest-grade distributions.
 - **Normalized feature table:** synonym-collapsed feature incidence with clinician `Keep` and `Skip` counts, search, sorting, and pagination.

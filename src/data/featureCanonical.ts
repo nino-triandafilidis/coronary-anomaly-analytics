@@ -37,7 +37,7 @@ export function normalizeCoronaryNarrowingFeature(record: {
   context?: string;
 }): string | null {
   const featureName = getAnalysisFeatureName(record);
-  const haystack = `${featureName} ${record.context ?? ""}`.toLowerCase();
+  const haystack = featureName.toLowerCase();
 
   const hasNarrowingConcept =
     /\bnarrow(?:ing|ed)?\b/.test(haystack) ||

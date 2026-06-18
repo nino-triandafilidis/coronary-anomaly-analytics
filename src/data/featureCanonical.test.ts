@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { canonicalFeature, reportIncidence } from "./featureCanonical";
+import {
+  canonicalFeature,
+  normalizeCoronaryNarrowingFeature,
+  reportIncidence,
+} from "./featureCanonical";
 import type { ParsedTerm } from "./parseTypes";
 
 const term = (p: Partial<ParsedTerm>): ParsedTerm =>
@@ -26,6 +30,17 @@ describe("canonicalFeature", () => {
     const a = canonicalFeature(term({ normalizedName: "significant narrowing of LCx" }));
     const b = canonicalFeature(term({ normalizedName: "Significant Narrowing Of Left Circumflex Artery" }));
     expect(a?.key).toBe(b?.key);
+  });
+
+  it("does not infer a vessel-specific narrowing feature from broad context", () => {
+    expect(
+      normalizeCoronaryNarrowingFeature(
+        term({
+          normalizedName: "significant narrowing",
+          context: "The RCA has an interarterial course and is significantly narrowed proximally.",
+        })
+      )
+    ).toBeNull();
   });
 
   it("falls back to a lowercased key so case/whitespace variants still collapse", () => {

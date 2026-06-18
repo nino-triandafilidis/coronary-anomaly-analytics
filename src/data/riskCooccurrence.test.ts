@@ -85,14 +85,13 @@ describe("detectReportRiskFlags", () => {
     expect(flags.size).toBe(0);
   });
 
-  it("treats a right vessel from the left sinus as opposite-sinus", () => {
-    expect(flagSet(makeReport("r3", [makeTerm("left sinus")]), RIGHT).has("opposite_sinus")).toBe(true);
-    // ...but the same left-sinus origin is NOT opposite-sinus for a left vessel.
+  it("does not infer opposite-sinus from side plus left-sinus mention", () => {
+    expect(flagSet(makeReport("r3", [makeTerm("left sinus")]), RIGHT).has("opposite_sinus")).toBe(false);
     expect(flagSet(makeReport("r4", [makeTerm("left sinus")]), LEFT).has("opposite_sinus")).toBe(false);
   });
 
-  it("treats a left vessel from the right sinus as opposite-sinus", () => {
-    expect(flagSet(makeReport("r5", [makeTerm("right sinus")]), LEFT).has("opposite_sinus")).toBe(true);
+  it("does not infer opposite-sinus from side plus right-sinus mention", () => {
+    expect(flagSet(makeReport("r5", [makeTerm("right sinus")]), LEFT).has("opposite_sinus")).toBe(false);
     expect(flagSet(makeReport("r6", [makeTerm("right sinus")]), RIGHT).has("opposite_sinus")).toBe(false);
   });
 

@@ -20,6 +20,17 @@ function makeTerm(normalizedName: string, assertion: Assertion = "asserted"): Pa
   };
 }
 
+function makeResolvedTerm(
+  normalizedName: string,
+  paperFeatureId: string,
+  assertion: Assertion = "asserted"
+): ParsedTerm {
+  return {
+    ...makeTerm(normalizedName, assertion),
+    paperFeatureId,
+  };
+}
+
 function makeReport(
   parsedTerms: ParsedTerm[],
   anomalousLeftSubtypes: AnomalousLeftSubtypeEntry[] = []
@@ -87,9 +98,19 @@ describe("deriveReportLaterality", () => {
     expect(laterality.right).toBe(false);
   });
 
-  it("reads a free-text RCA anomaly as right, not the left cusp it arises from", () => {
+  it("does not infer laterality from free-text vessel/origin regex cues", () => {
     const laterality = deriveReportLaterality(
       makeReport([makeTerm("Anomalous Origin of RCA from Left Coronary Cusp")])
+    );
+    expect(laterality.right).toBe(false);
+    expect(laterality.left).toBe(false);
+  });
+
+  it("uses parser-resolved AAOCA ids for laterality", () => {
+    const laterality = deriveReportLaterality(
+      makeReport([
+        makeResolvedTerm("Anomalous Origin of RCA from Left Coronary Cusp", "r_aaoca"),
+      ])
     );
     expect(laterality.right).toBe(true);
     expect(laterality.left).toBe(false);
@@ -130,21 +151,20 @@ describe("deriveReportLaterality", () => {
     expect(laterality.leftSubtypes.has("intramural_interarterial_left")).toBe(true);
   });
 
-  it("reads a free-text left-circumflex anomaly as left", () => {
+  it("does not infer left laterality from free-text left-circumflex anomaly wording", () => {
     const laterality = deriveReportLaterality(
       makeReport([makeTerm("Anomalous Origin of Left Circumflex Artery")])
     );
-    expect(laterality.left).toBe(true);
+    expect(laterality.left).toBe(false);
     expect(laterality.right).toBe(false);
   });
 
-  it("takes the majority side when a report names both systems", () => {
+  it("takes the majority side from parser-resolved AAOCA ids", () => {
     const laterality = deriveReportLaterality(
       makeReport([
-        makeTerm("Anomalous Origin of RCA from Left Coronary Sinus"),
-        makeTerm("Interarterial Course of RCA"),
-        makeTerm("Intramural Course of RCA"),
-        makeTerm("Anomalous Origin of Left Anterior Descending Artery"),
+        makeResolvedTerm("R-AAOCA", "r_aaoca"),
+        makeResolvedTerm("R-AAOCA", "r_aaoca"),
+        makeResolvedTerm("LAD-AAOCA", "lad_aaoca"),
       ])
     );
     expect(laterality.right).toBe(true);

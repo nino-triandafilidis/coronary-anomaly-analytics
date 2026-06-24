@@ -76,58 +76,62 @@ function detectRiskFeature(
   };
 }
 
-export const FILTERING_FEATURES: FilteringFeature[] = RISK_FLAGS.map((flag) => ({
+const RISK_FILTERING_FEATURES: FilteringFeature[] = RISK_FLAGS.map<FilteringFeature>((flag) => ({
   id: flag.key,
   label: flag.label,
   shortLabel: flag.short,
   category: "Risk features",
   detect: (report, side) => detectRiskFeature(report, side, flag.key),
-}))
-  .filter((feature) => feature.id !== "opposite_sinus")
-  .concat([
-    {
-      id: "bridge:grade:1",
-      label: "Bridge Grade 1",
-      shortLabel: "G1",
-      category: "Myocardial Bridge",
-      detect: (report) => detectBridgeGrade(report, 1),
-    },
-    {
-      id: "bridge:grade:2",
-      label: "Bridge Grade 2",
-      shortLabel: "G2",
-      category: "Myocardial Bridge",
-      detect: (report) => detectBridgeGrade(report, 2),
-    },
-    {
-      id: "bridge:grade:3",
-      label: "Bridge Grade 3",
-      shortLabel: "G3",
-      category: "Myocardial Bridge",
-      detect: (report) => detectBridgeGrade(report, 3),
-    },
-    {
-      id: "bridge:grade:unknown",
-      label: "Bridge Unknown Grade",
-      shortLabel: "G?",
-      category: "Myocardial Bridge",
-      detect: (report) => detectBridgeGrade(report, "unknown"),
-    },
-    ...BRIDGE_LENGTH_BUCKETS.map<FilteringFeature>((bucket) => ({
-      id: bucket.id,
-      label: bucket.label,
-      shortLabel: bucket.shortLabel,
-      category: "Myocardial Bridge",
-      detect: (report) => detectBridgeLengthBucket(report, bucket.id),
-    })),
-    {
-      id: "bridge:length:unknown",
-      label: "Unknown bridge length",
-      shortLabel: "L?",
-      category: "Myocardial Bridge",
-      detect: (report) => detectBridgeLengthBucket(report, "bridge:length:unknown"),
-    },
-  ]);
+})).filter((feature) => feature.id !== "opposite_sinus");
+
+const BRIDGE_FILTERING_FEATURES: FilteringFeature[] = [
+  {
+    id: "bridge:grade:1",
+    label: "Bridge Grade 1",
+    shortLabel: "G1",
+    category: "Myocardial Bridge",
+    detect: (report) => detectBridgeGrade(report, 1),
+  },
+  {
+    id: "bridge:grade:2",
+    label: "Bridge Grade 2",
+    shortLabel: "G2",
+    category: "Myocardial Bridge",
+    detect: (report) => detectBridgeGrade(report, 2),
+  },
+  {
+    id: "bridge:grade:3",
+    label: "Bridge Grade 3",
+    shortLabel: "G3",
+    category: "Myocardial Bridge",
+    detect: (report) => detectBridgeGrade(report, 3),
+  },
+  {
+    id: "bridge:grade:unknown",
+    label: "Bridge Unknown Grade",
+    shortLabel: "G?",
+    category: "Myocardial Bridge",
+    detect: (report) => detectBridgeGrade(report, "unknown"),
+  },
+  ...BRIDGE_LENGTH_BUCKETS.map<FilteringFeature>((bucket) => ({
+    id: bucket.id,
+    label: bucket.label,
+    shortLabel: bucket.shortLabel,
+    category: "Myocardial Bridge",
+    detect: (report) => detectBridgeLengthBucket(report, bucket.id),
+  })),
+  {
+    id: "bridge:length:unknown",
+    label: "Unknown bridge length",
+    shortLabel: "L?",
+    category: "Myocardial Bridge",
+    detect: (report) => detectBridgeLengthBucket(report, "bridge:length:unknown"),
+  },
+];
+
+export const FILTERING_FEATURES: FilteringFeature[] = RISK_FILTERING_FEATURES.concat(
+  BRIDGE_FILTERING_FEATURES
+);
 
 export function buildReportFeatureSet(
   report: StoredParsedReport,

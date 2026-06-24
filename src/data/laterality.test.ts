@@ -7,7 +7,11 @@ import type {
 import type { StoredParsedReport } from "@/lib/parsedReportStorage";
 import { deriveReportLaterality, reportMatchesFilter } from "@/data/laterality";
 
-function makeTerm(normalizedName: string, assertion: Assertion = "asserted"): ParsedTerm {
+function makeTerm(
+  normalizedName: string,
+  assertion: Assertion = "asserted",
+  paperFeatureId?: string
+): ParsedTerm {
   return {
     term: normalizedName,
     normalizedName,
@@ -17,6 +21,7 @@ function makeTerm(normalizedName: string, assertion: Assertion = "asserted"): Pa
     endIndex: normalizedName.length,
     context: normalizedName,
     isAnomaly: true,
+    paperFeatureId,
   };
 }
 
@@ -159,20 +164,53 @@ describe("deriveReportLaterality", () => {
     expect(laterality.left).toBe(false);
   });
 
-  it("prefers the curated cohort side over text cues", () => {
-    const report = makeReport([makeTerm("Anomalous Origin of Left Circumflex Artery")]);
+  it("counts a curated RCA side as right when the umbrella confirms R-AAOCA", () => {
+    const report = makeReport([
+      makeTerm("High Origin of RCA from Left Coronary Sinus", "asserted", "high_origin"),
+      makeTerm("Interarterial Course of RCA, 1.2 cm", "asserted", "interarterial_course"),
+    ]);
     report.side = "RCA";
     const laterality = deriveReportLaterality(report);
     expect(laterality.right).toBe(true);
     expect(laterality.left).toBe(false);
   });
 
-  it("maps a curated LCA side to left even with no anomaly terms", () => {
-    const report = makeReport([]);
+  it("drops a curated RCA side that carries no anomalous evidence (cohort mislabel)", () => {
+    const report = makeReport([makeTerm("right dominance", "asserted", "right_dominance")]);
+    report.side = "RCA";
+    const laterality = deriveReportLaterality(report);
+    expect(laterality.right).toBe(false);
+    expect(laterality.left).toBe(false);
+  });
+
+  it("counts a curated LCA side as left when the umbrella confirms an anomalous left vessel", () => {
+    const report = makeReport([
+      makeTerm("High Origin of LAD from Right Coronary Sinus", "asserted", "high_origin"),
+      makeTerm("Interarterial Course of LAD, 8 mm", "asserted", "interarterial_course"),
+    ]);
     report.side = "LCA";
     const laterality = deriveReportLaterality(report);
     expect(laterality.left).toBe(true);
     expect(laterality.right).toBe(false);
+  });
+
+  it("does not count a curated LCA side as left when no anomaly is described (cohort mislabel)", () => {
+    const report = makeReport([]);
+    report.side = "LCA";
+    const laterality = deriveReportLaterality(report);
+    expect(laterality.left).toBe(false);
+    expect(laterality.right).toBe(false);
+  });
+
+  it("keeps a curated LCA side as left when only the structured subtype evidences it", () => {
+    const report = makeReport(
+      [],
+      [{ subtype: "intramural_interarterial_left", rawText: "left main interarterial" }]
+    );
+    report.side = "LCA";
+    const laterality = deriveReportLaterality(report);
+    expect(laterality.left).toBe(true);
+    expect(laterality.leftSubtypes.has("intramural_interarterial_left")).toBe(true);
   });
 });
 

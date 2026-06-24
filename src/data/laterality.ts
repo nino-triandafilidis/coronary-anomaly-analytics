@@ -1,5 +1,6 @@
 import type { AnomalousLeftSubtype } from "@/data/parseTypes";
 import { getReportAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
+import { deriveAaocaUmbrella } from "@/data/aaocaUmbrella";
 import { resolveParsedTermPaperFeature } from "@/data/paperFeatures";
 import { getStoredParsedTerms, type StoredParsedReport } from "@/lib/parsedReportStorage";
 
@@ -35,11 +36,13 @@ export interface ReportLaterality {
 
 /**
  * Classifies a report by the side of its anomalous coronary. When the curated
- * cohort side is present it is authoritative (RCA = right, LCA = left). Otherwise
- * the side is inferred for live-parsed reports by tallying a vote per
- * anomaly-describing finding and taking the majority; a tie marks both sides
- * (rare, genuinely bilateral) and no vessel-resolved evidence is neither (shown
- * only under "overall").
+ * cohort side is present it seeds the umbrella classifier's cohort-vessel prior,
+ * and the report counts as that side only if the umbrella diagnosis confirms it
+ * (so cohort mislabels — normal origins, single trunks — drop out). Without a
+ * curated side, the laterality is inferred for live-parsed reports by tallying a
+ * vote per anomaly-describing finding and taking the majority; a tie marks both
+ * sides (rare, genuinely bilateral) and no vessel-resolved evidence is neither
+ * (shown only under "overall").
  */
 export function deriveReportLaterality(report: StoredParsedReport): ReportLaterality {
   const parsedTerms = getStoredParsedTerms(report);
@@ -49,8 +52,20 @@ export function deriveReportLaterality(report: StoredParsedReport): ReportLatera
     )
   );
 
-  if (report.side === "RCA") return { right: true, left: false, leftSubtypes };
-  if (report.side === "LCA") return { right: false, left: true, leftSubtypes };
+  // For curated-cohort reports the side names which vessel the cohort pipeline
+  // judged anomalous, but the umbrella classifier decides whether the report text
+  // actually supports that diagnosis. Gating on it drops the cohort's
+  // normal-origin / single-trunk mislabels and recovers reports whose anomaly the
+  // parser captured only as constituents, so this function and the umbrella
+  // feature rows describe the same set (#105). The side still seeds the umbrella's
+  // cohort-vessel prior, so a sided report never falls back to constituent voting.
+  if (report.side === "RCA" || report.side === "LCA") {
+    const { umbrella } = deriveAaocaUmbrella(report);
+    const right = umbrella === "r_aaoca";
+    const left =
+      umbrella === "l_aaoca" || umbrella === "lad_aaoca" || umbrella === "lcx_aaoca";
+    return { right, left, leftSubtypes };
+  }
 
   let rightVotes = 0;
   let leftVotes = leftSubtypes.size > 0 ? 1 : 0;

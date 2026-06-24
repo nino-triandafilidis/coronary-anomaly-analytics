@@ -67,6 +67,7 @@ import {
   cleanIntramuralCourseLengthMeasurements,
 } from "@/data/intramuralCourseLengths";
 import { getReportAnomalousLeftSubtypes } from "@/data/anomalousLeftSubtypes";
+import { deriveAaocaUmbrella, AAOCA_UMBRELLA_IDS } from "@/data/aaocaUmbrella";
 import {
   deriveReportLaterality,
   reportMatchesFilter,
@@ -510,6 +511,28 @@ export default function Analysis() {
         row.asserted += 1;
         row.total += 1;
       });
+    });
+
+    // The umbrella diagnosis rows (R/L/ST-AAOCA) are driven by the deterministic
+    // umbrella classifier rather than raw term incidence, so each row counts the
+    // same set its laterality card does: cohort mislabels drop out and the reports
+    // whose anomaly the parser captured only as constituents are recovered (#105).
+    AAOCA_UMBRELLA_IDS.forEach((id) => {
+      const row = rows.get(id);
+      if (row) {
+        row.asserted = 0;
+        row.negated = 0;
+        row.total = 0;
+      }
+    });
+    filteredReports.forEach((report) => {
+      const { umbrella } = deriveAaocaUmbrella(report);
+      if (!umbrella) return;
+      const row = rows.get(umbrella);
+      if (row) {
+        row.asserted += 1;
+        row.total += 1;
+      }
     });
 
     return Array.from(rows.values());

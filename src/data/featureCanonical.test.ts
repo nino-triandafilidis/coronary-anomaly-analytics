@@ -22,12 +22,6 @@ describe("canonicalFeature", () => {
     expect(a?.key).toBe(b?.key);
   });
 
-  it("collapses narrowing wording + vessel synonyms to one key", () => {
-    const a = canonicalFeature(term({ normalizedName: "significant narrowing of LCx" }));
-    const b = canonicalFeature(term({ normalizedName: "Significant Narrowing Of Left Circumflex Artery" }));
-    expect(a?.key).toBe(b?.key);
-  });
-
   it("falls back to a lowercased key so case/whitespace variants still collapse", () => {
     const a = canonicalFeature(term({ normalizedName: "Some Incidental Phrase" }));
     const b = canonicalFeature(term({ normalizedName: "some incidental   phrase" }));

@@ -27,79 +27,15 @@ export function getAnalysisFeatureName(record: {
 }
 
 /**
- * Canonicalize a coronary-narrowing finding to "<severity> <location> <concept>
- * of <vessel>" so wording variants collapse. Returns null when the term is not
- * a narrowing/stenosis/compression finding bound to a recognizable vessel.
- */
-export function normalizeCoronaryNarrowingFeature(record: {
-  normalizedName?: string;
-  term?: string;
-  context?: string;
-}): string | null {
-  const featureName = getAnalysisFeatureName(record);
-  const haystack = `${featureName} ${record.context ?? ""}`.toLowerCase();
-
-  const hasNarrowingConcept =
-    /\bnarrow(?:ing|ed)?\b/.test(haystack) ||
-    /\bstenos(?:is|ed)\b/.test(haystack) ||
-    /\bcompression\b/.test(haystack) ||
-    /\bcompressed\b/.test(haystack);
-  if (!hasNarrowingConcept) return null;
-
-  const vessel = (() => {
-    if (/\bleft\s+main\b|\blmca\b|\bleft\s+main\s+coronary\s+artery\b/.test(haystack)) return "left main coronary artery";
-    if (/\bleft\s+circumflex\b|\bcircumflex\b|\blcx\b/.test(haystack)) return "left circumflex artery";
-    if (/\bright\s+coronary\b|\brca\b/.test(haystack)) return "right coronary artery";
-    if (/\bleft\s+anterior\s+descending\b|\blad\b/.test(haystack)) return "left anterior descending artery";
-    if (/\bleft\s+coronary\s+artery\b|\blca\b/.test(haystack)) return "left coronary artery";
-    if (/\bcoronary\s+arter(?:y|ies)\b/.test(haystack)) return "coronary artery";
-    return null;
-  })();
-  if (!vessel) return null;
-
-  const location = (() => {
-    if (/\bostium\b|\bostial\b/.test(haystack)) return "ostial ";
-    if (/\bproximal(?:ly)?\b/.test(haystack)) return "proximal ";
-    if (/\bmid\b/.test(haystack)) return "mid ";
-    if (/\bdistal(?:ly)?\b/.test(haystack)) return "distal ";
-    return "";
-  })();
-
-  const severity = (() => {
-    if (/\bsevere(?:ly)?\b/.test(haystack)) return "severe ";
-    if (/\bmoderate(?:ly)?\b/.test(haystack)) return "moderate ";
-    if (/\bmild(?:ly)?\b/.test(haystack)) return "mild ";
-    if (/\bsignificant(?:ly)?\b/.test(haystack)) return "significant ";
-    if (/\bslight(?:ly)?\b/.test(haystack)) return "slight ";
-    if (/\bminimal(?:ly)?\b/.test(haystack)) return "minimal ";
-    return "";
-  })();
-
-  const concept = /\bcompression\b|\bcompressed\b/.test(haystack)
-    ? "compression"
-    : /\bstenos(?:is|ed)\b/.test(haystack)
-      ? "stenosis"
-      : "narrowing";
-
-  return `${severity}${location}${concept} of ${vessel}`.replace(/\s+/g, " ").trim();
-}
-
-/**
  * Resolve a term to its single canonical feature. Precedence:
  *   1. paper-tracked feature (bounded PAPER_FEATURES dictionary),
- *   2. canonical coronary-narrowing concept,
- *   3. lowercased normalized name (so case/whitespace variants still collapse).
+ *   2. lowercased normalized name (so case/whitespace variants still collapse).
  * Returns null only when there is no usable name.
  */
 export function canonicalFeature(term: ParsedTerm): CanonicalFeature | null {
   const paperFeature = resolveParsedTermPaperFeature(term);
   if (paperFeature) {
     return { key: `paper:${paperFeature.id}`, label: paperFeature.canonical, category: paperFeature.category };
-  }
-
-  const narrowing = normalizeCoronaryNarrowingFeature(term);
-  if (narrowing) {
-    return { key: `narrowing:${narrowing.toLowerCase()}`, label: narrowing, category: "Coronary narrowing" };
   }
 
   const name = getAnalysisFeatureName(term);

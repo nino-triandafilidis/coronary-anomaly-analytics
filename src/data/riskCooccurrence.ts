@@ -9,9 +9,9 @@
  * so the UI can render one symmetric heatmap instead of a matrix per flag.
  *
  * Detection reuses the existing resolvers: paper-feature ids for the binary
- * features, normalizeCoronaryNarrowingFeature for narrowing, and the report's
- * laterality for the vessel-relative "opposite sinus" flag (a right from the left
- * sinus, a left from the right sinus). Counting is pure and unit-tested; the
+ * features and the report's laterality for the vessel-relative "opposite sinus"
+ * flag (a right from the left sinus, a left from the right sinus). Counting is
+ * pure and unit-tested; the
  * Analysis page owns provenance, mirroring the rest of the drill-down.
  */
 
@@ -19,7 +19,6 @@ import type { ParsedTerm } from "@/data/parseTypes";
 import type { StoredParsedReport } from "@/lib/parsedReportStorage";
 import { getStoredParsedTerms } from "@/lib/parsedReportStorage";
 import { resolveParsedTermPaperFeature } from "@/data/paperFeatures";
-import { normalizeCoronaryNarrowingFeature } from "@/data/featureCanonical";
 import type { ReportLaterality } from "@/data/laterality";
 
 export type RiskFlagKey =
@@ -28,8 +27,7 @@ export type RiskFlagKey =
   | "intramural"
   | "slit_like"
   | "high_origin"
-  | "acute_takeoff"
-  | "narrowing";
+  | "acute_takeoff";
 
 export interface RiskFlag {
   key: RiskFlagKey;
@@ -45,7 +43,6 @@ export const RISK_FLAGS: RiskFlag[] = [
   { key: "slit_like", label: "Slit-like ostium", short: "Slit" },
   { key: "high_origin", label: "High origin", short: "HO" },
   { key: "acute_takeoff", label: "Acute takeoff", short: "Take" },
-  { key: "narrowing", label: "Sig. narrowing", short: "Narr" },
 ];
 
 /** The sponsor-priority flag, foregrounded in the UI. */
@@ -102,8 +99,6 @@ export function detectReportRiskFlags(
       if (side.right && feature.id === "left_sinus") set("opposite_sinus", term);
       if (side.left && feature.id === "right_sinus") set("opposite_sinus", term);
     }
-
-    if (normalizeCoronaryNarrowingFeature(term)) set("narrowing", term);
   }
 
   return { reportId: report.id, flags: new Set(evidence.keys()), evidence };

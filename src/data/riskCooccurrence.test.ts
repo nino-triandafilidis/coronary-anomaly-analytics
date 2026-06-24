@@ -52,14 +52,13 @@ function flagSet(report: StoredParsedReport, side: ReportLaterality): Set<RiskFl
 }
 
 describe("detectReportRiskFlags", () => {
-  it("flags asserted binary risk features and narrowing", () => {
+  it("flags asserted binary risk features", () => {
     const flags = flagSet(
       makeReport("r1", [
         makeTerm("interarterial course"),
         makeTerm("intramural course"),
         makeTerm("slit-like ostium"),
         makeTerm("acute angle of takeoff"),
-        makeTerm("significant narrowing of right coronary artery"),
       ]),
       RIGHT
     );
@@ -69,7 +68,6 @@ describe("detectReportRiskFlags", () => {
         "intramural",
         "slit_like",
         "acute_takeoff",
-        "narrowing",
       ])
     );
   });
